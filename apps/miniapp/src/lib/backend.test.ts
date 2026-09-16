@@ -59,6 +59,24 @@ describe('local backend (no VITE_WORKER_URL)', () => {
     expect(detail.total?.energyKcal).toBe(76);
   });
 
+  it('updates a saved meal in local mode', async () => {
+    const backend = createBackend();
+    saveMeal(meal('rice', 100));
+    const id = (await backend.recent())[0]?.id as string;
+    await backend.update(id, meal('fried rice', 300));
+    const detail = await backend.detail(id);
+    expect(detail.foods[0]?.name).toBe('fried rice');
+    expect(detail.total?.energyKcal).toBe(300);
+  });
+
+  it('deletes a saved meal in local mode', async () => {
+    const backend = createBackend();
+    saveMeal(meal('to-remove', 50));
+    const id = (await backend.recent())[0]?.id as string;
+    await backend.remove(id);
+    expect(await backend.recent()).toEqual([]);
+  });
+
   it('reports mock settings in local mode (no key needed)', async () => {
     const backend = createBackend();
     const s = await backend.getSettings();

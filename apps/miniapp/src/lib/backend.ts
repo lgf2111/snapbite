@@ -8,7 +8,13 @@ import {
 } from './api.js';
 import { readConfig } from './config.js';
 import { LocalMealProcessor, type MealProcessor, WorkerMealProcessor } from './processor.js';
-import { loadMeals, type SavedMeal, saveMeal as saveLocal } from './store.js';
+import {
+  deleteSavedMeal,
+  loadMeals,
+  type SavedMeal,
+  saveMeal as saveLocal,
+  updateSavedMeal,
+} from './store.js';
 import { getRawInitData } from './telegram.js';
 
 /** A unified recent-meal shape the home screen renders, from either source. */
@@ -35,6 +41,8 @@ export interface Backend {
   readonly mode: 'worker' | 'local';
   readonly processor: MealProcessor;
   save(meal: MealResult, previewUrl?: string): Promise<void>;
+  update(id: string, meal: MealResult): Promise<void>;
+  remove(id: string): Promise<void>;
   recent(): Promise<RecentMeal[]>;
   history(): Promise<HistoryDay[]>;
   detail(id: string): Promise<MealDetail>;
@@ -56,6 +64,12 @@ export function createBackend(): Backend {
       ),
       async save(meal) {
         await api.saveMeal(meal);
+      },
+      async update(id, meal) {
+        await api.updateMeal(id, meal);
+      },
+      async remove(id) {
+        await api.deleteMeal(id);
       },
       async recent() {
         const { meals } = await api.listMeals();
@@ -95,6 +109,12 @@ export function createBackend(): Backend {
     processor: new LocalMealProcessor(),
     async save(meal, previewUrl) {
       saveLocal(meal, previewUrl);
+    },
+    async update(id, meal) {
+      updateSavedMeal(id, meal);
+    },
+    async remove(id) {
+      deleteSavedMeal(id);
     },
     async recent() {
       return loadMeals().map(fromSaved);

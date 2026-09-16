@@ -1,4 +1,11 @@
-import { useEffect, useState } from 'react';
+import {
+  aggregate,
+  type FoodItem,
+  type MealResult,
+  resolveFoodNutrition,
+  sourceLabel,
+} from '@foodlog/core';
+import { useEffect, useMemo, useState } from 'react';
 import type { MealDetail } from '../lib/api.js';
 import type { Backend } from '../lib/backend.js';
 
@@ -6,24 +13,91 @@ interface MealDetailScreenProps {
   backend: Backend;
   mealId: string;
   onBack: () => void;
+  onChanged: () => void;
 }
 
-/** Full detail of a single logged meal (read-only), always framed as an estimate. */
-export function MealDetailScreen({ backend, mealId, onBack }: MealDetailScreenProps) {
+/** Editable, deletable detail of a single logged meal. */
+export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDetailScreenProps) {
   const [detail, setDetail] = useState<MealDetail | null>(null);
+  const [foods, setFoods] = useState<FoodItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<'saving' | 'deleting' | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     backend
       .detail(mealId)
-      .then(setDetail)
+      .then((d) => {
+        setDetail(d);
+        setFoods(
+          d.foods.map((f) => ({
+            name: f.name,
+            estimatedWeightG: f.estimatedWeightG ?? 1,
+            portion: f.portion ?? undefined,
+            quantity: f.quantity,
+            confidence: f.confidence ?? 0.5,
+          })),
+        );
+      })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'));
   }, [backend, mealId]);
+
+  const resolved = useMemo(() => {
+    const mealFoods = foods.map((food) => ({
+      food,
+      nutrition:
+        resolveFoodNutrition(food) ??
+        ({ energyKcal: 0, proteinG: 0, carbsG: 0, fatG: 0, source: 'ai_estimate' } as const),
+    }));
+    return { foods: mealFoods, total: aggregate(mealFoods.map((f) => f.nutrition)) };
+  }, [foods]);
+
+  function updateFood(i: number, patch: Partial<FoodItem>) {
+    setFoods((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+  }
+
+  function removeFood(i: number) {
+    setFoods((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function handleSave() {
+    if (!detail || foods.length === 0) return;
+    setBusy('saving');
+    setError(null);
+    const meal: MealResult = {
+      foods: resolved.foods,
+      total: resolved.total,
+      confidence: detail.confidence ?? 0.5,
+      needsConfirmation: false,
+      ...(detail.notes ? { notes: detail.notes } : {}),
+    };
+    try {
+      await backend.update(mealId, meal);
+      onChanged();
+      onBack();
+    } catch (e) {
+      setBusy(null);
+      setError(e instanceof Error ? e.message : 'Could not save');
+    }
+  }
+
+  async function handleDelete() {
+    setBusy('deleting');
+    setError(null);
+    try {
+      await backend.remove(mealId);
+      onChanged();
+      onBack();
+    } catch (e) {
+      setBusy(null);
+      setError(e instanceof Error ? e.message : 'Could not delete');
+    }
+  }
 
   return (
     <div>
       <div className="header">
-        <h1>Meal</h1>
+        <h1>Edit meal</h1>
         <span className="estimate-badge">estimate</span>
       </div>
 
@@ -33,35 +107,107 @@ export function MealDetailScreen({ backend, mealId, onBack }: MealDetailScreenPr
       {detail && (
         <>
           <p className="muted">{new Date(detail.loggedAt).toLocaleString()}</p>
+
           <div className="card">
-            {detail.foods.map((f) => (
-              <div className="food-row" key={f.id}>
+            {resolved.foods.map((mf, i) => (
+              <div className="food-row" key={i}>
                 <div>
-                  <div className="food-name">{f.name}</div>
+                  <input
+                    aria-label={`Food ${i + 1} name`}
+                    className="food-name"
+                    value={mf.food.name}
+                    onChange={(e) => updateFood(i, { name: e.target.value })}
+                  />
                   <div className="macro">
-                    ~{(f.estimatedWeightG ?? 0) * f.quantity}g
-                    {f.portion ? ` · ${f.portion}` : ''}
+                    {mf.nutrition.energyKcal} kcal · P {mf.nutrition.proteinG}g · C{' '}
+                    {mf.nutrition.carbsG}g · F {mf.nutrition.fatG}g{' '}
+                    <span className="source-tag">[{sourceLabel(mf.nutrition.source)}]</span>
                   </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input
+                    aria-label={`Food ${i + 1} weight in grams`}
+                    type="number"
+                    min={1}
+                    value={mf.food.estimatedWeightG}
+                    onChange={(e) =>
+                      updateFood(i, { estimatedWeightG: Math.max(1, Number(e.target.value) || 1) })
+                    }
+                    style={{ width: 64 }}
+                  />
+                  <span className="muted">g</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove food ${i + 1}`}
+                    className="btn secondary"
+                    onClick={() => removeFood(i)}
+                    style={{ padding: '4px 8px' }}
+                  >
+                    ✕
+                  </button>
                 </div>
               </div>
             ))}
-            {detail.total && (
-              <div className="total">
-                <span>Total (estimate)</span>
-                <span>
-                  {detail.total.energyKcal} kcal · P {detail.total.proteinG}g · C{' '}
-                  {detail.total.carbsG}g · F {detail.total.fatG}g
-                </span>
-              </div>
-            )}
+
+            <div className="total">
+              <span>Total (estimate)</span>
+              <span>
+                {resolved.total.energyKcal} kcal{' '}
+                <span className="source-tag">[{sourceLabel(resolved.total.source)}]</span>
+              </span>
+            </div>
           </div>
-          {detail.notes && <p className="muted">Notes: {detail.notes}</p>}
+
+          <div className="actions">
+            <button type="button" className="btn secondary full" onClick={onBack}>
+              Back
+            </button>
+            <button
+              type="button"
+              className="btn full"
+              disabled={busy !== null || foods.length === 0}
+              onClick={handleSave}
+            >
+              {busy === 'saving' ? 'Saving…' : 'Save changes'}
+            </button>
+          </div>
+
+          {confirmDelete ? (
+            <div className="card" style={{ marginTop: 12 }}>
+              <p className="warn" style={{ marginTop: 0 }}>
+                Delete this meal permanently?
+              </p>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn secondary full"
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn full"
+                  style={{ background: 'var(--warn)' }}
+                  disabled={busy !== null}
+                  onClick={handleDelete}
+                >
+                  {busy === 'deleting' ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn secondary full"
+              onClick={() => setConfirmDelete(true)}
+              style={{ marginTop: 12, color: 'var(--warn)' }}
+            >
+              Delete meal
+            </button>
+          )}
         </>
       )}
-
-      <button type="button" className="btn secondary full" onClick={onBack} style={{ marginTop: 16 }}>
-        Back
-      </button>
     </div>
   );
 }

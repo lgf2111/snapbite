@@ -96,6 +96,7 @@ export function App() {
           backend={backend}
           mealId={view.mealId}
           onBack={() => setView({ name: 'tabs' })}
+          onChanged={() => void refreshRecent()}
         />
       </div>
     );

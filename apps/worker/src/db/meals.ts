@@ -100,6 +100,62 @@ export async function listMeals(db: MealsDb, userId: string, limit = 50): Promis
   return summaries;
 }
 
+/**
+ * Replaces a meal's foods + nutrition + notes with the given MealResult, if the
+ * meal belongs to the user. Returns false when the meal isn't owned/found.
+ * Atomic via a single D1 batch (delete old children + insert new).
+ */
+export async function updateMeal(
+  db: MealsDb,
+  mealId: string,
+  userId: string,
+  meal: MealResult,
+): Promise<boolean> {
+  const owned = await mealOwnedBy(db, mealId, userId);
+  if (!owned) return false;
+
+  const statements = [
+    db
+      .update(meals)
+      .set({ notes: meal.notes ?? null, confidence: meal.confidence })
+      .where(eq(meals.id, mealId)),
+    db.delete(foodItems).where(eq(foodItems.mealId, mealId)),
+    db.delete(nutrition).where(eq(nutrition.mealId, mealId)),
+    ...meal.foods.map((f) =>
+      db.insert(foodItems).values({
+        id: crypto.randomUUID(),
+        mealId,
+        name: f.food.name,
+        estimatedWeightG: f.food.estimatedWeightG,
+        portion: f.food.portion ?? null,
+        quantity: f.food.quantity,
+        confidence: f.food.confidence,
+      }),
+    ),
+    db.insert(nutrition).values({
+      mealId,
+      energyKcal: meal.total.energyKcal,
+      proteinG: meal.total.proteinG,
+      carbsG: meal.total.carbsG,
+      fatG: meal.total.fatG,
+      source: meal.total.source,
+    }),
+  ];
+  await db.batch(statements as [(typeof statements)[number], ...(typeof statements)[number][]]);
+  return true;
+}
+
+/**
+ * Deletes a meal (and its food_items + nutrition via ON DELETE CASCADE), if it
+ * belongs to the user. Returns false when not owned/found.
+ */
+export async function deleteMeal(db: MealsDb, mealId: string, userId: string): Promise<boolean> {
+  const owned = await mealOwnedBy(db, mealId, userId);
+  if (!owned) return false;
+  await db.delete(meals).where(eq(meals.id, mealId));
+  return true;
+}
+
 /** Verifies a meal belongs to the user (for detail/delete in later tasks). */
 export async function mealOwnedBy(
   db: MealsDb,

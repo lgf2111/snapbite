@@ -25,6 +25,14 @@ export function loadMeals(): SavedMeal[] {
   }
 }
 
+function writeAll(all: SavedMeal[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+  } catch {
+    // Storage full or unavailable — non-fatal for the demo.
+  }
+}
+
 export function saveMeal(meal: MealResult, previewUrl?: string): SavedMeal {
   const entry: SavedMeal = {
     id: crypto.randomUUID(),
@@ -34,10 +42,26 @@ export function saveMeal(meal: MealResult, previewUrl?: string): SavedMeal {
   };
   const all = loadMeals();
   all.unshift(entry);
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
-  } catch {
-    // Storage full or unavailable — non-fatal for the demo.
-  }
+  writeAll(all);
   return entry;
+}
+
+/** Replaces the meal body of an existing saved entry. Returns true if found. */
+export function updateSavedMeal(id: string, meal: MealResult): boolean {
+  const all = loadMeals();
+  const idx = all.findIndex((m) => m.id === id);
+  if (idx < 0) return false;
+  const existing = all[idx] as SavedMeal;
+  all[idx] = { ...existing, meal };
+  writeAll(all);
+  return true;
+}
+
+/** Removes a saved meal by id. Returns true if it existed. */
+export function deleteSavedMeal(id: string): boolean {
+  const all = loadMeals();
+  const next = all.filter((m) => m.id !== id);
+  if (next.length === all.length) return false;
+  writeAll(next);
+  return true;
 }

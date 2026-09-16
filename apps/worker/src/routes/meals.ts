@@ -8,7 +8,15 @@ import {
   resolveMeal,
 } from '@foodlog/core';
 import { Hono } from 'hono';
-import { createMealsDb, getMealDetail, listMeals, saveMeal, searchMeals } from '../db/meals.js';
+import {
+  createMealsDb,
+  deleteMeal,
+  getMealDetail,
+  listMeals,
+  saveMeal,
+  searchMeals,
+  updateMeal,
+} from '../db/meals.js';
 import { createSettingsDb, getSettings } from '../db/settings.js';
 import type { AppBindings } from '../env.js';
 import type { BotClientFactory } from './webhook.js';
@@ -141,6 +149,34 @@ export function mealsRoutes(
     const detail = await getMealDetail(db, c.req.param('id'), c.get('userId'));
     if (!detail) return c.json({ error: 'Not found' }, 404);
     return c.json(detail);
+  });
+
+  // PUT /api/meals/:id — update an owned meal with an edited MealResult.
+  app.put('/:id', async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
+    }
+    const mealField = (body as { meal?: unknown })?.meal ?? body;
+    const parsed = MealResult.safeParse(mealField);
+    if (!parsed.success) {
+      return c.json({ error: 'Bad request', detail: 'Invalid meal', issues: parsed.error.issues }, 400);
+    }
+
+    const db = createMealsDb(c.env.DB);
+    const ok = await updateMeal(db, c.req.param('id'), c.get('userId'), parsed.data);
+    if (!ok) return c.json({ error: 'Not found' }, 404);
+    return c.json({ ok: true });
+  });
+
+  // DELETE /api/meals/:id — delete an owned meal (cascades to foods+nutrition).
+  app.delete('/:id', async (c) => {
+    const db = createMealsDb(c.env.DB);
+    const ok = await deleteMeal(db, c.req.param('id'), c.get('userId'));
+    if (!ok) return c.json({ error: 'Not found' }, 404);
+    return c.json({ ok: true });
   });
 
   return app;

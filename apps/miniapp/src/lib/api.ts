@@ -119,6 +119,19 @@ export class ApiClient {
     });
   }
 
+  updateMeal(id: string, meal: MealResult): Promise<{ ok: boolean }> {
+    return this.#request<{ ok: boolean }>(`/api/meals/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ meal }),
+    });
+  }
+
+  deleteMeal(id: string): Promise<{ ok: boolean }> {
+    return this.#request<{ ok: boolean }>(`/api/meals/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
   listMeals(): Promise<{ meals: MealSummary[]; groups: DayGroup[] }> {
     return this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>('/api/meals');
   }
