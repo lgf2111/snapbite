@@ -6,9 +6,21 @@
  * Only the pieces Task 5 needs are wired up; deeper SDK use (initData for the
  * Worker) arrives with the backend in later tasks.
  */
-import { init, viewport } from '@telegram-apps/sdk-react';
+import { init, retrieveRawInitData, viewport } from '@telegram-apps/sdk-react';
 
 let initialized = false;
+
+/**
+ * Returns the raw, signed initData string to send to the Worker for auth.
+ * Empty when not running inside Telegram (browser dev / no backend).
+ */
+export function getRawInitData(): string {
+  try {
+    return retrieveRawInitData() ?? '';
+  } catch {
+    return '';
+  }
+}
 
 /** True when running inside the Telegram client (best-effort detection). */
 export function isTelegramEnv(): boolean {

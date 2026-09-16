@@ -28,3 +28,16 @@ export class LocalMealProcessor implements MealProcessor {
     return resolveMeal(analysis);
   }
 }
+
+/** Delegates analysis to the Worker API (real DeepSeek pipeline, server-side key). */
+export class WorkerMealProcessor implements MealProcessor {
+  readonly #analyze: (image: MealImage, hint?: string) => Promise<MealResult>;
+
+  constructor(analyze: (image: MealImage, hint?: string) => Promise<MealResult>) {
+    this.#analyze = analyze;
+  }
+
+  analyze(image: MealImage, hint?: string): Promise<MealResult> {
+    return this.#analyze(image, hint);
+  }
+}

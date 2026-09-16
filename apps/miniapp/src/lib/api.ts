@@ -1,0 +1,91 @@
+import type { MealImage, MealResult } from '@foodlog/core';
+
+/** Header the Worker expects the signed initData in (matches the Worker). */
+const INIT_DATA_HEADER = 'x-telegram-init-data';
+
+export interface MealSummary {
+  id: string;
+  loggedAt: number;
+  notes: string | null;
+  confidence: number | null;
+  energyKcal: number | null;
+  source: string | null;
+  foods: string[];
+}
+
+export interface SettingsView {
+  aiProvider: string;
+  connected: boolean;
+  keyLast4: string | null;
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+/**
+ * Thin client for the FoodLog Worker API. Attaches the signed Telegram initData
+ * on every request so the Worker can authenticate.
+ */
+export class ApiClient {
+  readonly #baseUrl: string;
+  readonly #getInitData: () => string;
+  readonly #fetch: typeof fetch;
+
+  constructor(baseUrl: string, getInitData: () => string, fetchImpl: typeof fetch = fetch) {
+    this.#baseUrl = baseUrl.replace(/\/+$/, '');
+    this.#getInitData = getInitData;
+    this.#fetch = fetchImpl;
+  }
+
+  async #request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const headers = new Headers(init.headers);
+    headers.set(INIT_DATA_HEADER, this.#getInitData());
+    if (init.body && !headers.has('content-type')) {
+      headers.set('content-type', 'application/json');
+    }
+    const res = await this.#fetch(`${this.#baseUrl}${path}`, { ...init, headers });
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try {
+        const body = (await res.json()) as { detail?: string; error?: string };
+        detail = body.detail ?? body.error ?? detail;
+      } catch {
+        // non-JSON error body
+      }
+      throw new ApiError(res.status, detail);
+    }
+    return (await res.json()) as T;
+  }
+
+  analyze(image: MealImage, hint?: string): Promise<MealResult> {
+    return this.#request<MealResult>('/api/meals/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ base64: image.base64, mimeType: image.mimeType, hint }),
+    });
+  }
+
+  saveMeal(meal: MealResult): Promise<{ id: string }> {
+    return this.#request<{ id: string }>('/api/meals', {
+      method: 'POST',
+      body: JSON.stringify({ meal }),
+    });
+  }
+
+  listMeals(): Promise<{ meals: MealSummary[] }> {
+    return this.#request<{ meals: MealSummary[] }>('/api/meals');
+  }
+
+  getSettings(): Promise<SettingsView> {
+    return this.#request<SettingsView>('/api/settings');
+  }
+
+  saveApiKey(apiKey: string): Promise<SettingsView & { ok: boolean }> {
+    return this.#request('/api/settings', { method: 'PUT', body: JSON.stringify({ apiKey }) });
+  }
+}

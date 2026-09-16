@@ -2,10 +2,16 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { AppBindings } from './env.js';
 import { telegramAuth } from './middleware/auth.js';
+import { mealsRoutes, type ProviderFactory } from './routes/meals.js';
 import { settingsRoutes } from './routes/settings.js';
 
+export interface CreateAppOptions {
+  /** Injectable AI provider factory (tests pass a mock). */
+  providerFactory?: ProviderFactory;
+}
+
 /** Builds the Hono app. Exported separately so tests can mount it directly. */
-export function createApp() {
+export function createApp(opts: CreateAppOptions = {}) {
   const app = new Hono<AppBindings>();
 
   app.use('*', cors());
@@ -28,6 +34,7 @@ export function createApp() {
   });
 
   api.route('/settings', settingsRoutes());
+  api.route('/meals', mealsRoutes(opts.providerFactory));
 
   app.route('/api', api);
 
