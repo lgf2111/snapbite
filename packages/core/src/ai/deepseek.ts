@@ -62,7 +62,11 @@ export class DeepSeekProvider implements AIProvider {
     if (injected) {
       this.#fetch = injected;
     } else if (typeof globalFetch === 'function') {
-      this.#fetch = globalFetch as unknown as FetchLike;
+      // Bind to globalThis so `fetch` keeps its `this` (workerd/browsers throw
+      // "Illegal invocation" when an unbound fetch reference is called).
+      this.#fetch = (globalFetch as (...a: unknown[]) => unknown).bind(
+        globalThis,
+      ) as unknown as FetchLike;
     } else {
       throw new AIProviderError('network', 'No fetch implementation available');
     }

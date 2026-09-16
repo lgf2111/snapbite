@@ -42,8 +42,13 @@ export function webhookRoutes(botClientFactory: BotClientFactory = defaultBotCli
 
     const reply = replyForCommand(parsed, { miniAppUrl: c.env.MINI_APP_URL ?? '' });
     if (reply && c.env.TELEGRAM_BOT_TOKEN) {
-      const bot = botClientFactory(c.env.TELEGRAM_BOT_TOKEN);
-      await bot.sendMessage(parsed.chatId, reply);
+      try {
+        const bot = botClientFactory(c.env.TELEGRAM_BOT_TOKEN);
+        await bot.sendMessage(parsed.chatId, reply);
+      } catch (err) {
+        // Never 500 back to Telegram (it would retry). Log and ack.
+        console.error('sendMessage failed', err);
+      }
     }
 
     return c.json({ ok: true });

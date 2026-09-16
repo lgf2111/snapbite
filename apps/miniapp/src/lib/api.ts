@@ -77,10 +77,12 @@ export class ApiClient {
   readonly #getInitData: () => string;
   readonly #fetch: typeof fetch;
 
-  constructor(baseUrl: string, getInitData: () => string, fetchImpl: typeof fetch = fetch) {
+  constructor(baseUrl: string, getInitData: () => string, fetchImpl?: typeof fetch) {
     this.#baseUrl = baseUrl.replace(/\/+$/, '');
     this.#getInitData = getInitData;
-    this.#fetch = fetchImpl;
+    // Bind to the global so `fetch` keeps its `this` (browsers throw
+    // "Can only call Window.fetch on instances of Window" otherwise).
+    this.#fetch = fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
   async #request<T>(path: string, init: RequestInit = {}): Promise<T> {

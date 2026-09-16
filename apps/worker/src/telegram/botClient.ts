@@ -16,11 +16,18 @@ export class TelegramBotClient {
 
   constructor(token: string, fetchImpl?: FetchLike) {
     this.#token = token;
-    const injected = fetchImpl;
     const globalFetch = (globalThis as { fetch?: unknown }).fetch;
-    if (injected) this.#fetch = injected;
-    else if (typeof globalFetch === 'function') this.#fetch = globalFetch as unknown as FetchLike;
-    else throw new Error('No fetch implementation available');
+    if (fetchImpl) {
+      this.#fetch = fetchImpl;
+    } else if (typeof globalFetch === 'function') {
+      // Bind to globalThis so `fetch` keeps its `this` (workerd throws
+      // "Illegal invocation" otherwise).
+      this.#fetch = (globalFetch as (...a: unknown[]) => unknown).bind(
+        globalThis,
+      ) as unknown as FetchLike;
+    } else {
+      throw new Error('No fetch implementation available');
+    }
   }
 
   async sendMessage(chatId: number, reply: BotReply): Promise<void> {
