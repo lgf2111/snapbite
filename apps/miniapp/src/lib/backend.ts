@@ -1,5 +1,5 @@
 import type { MealImage, MealResult } from '@foodlog/core';
-import { ApiClient, type MealDetail, type MealSummary } from './api.js';
+import { type AnalyticsSummary, ApiClient, type MealDetail, type MealSummary } from './api.js';
 import { readConfig } from './config.js';
 import { LocalMealProcessor, type MealProcessor, WorkerMealProcessor } from './processor.js';
 import { loadMeals, type SavedMeal, saveMeal as saveLocal } from './store.js';
@@ -33,6 +33,7 @@ export interface Backend {
   history(): Promise<HistoryDay[]>;
   detail(id: string): Promise<MealDetail>;
   search(query: string): Promise<RecentMeal[]>;
+  analytics(days?: number): Promise<AnalyticsSummary>;
 }
 
 export function createBackend(): Backend {
@@ -68,6 +69,9 @@ export function createBackend(): Backend {
         const { meals } = await api.search(query);
         return meals.map(toRecent);
       },
+      analytics(days) {
+        return api.analytics(days);
+      },
     };
   }
 
@@ -94,6 +98,56 @@ export function createBackend(): Backend {
       return loadMeals()
         .filter((m) => m.meal.foods.some((f) => f.food.name.toLowerCase().includes(q)))
         .map(fromSaved);
+    },
+    async analytics(days = 30) {
+      return computeLocalAnalytics(loadMeals(), days);
+    },
+  };
+}
+
+function computeLocalAnalytics(saved: SavedMeal[], days: number): AnalyticsSummary {
+  const sinceMs = Date.now() - days * 24 * 60 * 60 * 1000;
+  const inWindow = saved.filter((s) => new Date(s.savedAt).getTime() >= sinceMs);
+
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  const totalMeals = inWindow.length;
+  const totalKcal = round1(inWindow.reduce((s, m) => s + m.meal.total.energyKcal, 0));
+
+  const dailyMap = new Map<string, { kcal: number; meals: number }>();
+  const foodCounts = new Map<string, number>();
+  let pSum = 0;
+  let cSum = 0;
+  let fSum = 0;
+  for (const s of inWindow) {
+    const date = new Date(s.savedAt).toISOString().slice(0, 10);
+    const d = dailyMap.get(date) ?? { kcal: 0, meals: 0 };
+    d.kcal += s.meal.total.energyKcal;
+    d.meals += 1;
+    dailyMap.set(date, d);
+    pSum += s.meal.total.proteinG;
+    cSum += s.meal.total.carbsG;
+    fSum += s.meal.total.fatG;
+    for (const f of s.meal.foods) {
+      foodCounts.set(f.food.name, (foodCounts.get(f.food.name) ?? 0) + 1);
+    }
+  }
+
+  return {
+    days,
+    totalMeals,
+    totalKcal,
+    avgKcalPerMeal: totalMeals > 0 ? round1(totalKcal / totalMeals) : 0,
+    daily: [...dailyMap.entries()]
+      .map(([date, v]) => ({ date, kcal: round1(v.kcal), meals: v.meals }))
+      .sort((a, b) => (a.date < b.date ? 1 : -1)),
+    commonFoods: [...foodCounts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10),
+    macroAverages: {
+      proteinG: totalMeals > 0 ? round1(pSum / totalMeals) : 0,
+      carbsG: totalMeals > 0 ? round1(cSum / totalMeals) : 0,
+      fatG: totalMeals > 0 ? round1(fSum / totalMeals) : 0,
     },
   };
 }

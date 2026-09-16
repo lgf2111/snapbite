@@ -43,6 +43,16 @@ export interface MealDetail {
   } | null;
 }
 
+export interface AnalyticsSummary {
+  days: number;
+  totalMeals: number;
+  totalKcal: number;
+  avgKcalPerMeal: number;
+  daily: Array<{ date: string; kcal: number; meals: number }>;
+  commonFoods: Array<{ name: string; count: number }>;
+  macroAverages: { proteinG: number; carbsG: number; fatG: number };
+}
+
 export interface SettingsView {
   aiProvider: string;
   connected: boolean;
@@ -119,6 +129,10 @@ export class ApiClient {
     return this.#request<{ query: string; meals: MealSummary[] }>(
       `/api/search?q=${encodeURIComponent(query)}`,
     );
+  }
+
+  analytics(days = 30): Promise<AnalyticsSummary> {
+    return this.#request<AnalyticsSummary>(`/api/analytics?days=${days}`);
   }
 
   getSettings(): Promise<SettingsView> {

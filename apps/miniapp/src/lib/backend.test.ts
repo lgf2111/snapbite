@@ -53,4 +53,17 @@ describe('local backend (no VITE_WORKER_URL)', () => {
     expect(detail.foods[0]?.name).toBe('tofu');
     expect(detail.total?.energyKcal).toBe(76);
   });
+
+  it('computes local analytics (totals, avg, common foods)', async () => {
+    const backend = createBackend();
+    saveMeal(meal('rice', 200));
+    saveMeal(meal('rice', 100));
+    saveMeal(meal('egg', 155));
+    const a = await backend.analytics(30);
+    expect(a.totalMeals).toBe(3);
+    expect(a.totalKcal).toBe(455);
+    expect(a.avgKcalPerMeal).toBeCloseTo(151.7, 1);
+    expect(a.commonFoods[0]?.name).toBe('rice');
+    expect(a.commonFoods[0]?.count).toBe(2);
+  });
 });

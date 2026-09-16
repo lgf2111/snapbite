@@ -1,5 +1,6 @@
 import type { MealResult } from '@foodlog/core';
 import { useEffect, useRef, useState } from 'react';
+import { AnalyticsScreen } from './components/AnalyticsScreen.js';
 import { ConfirmScreen } from './components/ConfirmScreen.js';
 import { HistoryScreen } from './components/HistoryScreen.js';
 import { MealDetailScreen } from './components/MealDetailScreen.js';
@@ -7,7 +8,7 @@ import { SearchScreen } from './components/SearchScreen.js';
 import { type Backend, createBackend, type RecentMeal } from './lib/backend.js';
 import { downscaleImage } from './lib/image.js';
 
-type Tab = 'home' | 'history' | 'search';
+type Tab = 'home' | 'history' | 'search' | 'analytics';
 
 type View =
   | { name: 'tabs' }
@@ -168,6 +169,7 @@ export function App() {
 
       {tab === 'history' && <HistoryScreen backend={backend} onOpenMeal={openMeal} />}
       {tab === 'search' && <SearchScreen backend={backend} onOpenMeal={openMeal} />}
+      {tab === 'analytics' && <AnalyticsScreen backend={backend} />}
 
       <nav className="tabbar">
         <button
@@ -190,6 +192,13 @@ export function App() {
           onClick={() => setTab('search')}
         >
           🔍 Search
+        </button>
+        <button
+          type="button"
+          className={tab === 'analytics' ? 'active' : ''}
+          onClick={() => setTab('analytics')}
+        >
+          📊 Stats
         </button>
       </nav>
     </div>
