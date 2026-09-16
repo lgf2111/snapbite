@@ -143,3 +143,48 @@ Phases 1–5 map to Tasks 1–12; **Phase 6** (Telegram-native serverless) is a 
 - Deterministic where possible (local nutrition table, SQL analytics/search); AI only for what genuinely needs vision.
 - No feature designed around extreme calorie restriction; this is a logging tool.
 - Never claim "private" or "zero data collection" beyond what the architecture actually guarantees.
+
+---
+
+## 10. Progress Log & Roadmap (living section)
+
+This section tracks what was actually built, including work beyond the original 12-task breakdown, plus what's planned next. Updated as the project evolves.
+
+### Delivered
+
+**Tasks 1–11 (core build), all with tests, typecheck, and per-task commits:**
+1. Monorepo + `packages/core` (pnpm workspaces, TS project refs, Vitest, Biome) + Zod schemas.
+2. `AIProvider` interface + DeepSeek adapter (OpenAI-compatible, inline base64 `image_url`, JSON mode). Verified against the real API.
+3. Nutrition resolver + bundled per-100g table (table-first, AI fallback, source-tagged, aggregation).
+4. Local CLI harness (mock default, real DeepSeek via `--real`).
+5. Mini App shell + camera flow on the mock processor (React 19 + Vite 6 + `@telegram-apps/sdk-react`, client-side canvas downscale, editable confirm screen).
+6. Worker + D1 + Drizzle + Telegram `initData` HMAC auth + `GET /api/me`. Tested against Miniflare D1.
+7. Settings + encrypted BYOK (AES-256-GCM, ciphertext+IV stored, key never returned/logged).
+8. `analyze` + `save` endpoints (real pipeline); Mini App wired onto the Worker with a local fallback.
+9. History + detail + search (owner-scoped, day-grouped, LIKE search with escaped wildcards).
+10. Analytics (aggregate SQL only — totals, daily trend, common foods, macro averages).
+11. Bot launcher + notification feed (webhook, `/start /help /settings`, web_app launch button, post-save message).
+
+**Extras delivered beyond the original plan:**
+- **Full meal CRUD** — `PUT`/`DELETE /api/meals/:id` (owner-scoped, cascade delete verified); editable + deletable meal detail screen in the Mini App.
+- **Settings screen in the Mini App** — enter/replace the BYOK key; shows connection status + last 4.
+- **Editable macros** — per-food manual override (`manual` nutrition source) used verbatim, editable in the detail screen.
+- **Bot-photo auto-log** — send a photo straight to the bot chat; the Worker downloads via `getFile`, runs the pipeline with the user's key, saves with the Telegram `file_id`, and replies with a summary + launch button.
+- **Photos in logs** — `GET /api/meal-photo/:id` proxies the Telegram image (bot token stays server-side; `initData` verified via query param); thumbnails in history/recent, full photo in detail.
+- **Deployed to production** — Worker on `workers.dev`, Mini App on Cloudflare Pages, D1 in APAC, webhook + menu button + commands registered. All on free tiers (AI on the user's key).
+
+### In progress
+
+- **Multi-provider AI (accuracy upgrade).** DeepSeek's food-vision accuracy is weak. Adding a **Gemini** adapter and a **generic OpenAI-compatible** adapter (e.g. GPT-4o-mini) behind the same `AIProvider` interface, with provider + model selection in Settings, and raising image detail to `high`. Primary target: **Gemini**.
+- **Mini App UI/UX pass.** Telegram theme params, native BackButton/MainButton, haptics; swipeable tabs, swipe-to-delete, pull-to-refresh; confirm-screen polish (quantity steppers, confidence cues, skeleton loaders); home daily-summary card; toasts and empty states.
+
+### Future / backlog
+
+- **R2 photo storage for Mini-App captures** so in-app photos persist like bot photos (currently only bot-sent photos keep an image). Deferred in the original plan until a gallery is actually needed.
+- **In-chat confirm/edit** — inline "Looks good / Edit" buttons on the bot auto-log reply, so corrections don't require opening the app.
+- **Goals & streaks** — daily calorie/protein targets, progress ring, logging streaks.
+- **Phase 6 (Telegram-native serverless)** — a future thin adapter over the same `packages/core`, per the original design.
+
+### Design principles (unchanged)
+
+`packages/core` stays transport-agnostic. AI nutrition is always an estimate and always correctable. Deterministic where possible (local table, SQL analytics/search). No feature designed around extreme calorie restriction. Never claim privacy beyond what the architecture guarantees.
