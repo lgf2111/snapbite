@@ -70,6 +70,7 @@ export interface MealSummary {
   energyKcal: number | null;
   source: string | null;
   foods: string[];
+  hasPhoto: boolean;
 }
 
 /** Lists a user's meals (newest first) with a food-name summary and totals. */
@@ -95,6 +96,7 @@ export async function listMeals(db: MealsDb, userId: string, limit = 50): Promis
       energyKcal: nut[0]?.energyKcal ?? null,
       source: nut[0]?.source ?? null,
       foods: foods.map((f) => f.name),
+      hasPhoto: Boolean(meal.telegramFileId),
     });
   }
   return summaries;
@@ -289,6 +291,7 @@ export async function searchMeals(
       energyKcal: nut[0]?.energyKcal ?? null,
       source: nut[0]?.source ?? null,
       foods: foods.map((f: FoodItemRow) => f.name),
+      hasPhoto: Boolean(meal.telegramFileId),
     });
   }
   return summaries;

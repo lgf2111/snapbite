@@ -6,6 +6,7 @@ import {
   mealLoggedMessage,
   MealResult,
   resolveMeal,
+  verifyInitData,
 } from '@foodlog/core';
 import { Hono } from 'hono';
 import {
@@ -18,8 +19,12 @@ import {
   updateMeal,
 } from '../db/meals.js';
 import { createSettingsDb, getSettings } from '../db/settings.js';
+import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';
+import { TelegramBotClient } from '../telegram/botClient.js';
 import type { BotClientFactory } from './webhook.js';
+
+const defaultBotClientFactory: BotClientFactory = (token) => new TelegramBotClient(token);
 
 /** Injectable provider factory so tests can supply a mock instead of DeepSeek. */
 export type ProviderFactory = (apiKey: string) => AIProvider;
@@ -177,6 +182,46 @@ export function mealsRoutes(
     const ok = await deleteMeal(db, c.req.param('id'), c.get('userId'));
     if (!ok) return c.json({ error: 'Not found' }, 404);
     return c.json({ ok: true });
+  });
+
+  return app;
+}
+
+/**
+ * Photo proxy route, mounted separately because <img> tags can't send the
+ * initData header — it's passed as a query param and verified inline here. The
+ * bot token never reaches the client; the Worker fetches the image and streams
+ * it back.
+ */
+export function mealPhotoRoutes(botClientFactory: BotClientFactory = defaultBotClientFactory) {
+  const app = new Hono<AppBindings>();
+
+  // GET /api/meal-photo/:id?initData=...
+  app.get('/:id', async (c) => {
+    const initData = c.req.query('initData') ?? '';
+    if (!initData || !c.env.TELEGRAM_BOT_TOKEN) return c.text('Unauthorized', 401);
+    const verified = await verifyInitData(initData, c.env.TELEGRAM_BOT_TOKEN);
+    if (!verified.ok) return c.text('Unauthorized', 401);
+
+    const db = createDb(c.env.DB);
+    const user = await upsertUser(db, verified.data.user);
+    const mealsDb = createMealsDb(c.env.DB);
+    const detail = await getMealDetail(mealsDb, c.req.param('id'), user.id);
+    if (!detail?.telegramFileId) return c.text('Not found', 404);
+
+    const bot = botClientFactory(c.env.TELEGRAM_BOT_TOKEN);
+    const filePath = await bot.getFilePath(detail.telegramFileId);
+    if (!filePath) return c.text('Not found', 404);
+    const file = await bot.downloadFile(filePath);
+    if (!file) return c.text('Not found', 404);
+
+    const bytes = Uint8Array.from(atob(file.base64), (ch) => ch.charCodeAt(0));
+    return new Response(bytes, {
+      headers: {
+        'content-type': file.mimeType,
+        'cache-control': 'private, max-age=86400',
+      },
+    });
   });
 
   return app;

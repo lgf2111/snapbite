@@ -275,3 +275,29 @@ body {
   margin-top: 4px;
   white-space: nowrap;
 }
+
+.macro-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.macro-edit label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.macro-edit input {
+  width: 52px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+}

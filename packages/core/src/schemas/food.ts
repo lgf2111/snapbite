@@ -36,5 +36,11 @@ export const FoodItem = z.object({
   quantity: z.number().finite().positive().default(1),
   confidence: Confidence,
   aiNutrition: NutritionPer100g.optional(),
+  /**
+   * User-entered absolute macros for this food (the whole item, already
+   * accounting for weight/quantity). When present, the resolver uses these
+   * verbatim and tags the value `manual`.
+   */
+  manualNutrition: NutritionPer100g.optional(),
 });
 export type FoodItem = z.infer<typeof FoodItem>;

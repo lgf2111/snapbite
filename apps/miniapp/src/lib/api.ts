@@ -11,6 +11,7 @@ export interface MealSummary {
   energyKcal: number | null;
   source: string | null;
   foods: string[];
+  hasPhoto: boolean;
 }
 
 export interface DayGroup {
@@ -148,6 +149,12 @@ export class ApiClient {
 
   analytics(days = 30): Promise<AnalyticsSummary> {
     return this.#request<AnalyticsSummary>(`/api/analytics?days=${days}`);
+  }
+
+  /** Builds a photo URL for a meal (initData in the query — used as an <img> src). */
+  photoUrl(id: string): string {
+    const initData = encodeURIComponent(this.#getInitData());
+    return `${this.#baseUrl}/api/meal-photo/${encodeURIComponent(id)}?initData=${initData}`;
   }
 
   getSettings(): Promise<SettingsView> {

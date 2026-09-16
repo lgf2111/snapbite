@@ -4,6 +4,7 @@ import type { NutritionSource } from '../schemas/nutrition.js';
 const SOURCE_LABEL: Record<NutritionSource, string> = {
   table: 'from table',
   ai_estimate: 'AI estimate',
+  manual: 'edited',
   mixed: 'mixed',
 };
 

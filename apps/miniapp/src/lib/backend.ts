@@ -50,6 +50,8 @@ export interface Backend {
   analytics(days?: number): Promise<AnalyticsSummary>;
   getSettings(): Promise<SettingsView>;
   saveApiKey(apiKey: string): Promise<SettingsView>;
+  /** Photo URL for a meal (worker mode with a telegram file); null otherwise. */
+  photoUrl(id: string): string | null;
 }
 
 export function createBackend(): Backend {
@@ -73,11 +75,11 @@ export function createBackend(): Backend {
       },
       async recent() {
         const { meals } = await api.listMeals();
-        return meals.map(toRecent);
+        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id)));
       },
       async history() {
         const { meals, groups } = await api.listMeals();
-        const byId = new Map(meals.map((m) => [m.id, toRecent(m)]));
+        const byId = new Map(meals.map((m) => [m.id, toRecent(m, (id) => api.photoUrl(id))]));
         return groups.map((g) => ({
           date: g.date,
           totalKcal: g.totalKcal,
@@ -89,7 +91,7 @@ export function createBackend(): Backend {
       },
       async search(query) {
         const { meals } = await api.search(query);
-        return meals.map(toRecent);
+        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id)));
       },
       analytics(days) {
         return api.analytics(days);
@@ -100,6 +102,9 @@ export function createBackend(): Backend {
       async saveApiKey(apiKey) {
         const res = await api.saveApiKey(apiKey);
         return { aiProvider: res.aiProvider, connected: res.connected, keyLast4: res.keyLast4 };
+      },
+      photoUrl(id) {
+        return api.photoUrl(id);
       },
     };
   }
@@ -143,6 +148,10 @@ export function createBackend(): Backend {
     },
     async saveApiKey() {
       return { aiProvider: 'mock', connected: true, keyLast4: null };
+    },
+    photoUrl(id) {
+      // Local mode stores a data-URL preview on the saved meal, if any.
+      return loadMeals().find((m) => m.id === id)?.previewUrl ?? null;
     },
   };
 }
@@ -228,12 +237,13 @@ function savedToDetail(s: SavedMeal): MealDetail {
   };
 }
 
-function toRecent(m: MealSummary): RecentMeal {
+function toRecent(m: MealSummary, photoUrl?: (id: string) => string): RecentMeal {
   return {
     id: m.id,
     label: m.foods.join(', ') || 'Meal',
     energyKcal: m.energyKcal,
     when: m.loggedAt,
+    ...(m.hasPhoto && photoUrl ? { previewUrl: photoUrl(m.id) } : {}),
   };
 }
 

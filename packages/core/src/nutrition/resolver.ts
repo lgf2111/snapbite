@@ -37,6 +37,17 @@ function totalGrams(food: FoodItem): number {
 export function resolveFoodNutrition(food: FoodItem): NutritionValue | undefined {
   const grams = totalGrams(food);
 
+  // User override wins — absolute macros for the whole food, used verbatim.
+  if (food.manualNutrition) {
+    return {
+      energyKcal: round1(food.manualNutrition.energyKcal),
+      proteinG: round1(food.manualNutrition.proteinG),
+      carbsG: round1(food.manualNutrition.carbsG),
+      fatG: round1(food.manualNutrition.fatG),
+      source: 'manual',
+    };
+  }
+
   const tableMatch = lookupTable(food.name);
   if (tableMatch) return scale(tableMatch, grams, 'table');
 

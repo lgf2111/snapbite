@@ -5,9 +5,10 @@ import { z } from 'zod';
  * an estimate:
  * - `table`       — resolved from the bundled local per-100g table.
  * - `ai_estimate` — the AI's rough estimate (no table match).
- * - `mixed`       — an aggregate combining table-backed and AI-estimated foods.
+ * - `manual`      — the user entered/edited these macros directly.
+ * - `mixed`       — an aggregate combining foods from more than one source.
  */
-export const NutritionSource = z.enum(['table', 'ai_estimate', 'mixed']);
+export const NutritionSource = z.enum(['table', 'ai_estimate', 'manual', 'mixed']);
 export type NutritionSource = z.infer<typeof NutritionSource>;
 
 const nonNegative = z.number().finite().nonnegative();

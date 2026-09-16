@@ -60,6 +60,27 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
     setFoods((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  /** Sets a manual macro override for a food, seeding from current resolved values. */
+  function setMacro(i: number, key: 'energyKcal' | 'proteinG' | 'carbsG' | 'fatG', value: number) {
+    setFoods((prev) =>
+      prev.map((f, idx) => {
+        if (idx !== i) return f;
+        const current = f.manualNutrition ??
+          resolveFoodNutrition(f) ?? { energyKcal: 0, proteinG: 0, carbsG: 0, fatG: 0 };
+        return {
+          ...f,
+          manualNutrition: {
+            energyKcal: current.energyKcal,
+            proteinG: current.proteinG,
+            carbsG: current.carbsG,
+            fatG: current.fatG,
+            [key]: Math.max(0, value),
+          },
+        };
+      }),
+    );
+  }
+
   async function handleSave() {
     if (!detail || foods.length === 0) return;
     setBusy('saving');
@@ -107,6 +128,9 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
       {detail && (
         <>
           <p className="muted">{new Date(detail.loggedAt).toLocaleString()}</p>
+          {detail.telegramFileId && backend.photoUrl(mealId) && (
+            <img className="preview" src={backend.photoUrl(mealId) as string} alt="Meal" />
+          )}
 
           <div className="card">
             {resolved.foods.map((mf, i) => (
@@ -118,9 +142,47 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
                     value={mf.food.name}
                     onChange={(e) => updateFood(i, { name: e.target.value })}
                   />
-                  <div className="macro">
-                    {mf.nutrition.energyKcal} kcal · P {mf.nutrition.proteinG}g · C{' '}
-                    {mf.nutrition.carbsG}g · F {mf.nutrition.fatG}g{' '}
+                  <div className="macro-edit">
+                    <label>
+                      <input
+                        aria-label={`Food ${i + 1} kcal`}
+                        type="number"
+                        min={0}
+                        value={mf.nutrition.energyKcal}
+                        onChange={(e) => setMacro(i, 'energyKcal', Number(e.target.value) || 0)}
+                      />
+                      kcal
+                    </label>
+                    <label>
+                      P
+                      <input
+                        aria-label={`Food ${i + 1} protein grams`}
+                        type="number"
+                        min={0}
+                        value={mf.nutrition.proteinG}
+                        onChange={(e) => setMacro(i, 'proteinG', Number(e.target.value) || 0)}
+                      />
+                    </label>
+                    <label>
+                      C
+                      <input
+                        aria-label={`Food ${i + 1} carbs grams`}
+                        type="number"
+                        min={0}
+                        value={mf.nutrition.carbsG}
+                        onChange={(e) => setMacro(i, 'carbsG', Number(e.target.value) || 0)}
+                      />
+                    </label>
+                    <label>
+                      F
+                      <input
+                        aria-label={`Food ${i + 1} fat grams`}
+                        type="number"
+                        min={0}
+                        value={mf.nutrition.fatG}
+                        onChange={(e) => setMacro(i, 'fatG', Number(e.target.value) || 0)}
+                      />
+                    </label>
                     <span className="source-tag">[{sourceLabel(mf.nutrition.source)}]</span>
                   </div>
                 </div>

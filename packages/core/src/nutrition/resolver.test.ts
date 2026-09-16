@@ -96,6 +96,24 @@ describe('resolveFoodNutrition', () => {
   it('returns undefined when neither table nor AI estimate is available', () => {
     expect(resolveFoodNutrition(food({ name: 'mystery stew' }))).toBeUndefined();
   });
+
+  it('uses manual override verbatim (source=manual), beating table and AI', () => {
+    const result = resolveFoodNutrition(
+      food({
+        name: 'white rice', // would match the table
+        estimatedWeightG: 500,
+        aiNutrition: { energyKcal: 1, proteinG: 1, carbsG: 1, fatG: 1 },
+        manualNutrition: { energyKcal: 321, proteinG: 12, carbsG: 40, fatG: 9 },
+      }),
+    );
+    expect(result).toEqual({
+      energyKcal: 321,
+      proteinG: 12,
+      carbsG: 40,
+      fatG: 9,
+      source: 'manual',
+    });
+  });
 });
 
 describe('aggregate', () => {

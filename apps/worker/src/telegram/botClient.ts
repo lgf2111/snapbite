@@ -40,4 +40,47 @@ export class TelegramBotClient {
       body: JSON.stringify(body),
     });
   }
+
+  /** Resolves a file_id to a downloadable file_path via getFile. */
+  async getFilePath(fileId: string): Promise<string | null> {
+    const res = await this.#fetch(`https://api.telegram.org/bot${this.#token}/getFile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: fileId }),
+    });
+    if (!res.ok) return null;
+    try {
+      const json = JSON.parse(await res.text()) as { ok: boolean; result?: { file_path?: string } };
+      return json.ok && json.result?.file_path ? json.result.file_path : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Downloads a file by its file_path and returns base64 + detected mime. */
+  async downloadFile(
+    filePath: string,
+  ): Promise<{ base64: string; mimeType: string } | null> {
+    // The file download endpoint is a plain GET; use the raw global fetch so we
+    // get a real Response with arrayBuffer().
+    const url = `https://api.telegram.org/file/bot${this.#token}/${filePath}`;
+    const globalFetch = (globalThis as { fetch?: typeof fetch }).fetch;
+    if (typeof globalFetch !== 'function') return null;
+    const res = await globalFetch.call(globalThis, url);
+    if (!res.ok) return null;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    let binary = '';
+    for (const b of buf) binary += String.fromCharCode(b);
+    const base64 = btoa(binary);
+    const mimeType = mimeFromPath(filePath);
+    return { base64, mimeType };
+  }
+}
+
+function mimeFromPath(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'image/jpeg';
 }

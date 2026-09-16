@@ -4,12 +4,23 @@
  * message. No network here — the Worker supplies the send transport.
  */
 
+/** One size of a photo Telegram delivered. */
+export interface TelegramPhotoSize {
+  file_id: string;
+  file_unique_id?: string;
+  width?: number;
+  height?: number;
+  file_size?: number;
+}
+
 /** The subset of a Telegram Update we care about. */
 export interface TelegramUpdate {
   update_id?: number;
   message?: {
     message_id?: number;
     text?: string;
+    caption?: string;
+    photo?: TelegramPhotoSize[];
     chat?: { id: number; type?: string };
     from?: { id: number; first_name?: string; username?: string };
   };
@@ -17,14 +28,20 @@ export interface TelegramUpdate {
 
 export interface ParsedCommand {
   chatId: number;
+  /** The Telegram user id (for resolving the app user), when present. */
+  fromId: number | null;
   /** The command without the leading slash, lowercased (e.g. "start"). */
   command: string | null;
   /** Raw text after the command, if any. */
   args: string;
   text: string;
+  /** file_id of the largest photo in the message, if this is a photo message. */
+  photoFileId: string | null;
+  /** Caption text accompanying a photo, if any. */
+  caption: string;
 }
 
-/** Extracts the chat id, command, and args from an update's message. */
+/** Extracts the chat id, command, args, and any photo from an update's message. */
 export function parseUpdate(update: TelegramUpdate): ParsedCommand | null {
   const message = update.message;
   if (!message?.chat) return null;
@@ -40,7 +57,19 @@ export function parseUpdate(update: TelegramUpdate): ParsedCommand | null {
     args = rest.join(' ');
   }
 
-  return { chatId: message.chat.id, command, args, text };
+  // Telegram sends an array of photo sizes ascending; the last is the largest.
+  const photo = message.photo;
+  const photoFileId = photo && photo.length > 0 ? (photo[photo.length - 1]?.file_id ?? null) : null;
+
+  return {
+    chatId: message.chat.id,
+    fromId: message.from?.id ?? null,
+    command,
+    args,
+    text,
+    photoFileId,
+    caption: (message.caption ?? '').trim(),
+  };
 }
 
 export interface InlineKeyboardButton {
@@ -64,7 +93,10 @@ export interface BotConfig {
  * Produces the reply for a parsed command. Returns null when there's nothing to
  * say (non-command messages just get a gentle nudge to open the app).
  */
-export function replyForCommand(parsed: ParsedCommand, config: BotConfig): BotReply | null {
+export function replyForCommand(
+  parsed: Pick<ParsedCommand, 'command'>,
+  config: BotConfig,
+): BotReply | null {
   const launchButton: InlineKeyboardButton[][] | undefined = config.miniAppUrl
     ? [[{ text: '📷 Open FoodLog', web_app: { url: config.miniAppUrl } }]]
     : undefined;
@@ -94,4 +126,20 @@ export function mealLoggedMessage(foods: string[], energyKcal: number | null): s
   const list = foods.length > 0 ? foods.join(', ') : 'your meal';
   const kcal = energyKcal != null ? ` (~${energyKcal} kcal, estimate)` : '';
   return `✅ Logged ${list}${kcal}.`;
+}
+
+/** Reply shown when a photo is logged straight from the bot chat. */
+export function photoLoggedReply(
+  foods: string[],
+  energyKcal: number | null,
+  config: BotConfig,
+): BotReply {
+  const text = `${mealLoggedMessage(foods, energyKcal)}\nOpen the app to review or correct it.`;
+  if (config.miniAppUrl) {
+    return {
+      text,
+      replyMarkup: { inline_keyboard: [[{ text: '📷 Open FoodLog', web_app: { url: config.miniAppUrl } }]] },
+    };
+  }
+  return { text };
 }

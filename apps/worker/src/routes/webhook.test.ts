@@ -1,20 +1,33 @@
-import type { BotReply } from '@foodlog/core';
+import { type AIFoodAnalysis, type BotReply, MockAIProvider, signInitData } from '@foodlog/core';
 import { env } from 'cloudflare:test';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
+import { INIT_DATA_HEADER } from '../middleware/auth.js';
 
 const SECRET_HEADER = 'x-telegram-bot-api-secret-token';
 const SECRET = 'test-webhook-secret';
 
+/** A full BotClient mock; photo helpers return canned data. */
+function mockBot(sent: Array<{ chatId: number; reply: BotReply }>) {
+  return {
+    async sendMessage(chatId: number, reply: BotReply) {
+      sent.push({ chatId, reply });
+    },
+    async getFilePath() {
+      return 'photos/file_1.jpg';
+    },
+    async downloadFile() {
+      return { base64: 'QUJD', mimeType: 'image/jpeg' };
+    },
+  };
+}
+
 /** Captures messages the webhook would send, via an injected mock bot client. */
-function appWithCapture() {
+function appWithCapture(analysis?: AIFoodAnalysis) {
   const sent: Array<{ chatId: number; reply: BotReply }> = [];
   const app = createApp({
-    botClientFactory: () => ({
-      async sendMessage(chatId: number, reply: BotReply) {
-        sent.push({ chatId, reply });
-      },
-    }),
+    botClientFactory: () => mockBot(sent),
+    providerFactory: () => new MockAIProvider(analysis),
   });
   return { app, sent };
 }
@@ -66,12 +79,58 @@ describe('POST /webhook', () => {
   });
 
   it('acks malformed JSON without throwing', async () => {
-    const app = createApp({ botClientFactory: () => ({ sendMessage: vi.fn() }) });
+    const { app } = appWithCapture();
     const res = await app.request(
       '/webhook',
       { method: 'POST', headers: { 'content-type': 'application/json', [SECRET_HEADER]: SECRET }, body: 'not json' },
       env,
     );
     expect(res.status).toBe(200);
+  });
+
+  it('prompts for an API key when a photo is sent but no key is saved', async () => {
+    const { app, sent } = appWithCapture();
+    const res = await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: 8100 }, from: { id: 8100 } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(sent[0]?.reply.text).toContain('Add your AI key');
+  });
+
+  it('auto-logs a photo when the user has a key', async () => {
+    // Save a key for this user via the authenticated settings endpoint first.
+    const tgId = 8200;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const keyApp = createApp();
+    await keyApp.request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'sk-test-key' }),
+      },
+      env,
+    );
+
+    const { app, sent } = appWithCapture();
+    const res = await app.request(
+      '/webhook',
+      post({
+        message: { photo: [{ file_id: 'f_small' }, { file_id: 'f_large' }], chat: { id: tgId }, from: { id: tgId } },
+      }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(sent[0]?.reply.text).toContain('Logged');
+
+    // The meal should now be listed for that user.
+    const list = (await (
+      await createApp().request('/api/meals', { headers: { [INIT_DATA_HEADER]: initData } }, env)
+    ).json()) as { meals: unknown[] };
+    expect(list.meals.length).toBeGreaterThanOrEqual(1);
   });
 });

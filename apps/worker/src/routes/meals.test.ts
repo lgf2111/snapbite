@@ -164,6 +164,12 @@ describe('POST /api/meals + GET /api/meals', () => {
         async sendMessage(chatId: number, reply: { text: string }) {
           sent.push({ chatId, text: reply.text });
         },
+        async getFilePath() {
+          return null;
+        },
+        async downloadFile() {
+          return null;
+        },
       }),
     });
     await app.request(

@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import type { AppBindings } from './env.js';
 import { telegramAuth } from './middleware/auth.js';
 import { analyticsRoutes } from './routes/analytics.js';
-import { mealsRoutes, type ProviderFactory, searchRoutes } from './routes/meals.js';
+import { mealPhotoRoutes, mealsRoutes, type ProviderFactory, searchRoutes } from './routes/meals.js';
 import { settingsRoutes } from './routes/settings.js';
 import { type BotClientFactory, webhookRoutes } from './routes/webhook.js';
 
@@ -24,7 +24,16 @@ export function createApp(opts: CreateAppOptions = {}) {
   app.get('/api/health', (c) => c.json({ ok: true }));
 
   // Telegram webhook — unauthenticated by initData; guarded by secret token.
-  app.route('/webhook', webhookRoutes(opts.botClientFactory));
+  app.route(
+    '/webhook',
+    webhookRoutes({
+      ...(opts.botClientFactory ? { botClientFactory: opts.botClientFactory } : {}),
+      ...(opts.providerFactory ? { providerFactory: opts.providerFactory } : {}),
+    }),
+  );
+
+  // Photo proxy — verifies initData via query param (an <img> can't send headers).
+  app.route('/api/meal-photo', mealPhotoRoutes(opts.botClientFactory));
 
   // Everything under /api (except health) requires a valid Telegram session.
   const api = new Hono<AppBindings>();
