@@ -1,0 +1,32 @@
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import type { AppBindings } from './env.js';
+import { telegramAuth } from './middleware/auth.js';
+
+/** Builds the Hono app. Exported separately so tests can mount it directly. */
+export function createApp() {
+  const app = new Hono<AppBindings>();
+
+  app.use('*', cors());
+
+  // Health check — unauthenticated.
+  app.get('/api/health', (c) => c.json({ ok: true }));
+
+  // Everything under /api (except health) requires a valid Telegram session.
+  const api = new Hono<AppBindings>();
+  api.use('*', telegramAuth());
+
+  api.get('/me', (c) => {
+    const tgUser = c.get('telegramUser');
+    return c.json({
+      userId: c.get('userId'),
+      telegramUserId: tgUser.id,
+      firstName: tgUser.first_name ?? null,
+      username: tgUser.username ?? null,
+    });
+  });
+
+  app.route('/api', api);
+
+  return app;
+}
