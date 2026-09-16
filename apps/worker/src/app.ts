@@ -5,10 +5,13 @@ import { telegramAuth } from './middleware/auth.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { mealsRoutes, type ProviderFactory, searchRoutes } from './routes/meals.js';
 import { settingsRoutes } from './routes/settings.js';
+import { type BotClientFactory, webhookRoutes } from './routes/webhook.js';
 
 export interface CreateAppOptions {
   /** Injectable AI provider factory (tests pass a mock). */
   providerFactory?: ProviderFactory;
+  /** Injectable Telegram bot client factory (tests pass a mock). */
+  botClientFactory?: BotClientFactory;
 }
 
 /** Builds the Hono app. Exported separately so tests can mount it directly. */
@@ -19,6 +22,9 @@ export function createApp(opts: CreateAppOptions = {}) {
 
   // Health check — unauthenticated.
   app.get('/api/health', (c) => c.json({ ok: true }));
+
+  // Telegram webhook — unauthenticated by initData; guarded by secret token.
+  app.route('/webhook', webhookRoutes(opts.botClientFactory));
 
   // Everything under /api (except health) requires a valid Telegram session.
   const api = new Hono<AppBindings>();
@@ -35,7 +41,7 @@ export function createApp(opts: CreateAppOptions = {}) {
   });
 
   api.route('/settings', settingsRoutes());
-  api.route('/meals', mealsRoutes(opts.providerFactory));
+  api.route('/meals', mealsRoutes(opts.providerFactory, opts.botClientFactory));
   api.route('/search', searchRoutes());
   api.route('/analytics', analyticsRoutes());
 

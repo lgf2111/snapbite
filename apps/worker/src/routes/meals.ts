@@ -3,6 +3,7 @@ import {
   DeepSeekProvider,
   decryptSecret,
   type MealImage,
+  mealLoggedMessage,
   MealResult,
   resolveMeal,
 } from '@foodlog/core';
@@ -10,6 +11,7 @@ import { Hono } from 'hono';
 import { createMealsDb, getMealDetail, listMeals, saveMeal, searchMeals } from '../db/meals.js';
 import { createSettingsDb, getSettings } from '../db/settings.js';
 import type { AppBindings } from '../env.js';
+import type { BotClientFactory } from './webhook.js';
 
 /** Injectable provider factory so tests can supply a mock instead of DeepSeek. */
 export type ProviderFactory = (apiKey: string) => AIProvider;
@@ -23,7 +25,10 @@ const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/web
  * BYOK key and returns an editable MealResult; the uploaded image bytes are
  * used only for the request and then dropped (never persisted).
  */
-export function mealsRoutes(providerFactory: ProviderFactory = defaultProviderFactory) {
+export function mealsRoutes(
+  providerFactory: ProviderFactory = defaultProviderFactory,
+  botClientFactory?: BotClientFactory,
+) {
   const app = new Hono<AppBindings>();
 
   // POST /api/meals/analyze — { base64, mimeType, hint? } -> MealResult
@@ -105,6 +110,20 @@ export function mealsRoutes(providerFactory: ProviderFactory = defaultProviderFa
       meal: parsed.data,
       ...(typeof telegramFileId === 'string' ? { telegramFileId } : {}),
     });
+
+    // Best-effort "logged" feed message to the user's bot chat. Never blocks or
+    // fails the save.
+    if (botClientFactory && c.env.TELEGRAM_BOT_TOKEN) {
+      try {
+        const bot = botClientFactory(c.env.TELEGRAM_BOT_TOKEN);
+        const foods = parsed.data.foods.map((f) => f.food.name);
+        await bot.sendMessage(c.get('telegramUser').id, {
+          text: mealLoggedMessage(foods, parsed.data.total.energyKcal),
+        });
+      } catch {
+        // ignore feed failures
+      }
+    }
 
     return c.json({ id }, 201);
   });

@@ -156,4 +156,24 @@ describe('POST /api/meals + GET /api/meals', () => {
     const body = (await list.json()) as { meals: unknown[] };
     expect(body.meals).toEqual([]);
   });
+
+  it('posts a "logged" feed message to the user on save', async () => {
+    const sent: Array<{ chatId: number; text: string }> = [];
+    const app = createApp({
+      botClientFactory: () => ({
+        async sendMessage(chatId: number, reply: { text: string }) {
+          sent.push({ chatId, text: reply.text });
+        },
+      }),
+    });
+    await app.request(
+      '/api/meals',
+      { method: 'POST', headers: await headers(3005), body: JSON.stringify({ meal: savedMeal }) },
+      env,
+    );
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.chatId).toBe(3005);
+    expect(sent[0]?.text).toContain('Logged');
+    expect(sent[0]?.text).toContain('white rice');
+  });
 });

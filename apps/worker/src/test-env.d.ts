@@ -5,6 +5,8 @@ declare module 'cloudflare:test' {
     DB: D1Database;
     TELEGRAM_BOT_TOKEN: string;
     ENCRYPTION_KEY?: string;
+    MINI_APP_URL?: string;
+    TELEGRAM_WEBHOOK_SECRET?: string;
     TEST_MIGRATIONS: D1Migration[];
   }
   export const env: ProvidedEnv;
