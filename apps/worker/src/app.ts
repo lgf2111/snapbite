@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { AppBindings } from './env.js';
 import { telegramAuth } from './middleware/auth.js';
-import { mealsRoutes, type ProviderFactory } from './routes/meals.js';
+import { mealsRoutes, type ProviderFactory, searchRoutes } from './routes/meals.js';
 import { settingsRoutes } from './routes/settings.js';
 
 export interface CreateAppOptions {
@@ -35,6 +35,7 @@ export function createApp(opts: CreateAppOptions = {}) {
 
   api.route('/settings', settingsRoutes());
   api.route('/meals', mealsRoutes(opts.providerFactory));
+  api.route('/search', searchRoutes());
 
   app.route('/api', api);
 

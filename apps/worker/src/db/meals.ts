@@ -1,7 +1,7 @@
 import type { MealResult } from '@foodlog/core';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, like } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { foodItems, meals, nutrition } from './schema.js';
+import { type FoodItemRow, foodItems, meals, nutrition } from './schema.js';
 
 export function createMealsDb(d1: D1Database) {
   return drizzle(d1, { schema: { meals, foodItems, nutrition } });
@@ -112,4 +112,128 @@ export async function mealOwnedBy(
     .where(and(eq(meals.id, mealId), eq(meals.userId, userId)))
     .limit(1);
   return rows.length > 0;
+}
+
+export interface MealDetail {
+  id: string;
+  loggedAt: number;
+  createdAt: number;
+  notes: string | null;
+  confidence: number | null;
+  telegramFileId: string | null;
+  foods: Array<{
+    id: string;
+    name: string;
+    estimatedWeightG: number | null;
+    portion: string | null;
+    quantity: number;
+    confidence: number | null;
+  }>;
+  total: {
+    energyKcal: number;
+    proteinG: number;
+    carbsG: number;
+    fatG: number;
+    source: string;
+  } | null;
+}
+
+/** Fetches full detail for one meal, owner-scoped. Returns undefined if not owned. */
+export async function getMealDetail(
+  db: MealsDb,
+  mealId: string,
+  userId: string,
+): Promise<MealDetail | undefined> {
+  const mealRows = await db
+    .select()
+    .from(meals)
+    .where(and(eq(meals.id, mealId), eq(meals.userId, userId)))
+    .limit(1);
+  const meal = mealRows[0];
+  if (!meal) return undefined;
+
+  const [foods, nut] = await Promise.all([
+    db.select().from(foodItems).where(eq(foodItems.mealId, mealId)),
+    db.select().from(nutrition).where(eq(nutrition.mealId, mealId)).limit(1),
+  ]);
+
+  const n = nut[0];
+  return {
+    id: meal.id,
+    loggedAt: meal.loggedAt,
+    createdAt: meal.createdAt,
+    notes: meal.notes,
+    confidence: meal.confidence,
+    telegramFileId: meal.telegramFileId,
+    foods: foods.map((f: FoodItemRow) => ({
+      id: f.id,
+      name: f.name,
+      estimatedWeightG: f.estimatedWeightG,
+      portion: f.portion,
+      quantity: f.quantity,
+      confidence: f.confidence,
+    })),
+    total: n
+      ? {
+          energyKcal: n.energyKcal,
+          proteinG: n.proteinG,
+          carbsG: n.carbsG,
+          fatG: n.fatG,
+          source: n.source,
+        }
+      : null,
+  };
+}
+
+/**
+ * Searches a user's meals by food name (case-insensitive LIKE). Deterministic
+ * SQL — no AI. Returns matching meal summaries newest-first.
+ */
+export async function searchMeals(
+  db: MealsDb,
+  userId: string,
+  query: string,
+  limit = 50,
+): Promise<MealSummary[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  // Escape LIKE wildcards in user input, then wrap for a contains match.
+  const escaped = q.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+  const pattern = `%${escaped}%`;
+
+  // Find the user's food_items whose name matches, scoped to their meals.
+  const matches = await db
+    .select({ mealId: foodItems.mealId })
+    .from(foodItems)
+    .innerJoin(meals, eq(foodItems.mealId, meals.id))
+    .where(and(eq(meals.userId, userId), like(foodItems.name, pattern)));
+
+  const mealIds = [...new Set(matches.map((m: { mealId: string }) => m.mealId))];
+  if (mealIds.length === 0) return [];
+
+  const mealRows = await db
+    .select()
+    .from(meals)
+    .where(and(eq(meals.userId, userId), inArray(meals.id, mealIds)))
+    .orderBy(desc(meals.loggedAt))
+    .limit(limit);
+
+  const summaries: MealSummary[] = [];
+  for (const meal of mealRows) {
+    const [foods, nut] = await Promise.all([
+      db.select().from(foodItems).where(eq(foodItems.mealId, meal.id)),
+      db.select().from(nutrition).where(eq(nutrition.mealId, meal.id)).limit(1),
+    ]);
+    summaries.push({
+      id: meal.id,
+      loggedAt: meal.loggedAt,
+      notes: meal.notes,
+      confidence: meal.confidence,
+      energyKcal: nut[0]?.energyKcal ?? null,
+      source: nut[0]?.source ?? null,
+      foods: foods.map((f: FoodItemRow) => f.name),
+    });
+  }
+  return summaries;
 }

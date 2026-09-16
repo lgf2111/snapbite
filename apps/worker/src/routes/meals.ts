@@ -7,7 +7,7 @@ import {
   resolveMeal,
 } from '@foodlog/core';
 import { Hono } from 'hono';
-import { createMealsDb, listMeals, saveMeal } from '../db/meals.js';
+import { createMealsDb, getMealDetail, listMeals, saveMeal, searchMeals } from '../db/meals.js';
 import { createSettingsDb, getSettings } from '../db/settings.js';
 import type { AppBindings } from '../env.js';
 
@@ -109,12 +109,61 @@ export function mealsRoutes(providerFactory: ProviderFactory = defaultProviderFa
     return c.json({ id }, 201);
   });
 
-  // GET /api/meals — list the user's meals (newest first).
+  // GET /api/meals — list the user's meals (newest first), grouped by day.
   app.get('/', async (c) => {
     const db = createMealsDb(c.env.DB);
     const summaries = await listMeals(db, c.get('userId'));
-    return c.json({ meals: summaries });
+    return c.json({ meals: summaries, groups: groupByDay(summaries) });
   });
 
+  // GET /api/meals/:id — full detail for one owned meal.
+  app.get('/:id', async (c) => {
+    const db = createMealsDb(c.env.DB);
+    const detail = await getMealDetail(db, c.req.param('id'), c.get('userId'));
+    if (!detail) return c.json({ error: 'Not found' }, 404);
+    return c.json(detail);
+  });
+
+  return app;
+}
+
+/** A day bucket for the grouped history view. */
+export interface DayGroup {
+  /** ISO date (YYYY-MM-DD, UTC) for the bucket. */
+  date: string;
+  totalKcal: number;
+  mealIds: string[];
+}
+
+/** Groups meal summaries into day buckets (UTC), newest day first. */
+export function groupByDay(summaries: MealSummaryLike[]): DayGroup[] {
+  const byDate = new Map<string, DayGroup>();
+  for (const m of summaries) {
+    const date = new Date(m.loggedAt).toISOString().slice(0, 10);
+    const group = byDate.get(date) ?? { date, totalKcal: 0, mealIds: [] };
+    group.totalKcal += m.energyKcal ?? 0;
+    group.mealIds.push(m.id);
+    byDate.set(date, group);
+  }
+  return [...byDate.values()]
+    .map((g) => ({ ...g, totalKcal: Math.round(g.totalKcal * 10) / 10 }))
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
+interface MealSummaryLike {
+  id: string;
+  loggedAt: number;
+  energyKcal: number | null;
+}
+
+/** Search routes: GET /api/search?q= over the user's food names. */
+export function searchRoutes() {
+  const app = new Hono<AppBindings>();
+  app.get('/', async (c) => {
+    const q = c.req.query('q') ?? '';
+    const db = createMealsDb(c.env.DB);
+    const results = await searchMeals(db, c.get('userId'), q);
+    return c.json({ query: q.trim(), meals: results });
+  });
   return app;
 }

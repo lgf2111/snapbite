@@ -13,6 +13,36 @@ export interface MealSummary {
   foods: string[];
 }
 
+export interface DayGroup {
+  date: string;
+  totalKcal: number;
+  mealIds: string[];
+}
+
+export interface MealDetail {
+  id: string;
+  loggedAt: number;
+  createdAt: number;
+  notes: string | null;
+  confidence: number | null;
+  telegramFileId: string | null;
+  foods: Array<{
+    id: string;
+    name: string;
+    estimatedWeightG: number | null;
+    portion: string | null;
+    quantity: number;
+    confidence: number | null;
+  }>;
+  total: {
+    energyKcal: number;
+    proteinG: number;
+    carbsG: number;
+    fatG: number;
+    source: string;
+  } | null;
+}
+
 export interface SettingsView {
   aiProvider: string;
   connected: boolean;
@@ -77,8 +107,18 @@ export class ApiClient {
     });
   }
 
-  listMeals(): Promise<{ meals: MealSummary[] }> {
-    return this.#request<{ meals: MealSummary[] }>('/api/meals');
+  listMeals(): Promise<{ meals: MealSummary[]; groups: DayGroup[] }> {
+    return this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>('/api/meals');
+  }
+
+  getMeal(id: string): Promise<MealDetail> {
+    return this.#request<MealDetail>(`/api/meals/${encodeURIComponent(id)}`);
+  }
+
+  search(query: string): Promise<{ query: string; meals: MealSummary[] }> {
+    return this.#request<{ query: string; meals: MealSummary[] }>(
+      `/api/search?q=${encodeURIComponent(query)}`,
+    );
   }
 
   getSettings(): Promise<SettingsView> {

@@ -211,3 +211,31 @@ body {
   gap: 12px;
   padding: 32px 0;
 }
+
+.tabbar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.tabbar button {
+  flex: 1;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 10px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.tabbar button.active {
+  color: var(--text);
+  background: var(--surface-2);
+}
