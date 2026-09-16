@@ -1,0 +1,24 @@
+{
+  "name": "@foodlog/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local CLI harness: analyze a meal photo end-to-end (mock by default, real DeepSeek with --real).",
+  "type": "module",
+  "bin": {
+    "foodlog": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run",
+    "analyze": "node --env-file-if-exists=../../.env dist/index.js"
+  },
+  "dependencies": {
+    "@foodlog/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
