@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { AppBindings } from './env.js';
 import { telegramAuth } from './middleware/auth.js';
+import { settingsRoutes } from './routes/settings.js';
 
 /** Builds the Hono app. Exported separately so tests can mount it directly. */
 export function createApp() {
@@ -25,6 +26,8 @@ export function createApp() {
       username: tgUser.username ?? null,
     });
   });
+
+  api.route('/settings', settingsRoutes());
 
   app.route('/api', api);
 

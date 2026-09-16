@@ -18,6 +18,8 @@ export default defineWorkersConfig(async () => {
           miniflare: {
             bindings: {
               TELEGRAM_BOT_TOKEN: '123456:LOCAL-DEV-BOT-TOKEN',
+              // 32-byte AES key, base64, for BYOK encryption in tests.
+              ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
               TEST_MIGRATIONS: migrations,
             },
           },
