@@ -1,5 +1,11 @@
 import type { MealImage, MealResult } from '@foodlog/core';
-import { type AnalyticsSummary, ApiClient, type MealDetail, type MealSummary } from './api.js';
+import {
+  type AnalyticsSummary,
+  ApiClient,
+  type MealDetail,
+  type MealSummary,
+  type SettingsView,
+} from './api.js';
 import { readConfig } from './config.js';
 import { LocalMealProcessor, type MealProcessor, WorkerMealProcessor } from './processor.js';
 import { loadMeals, type SavedMeal, saveMeal as saveLocal } from './store.js';
@@ -34,6 +40,8 @@ export interface Backend {
   detail(id: string): Promise<MealDetail>;
   search(query: string): Promise<RecentMeal[]>;
   analytics(days?: number): Promise<AnalyticsSummary>;
+  getSettings(): Promise<SettingsView>;
+  saveApiKey(apiKey: string): Promise<SettingsView>;
 }
 
 export function createBackend(): Backend {
@@ -72,6 +80,13 @@ export function createBackend(): Backend {
       analytics(days) {
         return api.analytics(days);
       },
+      getSettings() {
+        return api.getSettings();
+      },
+      async saveApiKey(apiKey) {
+        const res = await api.saveApiKey(apiKey);
+        return { aiProvider: res.aiProvider, connected: res.connected, keyLast4: res.keyLast4 };
+      },
     };
   }
 
@@ -101,6 +116,13 @@ export function createBackend(): Backend {
     },
     async analytics(days = 30) {
       return computeLocalAnalytics(loadMeals(), days);
+    },
+    // Local (no-backend) mode uses the mock processor, which needs no key.
+    async getSettings() {
+      return { aiProvider: 'mock', connected: true, keyLast4: null };
+    },
+    async saveApiKey() {
+      return { aiProvider: 'mock', connected: true, keyLast4: null };
     },
   };
 }

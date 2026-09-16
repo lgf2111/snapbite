@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { MealResult } from '@foodlog/core';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBackend } from './backend.js';
 import { saveMeal } from './store.js';
 
@@ -19,7 +19,12 @@ function meal(name: string, kcal: number): MealResult {
 }
 
 describe('local backend (no VITE_WORKER_URL)', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    // Force local mode regardless of any ambient VITE_WORKER_URL in the shell.
+    vi.stubEnv('VITE_WORKER_URL', '');
+  });
+  afterEach(() => vi.unstubAllEnvs());
 
   it('runs in local mode', () => {
     expect(createBackend().mode).toBe('local');
@@ -52,6 +57,15 @@ describe('local backend (no VITE_WORKER_URL)', () => {
     const detail = await backend.detail(id);
     expect(detail.foods[0]?.name).toBe('tofu');
     expect(detail.total?.energyKcal).toBe(76);
+  });
+
+  it('reports mock settings in local mode (no key needed)', async () => {
+    const backend = createBackend();
+    const s = await backend.getSettings();
+    expect(s.aiProvider).toBe('mock');
+    expect(s.connected).toBe(true);
+    const saved = await backend.saveApiKey('anything');
+    expect(saved.connected).toBe(true);
   });
 
   it('computes local analytics (totals, avg, common foods)', async () => {
