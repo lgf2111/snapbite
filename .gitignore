@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+
+# Env & secrets
+.env
+.env.*
+.dev.vars
+*.local
+
+# Editor / OS
+.DS_Store
+.idea/
+*.log
+
+# Cloudflare
+.wrangler/
