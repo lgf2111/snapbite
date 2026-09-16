@@ -3,10 +3,9 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
-# D1 database binding. The database_id is a placeholder for local dev; it is
-# replaced with a real id (from `wrangler d1 create`) before deploying.
+# D1 database binding.
 [[d1_databases]]
 binding = "DB"
 database_name = "foodlog-db"
-database_id = "local-dev-placeholder"
+database_id = "f0312e67-2fef-47a6-a9ca-59cb9c21a79b"
 migrations_dir = "migrations"

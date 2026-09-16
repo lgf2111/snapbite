@@ -13,6 +13,8 @@ coverage/
 .env.*
 !.env.example
 .dev.vars
+.bot-token
+.deploy-secrets
 *.local
 
 # Editor / OS
