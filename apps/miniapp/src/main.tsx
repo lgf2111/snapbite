@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { applyTelegramTheme, initTelegram } from './lib/telegram.js';
-import './styles.css';
+import './index.css';
 
 initTelegram();
 applyTelegramTheme();

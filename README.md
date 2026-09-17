@@ -18,7 +18,7 @@ Monorepo (pnpm workspaces):
 
 - **`packages/core`** — transport-agnostic domain logic: Zod schemas, the `AIProvider` interface + a generic OpenAI-compatible adapter with provider presets (Gemini, OpenAI, DeepSeek), prompt builder, nutrition resolver + bundled table, Telegram `initData` verification, bot update parsing, AES-GCM crypto. Zero platform imports; the reason a future Telegram-native port is cheap.
 - **`apps/worker`** — Cloudflare Worker (Hono) + D1 (Drizzle ORM). Auth via Telegram `initData` HMAC, encrypted BYOK, meal analyze/save/CRUD, history/search/analytics, and the bot webhook.
-- **`apps/miniapp`** — React + Vite Mini App (`@telegram-apps/sdk-react`), hosted on Cloudflare Pages. Reviews/edits/searches/analyzes logged meals (logging itself is done via the bot). Falls back to localStorage when no backend is configured (browser dev).
+- **`apps/miniapp`** — React + Vite Mini App (`@telegram-apps/sdk-react`), UI built with **shadcn/ui + Tailwind CSS v4**, hosted on Cloudflare Pages. Reviews/edits/searches/analyzes logged meals (logging itself is done via the bot). The Telegram theme drives the shadcn color tokens at runtime. Falls back to localStorage when no backend is configured (browser dev).
 - **`apps/cli`** — local harness to run a photo through the pipeline end-to-end (mock by default, real provider via `--real`).
 
 **Security:** the AI key is stored AES-256-GCM encrypted in D1 (ciphertext + IV), decrypted in-memory per request, never returned or logged. Image bytes transit but are not persisted; only the Telegram `file_id` is kept (for bot photos). All meal data is owner-scoped.

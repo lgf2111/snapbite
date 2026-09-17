@@ -1,35 +1,36 @@
-import {
-  aggregate,
-  type FoodItem,
-  type MealResult,
-  resolveFoodNutrition,
-  sourceLabel,
-} from '@foodlog/core';
+import { aggregate, type FoodItem, type MealResult, resolveFoodNutrition, sourceLabel } from '@foodlog/core';
+import { Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { MealDetail } from '../lib/api.js';
-import type { Backend } from '../lib/backend.js';
-import { hapticImpact } from '../lib/telegram.js';
-import { useBackButton, useMainButton } from '../lib/useTelegramButtons.js';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import type { MealDetail } from '@/lib/api';
+import type { Backend } from '@/lib/backend';
+import { hapticImpact } from '@/lib/telegram';
+import { useBackButton, useMainButton } from '@/lib/useTelegramButtons';
 import { MacroLine } from './MacroLine.js';
 
 type ToastKind = 'success' | 'error' | 'info';
 
 interface MealDetailScreenProps {
   backend: Backend;
-  onToast?: (kind: ToastKind, message: string) => void;
   mealId: string;
   onBack: () => void;
   onChanged: () => void;
+  onToast?: (kind: ToastKind, message: string) => void;
 }
 
-/** Editable, deletable detail of a single logged meal. */
-export function MealDetailScreen({
-  backend,
-  mealId,
-  onBack,
-  onChanged,
-  onToast,
-}: MealDetailScreenProps) {
+type MacroKey = 'energyKcal' | 'proteinG' | 'carbsG' | 'fatG';
+
+export function MealDetailScreen({ backend, mealId, onBack, onChanged, onToast }: MealDetailScreenProps) {
   const [detail, setDetail] = useState<MealDetail | null>(null);
   const [foods, setFoods] = useState<FoodItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -48,9 +49,6 @@ export function MealDetailScreen({
             portion: f.portion ?? undefined,
             quantity: f.quantity,
             confidence: f.confidence ?? 0.5,
-            // Seed the stored per-food nutrition so every food shows its real
-            // macros on load (not just table-matched ones). Kept as a manual
-            // override so it survives re-render without re-resolving from name.
             ...(f.energyKcal != null
               ? {
                   manualNutrition: {
@@ -85,12 +83,12 @@ export function MealDetailScreen({
     setFoods((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  /** Sets a manual macro override for a food, seeding from current resolved values. */
-  function setMacro(i: number, key: 'energyKcal' | 'proteinG' | 'carbsG' | 'fatG', value: number) {
+  function setMacro(i: number, key: MacroKey, value: number) {
     setFoods((prev) =>
       prev.map((f, idx) => {
         if (idx !== i) return f;
-        const current = f.manualNutrition ??
+        const current =
+          f.manualNutrition ??
           resolveFoodNutrition(f) ?? { energyKcal: 0, proteinG: 0, carbsG: 0, fatG: 0 };
         return {
           ...f,
@@ -109,7 +107,6 @@ export function MealDetailScreen({
   async function handleSave() {
     if (!detail || foods.length === 0) return;
     setBusy('saving');
-    setError(null);
     const meal: MealResult = {
       foods: resolved.foods,
       total: resolved.total,
@@ -124,15 +121,12 @@ export function MealDetailScreen({
       onBack();
     } catch (e) {
       setBusy(null);
-      const msg = e instanceof Error ? e.message : 'Could not save';
-      setError(msg);
-      onToast?.('error', msg);
+      onToast?.('error', e instanceof Error ? e.message : 'Could not save');
     }
   }
 
   async function handleDelete() {
     setBusy('deleting');
-    setError(null);
     try {
       await backend.remove(mealId);
       onChanged();
@@ -140,26 +134,15 @@ export function MealDetailScreen({
       onBack();
     } catch (e) {
       setBusy(null);
-      const msg = e instanceof Error ? e.message : 'Could not delete';
-      setError(msg);
-      onToast?.('error', msg);
+      onToast?.('error', e instanceof Error ? e.message : 'Could not delete');
     }
   }
 
-  function requestDelete() {
-    hapticImpact('medium');
-    setConfirmDelete(true);
-  }
-
-  // Native Telegram back button returns to the list; while a delete dialog is
-  // open, back cancels it instead.
   useBackButton(true, () => {
     if (confirmDelete) setConfirmDelete(false);
     else onBack();
   });
 
-  // Native Telegram main button drives Save; falls back to the in-page button
-  // when not running in Telegram.
   const nativeSave = useMainButton(detail !== null && !confirmDelete, {
     text: busy === 'saving' ? 'Saving…' : 'Save changes',
     onClick: () => void handleSave(),
@@ -167,181 +150,149 @@ export function MealDetailScreen({
     loading: busy === 'saving',
   });
 
+  const macroFields: Array<{ key: MacroKey; icon: string; suffix: string }> = [
+    { key: 'energyKcal', icon: '🔥', suffix: 'kcal' },
+    { key: 'proteinG', icon: '🥩', suffix: 'g' },
+    { key: 'carbsG', icon: '🍚', suffix: 'g' },
+    { key: 'fatG', icon: '🧈', suffix: 'g' },
+  ];
+
   return (
-    <div>
-      <div className="header">
-        <h1>Edit meal</h1>
+    <div className="flex flex-1 flex-col gap-4 pb-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Edit meal</h1>
+        {!nativeSave && (
+          <Button variant="ghost" size="icon" onClick={onBack} aria-label="Back">
+            <X className="size-5" />
+          </Button>
+        )}
       </div>
 
-      {error && <p className="warn">{error}</p>}
-      {!detail && !error && <p className="muted">Loading…</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
+      {!detail && !error && <p className="text-muted-foreground text-sm">Loading…</p>}
 
       {detail && (
         <>
-          <p className="muted">{new Date(detail.loggedAt).toLocaleString()}</p>
+          <p className="text-muted-foreground text-sm">
+            {new Date(detail.loggedAt).toLocaleString()}
+          </p>
           {detail.telegramFileId && backend.photoUrl(mealId) && (
-            <img className="preview" src={backend.photoUrl(mealId) as string} alt="Meal" />
+            <img
+              src={backend.photoUrl(mealId) as string}
+              alt="Meal"
+              className="w-full rounded-xl border object-cover"
+            />
           )}
 
-          <div className="card">
-            {resolved.foods.map((mf, i) => (
-              <div className="food-row" key={i}>
-                <div>
-                  <input
-                    aria-label={`Food ${i + 1} name`}
-                    className="food-name"
-                    value={mf.food.name}
-                    onChange={(e) => updateFood(i, { name: e.target.value })}
-                  />
-                  <div className="macro-edit">
-                    <label title="calories">
-                      🔥
-                      <input
-                        aria-label={`Food ${i + 1} kcal`}
+          <Card>
+            <CardContent className="flex flex-col gap-4">
+              {resolved.foods.map((mf, i) => (
+                <div key={i} className="flex flex-col gap-2 border-b pb-3 last:border-b-0 last:pb-0">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      aria-label={`Food ${i + 1} name`}
+                      value={mf.food.name}
+                      onChange={(e) => updateFood(i, { name: e.target.value })}
+                      className="font-medium"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Remove food ${i + 1}`}
+                      onClick={() => removeFood(i)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {macroFields.map(({ key, icon, suffix }) => (
+                      <label key={key} className="flex items-center gap-1 text-xs" title={key}>
+                        <span>{icon}</span>
+                        <Input
+                          aria-label={`Food ${i + 1} ${key}`}
+                          type="number"
+                          min={0}
+                          value={mf.nutrition[key]}
+                          onChange={(e) => setMacro(i, key, Number(e.target.value) || 0)}
+                          className="h-8 w-16 px-2"
+                        />
+                        <span className="text-muted-foreground">{suffix}</span>
+                      </label>
+                    ))}
+                    <label className="flex items-center gap-1 text-xs" title="weight">
+                      <span>⚖️</span>
+                      <Input
+                        aria-label={`Food ${i + 1} weight in grams`}
                         type="number"
-                        min={0}
-                        value={mf.nutrition.energyKcal}
-                        onChange={(e) => setMacro(i, 'energyKcal', Number(e.target.value) || 0)}
+                        min={1}
+                        value={mf.food.estimatedWeightG}
+                        onChange={(e) =>
+                          updateFood(i, {
+                            estimatedWeightG: Math.max(1, Number(e.target.value) || 1),
+                          })
+                        }
+                        className="h-8 w-16 px-2"
                       />
-                      kcal
+                      <span className="text-muted-foreground">g</span>
                     </label>
-                    <label title="protein">
-                      🥩
-                      <input
-                        aria-label={`Food ${i + 1} protein grams`}
-                        type="number"
-                        min={0}
-                        value={mf.nutrition.proteinG}
-                        onChange={(e) => setMacro(i, 'proteinG', Number(e.target.value) || 0)}
-                      />
-                      g
-                    </label>
-                    <label title="carbs">
-                      🍚
-                      <input
-                        aria-label={`Food ${i + 1} carbs grams`}
-                        type="number"
-                        min={0}
-                        value={mf.nutrition.carbsG}
-                        onChange={(e) => setMacro(i, 'carbsG', Number(e.target.value) || 0)}
-                      />
-                      g
-                    </label>
-                    <label title="fat">
-                      🧈
-                      <input
-                        aria-label={`Food ${i + 1} fat grams`}
-                        type="number"
-                        min={0}
-                        value={mf.nutrition.fatG}
-                        onChange={(e) => setMacro(i, 'fatG', Number(e.target.value) || 0)}
-                      />
-                      g
-                    </label>
-                    <span className="source-tag">[{sourceLabel(mf.nutrition.source)}]</span>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <input
-                    aria-label={`Food ${i + 1} weight in grams`}
-                    type="number"
-                    min={1}
-                    value={mf.food.estimatedWeightG}
-                    onChange={(e) =>
-                      updateFood(i, { estimatedWeightG: Math.max(1, Number(e.target.value) || 1) })
-                    }
-                    style={{ width: 64 }}
-                  />
-                  <span className="muted">g</span>
-                  <button
-                    type="button"
-                    aria-label={`Remove food ${i + 1}`}
-                    className="btn secondary"
-                    onClick={() => removeFood(i)}
-                    style={{ padding: '4px 8px' }}
-                  >
-                    ✕
-                  </button>
-                </div>
+              ))}
+
+              <div className="flex items-center justify-between pt-1 font-semibold">
+                <span>Total</span>
+                <MacroLine
+                  energyKcal={resolved.total.energyKcal}
+                  proteinG={resolved.total.proteinG}
+                  carbsG={resolved.total.carbsG}
+                  fatG={resolved.total.fatG}
+                  sourceLabel={sourceLabel(resolved.total.source)}
+                />
               </div>
-            ))}
+            </CardContent>
+          </Card>
 
-            <div className="total">
-              <span>Total</span>
-              <MacroLine
-                energyKcal={resolved.total.energyKcal}
-                proteinG={resolved.total.proteinG}
-                carbsG={resolved.total.carbsG}
-                fatG={resolved.total.fatG}
-                sourceLabel={sourceLabel(resolved.total.source)}
-              />
-            </div>
-          </div>
-
-          {/* In-page Save/Back are hidden when the native Telegram MainButton
-              is driving Save (still shown in browser dev). */}
           {!nativeSave && (
-            <div className="actions">
-              <button type="button" className="btn secondary full" onClick={onBack}>
-                Back
-              </button>
-              <button
-                type="button"
-                className="btn full"
-                disabled={busy !== null || foods.length === 0}
-                onClick={handleSave}
-              >
-                {busy === 'saving' ? 'Saving…' : 'Save changes'}
-              </button>
-            </div>
-          )}
-
-          <button
-            type="button"
-            className="btn secondary full"
-            onClick={requestDelete}
-            style={{ marginTop: 12, color: 'var(--warn)' }}
-          >
-            Delete meal
-          </button>
-
-          {confirmDelete && (
-            <div
-              className="modal-overlay"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Confirm delete"
-              onClick={(e) => {
-                if (e.target === e.currentTarget && busy === null) setConfirmDelete(false);
-              }}
+            <Button
+              className="w-full"
+              disabled={busy !== null || foods.length === 0}
+              onClick={handleSave}
             >
-              <div className="modal">
-                <h2 style={{ margin: '0 0 4px' }}>Delete meal?</h2>
-                <p className="muted" style={{ marginTop: 0 }}>
-                  This can't be undone.
-                </p>
-                <div className="actions">
-                  <button
-                    type="button"
-                    className="btn secondary full"
-                    disabled={busy !== null}
-                    onClick={() => setConfirmDelete(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn full"
-                    style={{ background: 'var(--warn)' }}
-                    disabled={busy !== null}
-                    onClick={handleDelete}
-                  >
-                    {busy === 'deleting' ? 'Deleting…' : 'Delete'}
-                  </button>
-                </div>
-              </div>
-            </div>
+              {busy === 'saving' ? 'Saving…' : 'Save changes'}
+            </Button>
           )}
+
+          <Button
+            variant="ghost"
+            className="text-destructive w-full"
+            onClick={() => {
+              hapticImpact('medium');
+              setConfirmDelete(true);
+            }}
+          >
+            <Trash2 className="size-4" /> Delete meal
+          </Button>
+
+          <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete meal?</DialogTitle>
+                <DialogDescription>This can't be undone.</DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="secondary"
+                  disabled={busy !== null}
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  Cancel
+                </Button>
+                <Button variant="destructive" disabled={busy !== null} onClick={handleDelete}>
+                  {busy === 'deleting' ? 'Deleting…' : 'Delete'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>

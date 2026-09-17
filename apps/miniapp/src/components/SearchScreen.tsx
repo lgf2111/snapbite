@@ -1,5 +1,9 @@
+import { SearchX } from 'lucide-react';
 import { useState } from 'react';
-import type { Backend, RecentMeal } from '../lib/backend.js';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import type { Backend, RecentMeal } from '@/lib/backend';
+import { MacroLine } from './MacroLine.js';
 
 interface SearchScreenProps {
   backend: Backend;
@@ -29,42 +33,36 @@ export function SearchScreen({ backend, onOpenMeal }: SearchScreenProps) {
   }
 
   return (
-    <div>
-      <h1>Search</h1>
-      <input
+    <div className="flex flex-col gap-4">
+      <h1 className="text-xl font-semibold">Search</h1>
+      <Input
         aria-label="Search meals"
-        className="food-name"
         placeholder="Search by food…"
         value={query}
         onChange={(e) => void runSearch(e.target.value)}
-        style={{
-          width: '100%',
-          padding: 12,
-          borderRadius: 8,
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border)',
-          color: 'var(--text)',
-          marginBottom: 12,
-        }}
       />
 
-      {busy && <p className="muted">Searching…</p>}
-      {results && results.length === 0 && !busy && <p className="muted">No matches.</p>}
+      {busy && <p className="text-muted-foreground text-sm">Searching…</p>}
+
+      {results && results.length === 0 && !busy && (
+        <div className="text-muted-foreground flex flex-col items-center gap-2 py-12 text-center">
+          <SearchX className="size-10" />
+          <p>No matches.</p>
+        </div>
+      )}
+
       {results?.map((m) => (
-        <button
-          type="button"
-          className="card saved-item"
-          key={m.id}
-          onClick={() => onOpenMeal(m.id)}
-          style={{ marginBottom: 8, width: '100%', textAlign: 'left', cursor: 'pointer' }}
-        >
-          <div>
-            <div className="food-name">{m.label}</div>
-            <div className="macro">
-              {m.energyKcal ?? '—'} kcal · {new Date(m.when).toLocaleDateString()}
+        <Card key={m.id} onClick={() => onOpenMeal(m.id)} className="cursor-pointer">
+          <CardContent className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium">{m.label}</div>
+              <div className="text-muted-foreground text-xs">
+                <MacroLine energyKcal={m.energyKcal} compact /> ·{' '}
+                {new Date(m.when).toLocaleDateString()}
+              </div>
             </div>
-          </div>
-        </button>
+          </CardContent>
+        </Card>
       ))}
     </div>
   );

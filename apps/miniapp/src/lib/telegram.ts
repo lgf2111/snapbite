@@ -83,22 +83,43 @@ export function applyTelegramTheme(): void {
     const set = (name: string, value: string | undefined) => {
       if (value) root.style.setProperty(name, value);
     };
+    // Map Telegram theme colors onto the shadcn/Tailwind design tokens so the
+    // whole UI follows the user's Telegram theme. Hex values are valid CSS for
+    // these custom properties.
     const bg = themeParams.backgroundColor();
     const secondary = themeParams.secondaryBackgroundColor();
     const section = themeParams.sectionBackgroundColor();
-    set('--bg', bg);
-    set('--surface', secondary ?? section);
-    set('--surface-2', section ?? secondary);
-    set('--text', themeParams.textColor());
-    set('--muted', themeParams.hintColor() ?? themeParams.subtitleTextColor());
-    set('--accent', themeParams.buttonColor() ?? themeParams.linkColor());
-    set('--accent-strong', themeParams.buttonColor());
-    set('--border', themeParams.sectionSeparatorColor());
-    set('--warn', themeParams.destructiveTextColor());
+    const text = themeParams.textColor();
+    const hint = themeParams.hintColor() ?? themeParams.subtitleTextColor();
+    const button = themeParams.buttonColor() ?? themeParams.linkColor();
+    const buttonText = themeParams.buttonTextColor();
+    const border = themeParams.sectionSeparatorColor();
+    const destructive = themeParams.destructiveTextColor();
+    const cardBg = secondary ?? section;
+
+    set('--background', bg);
+    set('--foreground', text);
+    set('--card', cardBg);
+    set('--card-foreground', text);
+    set('--popover', cardBg);
+    set('--popover-foreground', text);
+    set('--primary', button);
+    set('--primary-foreground', buttonText);
+    set('--secondary', section ?? secondary);
+    set('--secondary-foreground', text);
+    set('--muted', section ?? secondary);
+    set('--muted-foreground', hint);
+    set('--accent', section ?? secondary);
+    set('--accent-foreground', text);
+    set('--border', border);
+    set('--input', border);
+    set('--ring', button);
+    set('--destructive', destructive);
 
     const dark = themeParams.isDark();
     if (typeof dark === 'boolean') {
       root.style.setProperty('color-scheme', dark ? 'dark' : 'light');
+      root.classList.toggle('dark', dark);
     }
   } catch {
     // Theme unavailable — keep the fallback palette.

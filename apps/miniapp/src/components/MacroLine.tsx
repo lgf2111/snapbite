@@ -1,24 +1,19 @@
+import { Badge } from '@/components/ui/badge';
+
 interface MacroLineProps {
   energyKcal: number | null;
   proteinG?: number | null;
   carbsG?: number | null;
   fatG?: number | null;
-  /** Optional source label (e.g. "from table", "AI estimate", "edited"). */
   sourceLabel?: string;
-  /** Compact = kcal only with the flame icon (for list rows). */
+  /** Compact = kcal only (for list rows). */
   compact?: boolean;
 }
 
 const DASH = '—';
-function fmt(n: number | null | undefined): string {
-  return n == null ? DASH : String(n);
-}
+const fmt = (n: number | null | undefined) => (n == null ? DASH : String(n));
 
-/**
- * Shared macro display with icons: 🔥 kcal · 🥩 protein · 🍚 carbs · 🧈 fat.
- * Used in history rows (compact) and meal detail (full), so the iconography is
- * consistent everywhere.
- */
+/** Macro display with icons: 🔥 kcal · 🥩 protein · 🍚 carbs · 🧈 fat. */
 export function MacroLine({
   energyKcal,
   proteinG,
@@ -29,28 +24,30 @@ export function MacroLine({
 }: MacroLineProps) {
   if (compact) {
     return (
-      <span className="macro">
-        <span className="macro-item" title="calories">
-          🔥 {fmt(energyKcal)}
-        </span>
+      <span className="text-muted-foreground text-sm" title="calories">
+        🔥 {fmt(energyKcal)} kcal
       </span>
     );
   }
   return (
-    <span className="macro">
-      <span className="macro-item" title="calories">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+      <span title="calories" className="whitespace-nowrap">
         🔥 {fmt(energyKcal)} kcal
-      </span>{' '}
-      <span className="macro-item" title="protein">
+      </span>
+      <span title="protein" className="whitespace-nowrap">
         🥩 {fmt(proteinG)}g
-      </span>{' '}
-      <span className="macro-item" title="carbs">
+      </span>
+      <span title="carbs" className="whitespace-nowrap">
         🍚 {fmt(carbsG)}g
-      </span>{' '}
-      <span className="macro-item" title="fat">
+      </span>
+      <span title="fat" className="whitespace-nowrap">
         🧈 {fmt(fatG)}g
       </span>
-      {sourceLabel ? <span className="source-tag"> [{sourceLabel}]</span> : null}
-    </span>
+      {sourceLabel ? (
+        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+          {sourceLabel}
+        </Badge>
+      ) : null}
+    </div>
   );
 }
