@@ -75,7 +75,9 @@ pnpm --filter @foodlog/worker exec wrangler deploy
 VITE_WORKER_URL=https://<worker-url> pnpm --filter @foodlog/miniapp build
 pnpm --filter @foodlog/miniapp exec wrangler pages deploy dist --project-name=foodlog
 
-# Bot: register the webhook (with the secret) and set the Mini App menu button via the Telegram Bot API.
+# Bot: register the webhook (with the secret) via the Telegram Bot API. The Mini App is set as
+# the bot's Main Mini App in BotFather, so it launches from the bot profile's "Open App" button
+# (no separate chat menu button needed).
 ```
 
 ## AI providers

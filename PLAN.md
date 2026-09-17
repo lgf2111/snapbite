@@ -2,7 +2,7 @@
 
 A Telegram-native, low-friction, AI-assisted food/nutrition logging application.
 
-> **One-line goal:** Unlock phone → open FoodLog → take a photo → AI analyzes it → confirm/correct → saved.
+> **One-line goal:** Send a meal photo to the FoodLog bot → AI analyzes it → logged → review/correct in the Mini App.
 
 ---
 
@@ -172,7 +172,7 @@ This section tracks what was actually built, including work beyond the original 
 - **Editable macros** — per-food manual override (`manual` nutrition source) used verbatim, editable in the detail screen.
 - **Bot-photo auto-log** — send a photo straight to the bot chat; the Worker downloads via `getFile`, runs the pipeline with the user's key, saves with the Telegram `file_id`, and replies with a summary + launch button.
 - **Photos in logs** — `GET /api/meal-photo/:id` proxies the Telegram image (bot token stays server-side; `initData` verified via query param); thumbnails in history/recent, full photo in detail.
-- **Deployed to production** — Worker on `workers.dev`, Mini App on Cloudflare Pages, D1 in APAC, webhook + menu button + commands registered. All on free tiers (AI on the user's key).
+- **Deployed to production** — Worker on `workers.dev`, Mini App on Cloudflare Pages, D1 in APAC, webhook registered. The Mini App is configured as the bot's **Main Mini App** in BotFather (launches from the profile "Open App" button); commands/description/about set in BotFather. All on free tiers (AI on the user's key).
 
 ### In progress
 
@@ -184,6 +184,8 @@ _(nothing actively in progress)_
 - **Mini App photo capture removed.** Because Mini-App uploads can't retain an image for free (bytes are discarded; no Telegram `file_id`), the camera/upload + confirm flow was removed. Logging is now bot-only (photo → auto-log, photo kept). Removed `ConfirmScreen`, `image.ts` downscale, and `MealProcessor` from the app layer.
 - **Per-food nutrition persisted.** `food_items` now stores each food's kcal/P/C/F + source; the detail screen shows stored values instead of re-deriving, so multi-food meals keep every food's macros.
 - **Mini App rebuilt on shadcn/ui + Tailwind CSS v4.** The whole presentation layer was moved to shadcn components (Card, Button, Dialog, Tabs, Input, Skeleton, Badge) with Sonner toasts and lucide icons; the Telegram theme drives the shadcn color tokens at runtime. Kept: native BackButton/MainButton + haptics on the detail screen, macro icons (🔥/🥩/🍚/🧈), skeletons, empty states, and a home daily-summary card. **Swipe-between-tabs was removed** (choppy hand-rolled version); tabs are tap-only. **Swipe-to-delete** on history rows was rebuilt on `react-swipeable` so it works on both touch and mouse. The earlier hand-rolled `gesture.ts`/`toast.ts` and the client canvas downscale were removed.
+
+- **Bot copy synced to the real flow + Main Mini App.** Switched the bot to a **Main Mini App** in BotFather, so it launches from the profile "Open App" button rather than a chat menu button. Updated the `/start`, `/help`, and fallback replies (in `packages/core`) to describe the actual bot-only flow — *send a photo straight to the chat to log it; open the app to review/correct, browse history, search, and trends* — instead of the old "open the app and take a photo" wording. Launch-button label is now 🍽️ Open FoodLog.
 
 ### Future / backlog
 
