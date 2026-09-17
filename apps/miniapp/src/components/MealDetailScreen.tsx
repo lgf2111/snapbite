@@ -132,7 +132,6 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
     <div>
       <div className="header">
         <h1>Edit meal</h1>
-        <span className="estimate-badge">estimate</span>
       </div>
 
       {error && <p className="warn">{error}</p>}
@@ -225,7 +224,7 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
             ))}
 
             <div className="total">
-              <span>Total (estimate)</span>
+              <span>Total</span>
               <span>
                 {resolved.total.energyKcal} kcal{' '}
                 <span className="source-tag">[{sourceLabel(resolved.total.source)}]</span>
@@ -247,39 +246,51 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
             </button>
           </div>
 
-          {confirmDelete ? (
-            <div className="card" style={{ marginTop: 12 }}>
-              <p className="warn" style={{ marginTop: 0 }}>
-                Delete this meal permanently?
-              </p>
-              <div className="actions">
-                <button
-                  type="button"
-                  className="btn secondary full"
-                  onClick={() => setConfirmDelete(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn full"
-                  style={{ background: 'var(--warn)' }}
-                  disabled={busy !== null}
-                  onClick={handleDelete}
-                >
-                  {busy === 'deleting' ? 'Deleting…' : 'Delete'}
-                </button>
+          <button
+            type="button"
+            className="btn secondary full"
+            onClick={() => setConfirmDelete(true)}
+            style={{ marginTop: 12, color: 'var(--warn)' }}
+          >
+            Delete meal
+          </button>
+
+          {confirmDelete && (
+            <div
+              className="modal-overlay"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Confirm delete"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && busy === null) setConfirmDelete(false);
+              }}
+            >
+              <div className="modal">
+                <h2 style={{ margin: '0 0 4px' }}>Delete meal?</h2>
+                <p className="muted" style={{ marginTop: 0 }}>
+                  This can't be undone.
+                </p>
+                <div className="actions">
+                  <button
+                    type="button"
+                    className="btn secondary full"
+                    disabled={busy !== null}
+                    onClick={() => setConfirmDelete(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn full"
+                    style={{ background: 'var(--warn)' }}
+                    disabled={busy !== null}
+                    onClick={handleDelete}
+                  >
+                    {busy === 'deleting' ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
               </div>
             </div>
-          ) : (
-            <button
-              type="button"
-              className="btn secondary full"
-              onClick={() => setConfirmDelete(true)}
-              style={{ marginTop: 12, color: 'var(--warn)' }}
-            >
-              Delete meal
-            </button>
           )}
         </>
       )}
