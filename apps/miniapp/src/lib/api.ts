@@ -3,6 +3,11 @@ import type { MealImage, MealResult } from '@foodlog/core';
 /** Header the Worker expects the signed initData in (matches the Worker). */
 const INIT_DATA_HEADER = 'x-telegram-init-data';
 
+/** Default per-request timeout (ms). */
+const DEFAULT_TIMEOUT_MS = 20_000;
+/** AI calls (analyze/revise) run a model server-side; give them more headroom. */
+const AI_TIMEOUT_MS = 60_000;
+
 export interface MealSummary {
   id: string;
   loggedAt: number;
@@ -119,13 +124,29 @@ export class ApiClient {
     this.#fetch = fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
-  async #request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async #request<T>(path: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set(INIT_DATA_HEADER, this.#getInitData());
     if (init.body && !headers.has('content-type')) {
       headers.set('content-type', 'application/json');
     }
-    const res = await this.#fetch(`${this.#baseUrl}${path}`, { ...init, headers });
+
+    // Bound every request so the UI can't hang forever if the connection stalls.
+    const timeoutMs = init.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await this.#fetch(`${this.#baseUrl}${path}`, { ...init, headers, signal: ac.signal });
+    } catch (err) {
+      if (ac.signal.aborted) {
+        throw new ApiError(0, 'Request timed out. Please try again.');
+      }
+      throw new ApiError(0, err instanceof Error ? err.message : 'Network error');
+    } finally {
+      clearTimeout(timer);
+    }
+
     if (!res.ok) {
       let detail = `HTTP ${res.status}`;
       try {
@@ -143,6 +164,7 @@ export class ApiClient {
     return this.#request<MealResult>('/api/meals/analyze', {
       method: 'POST',
       body: JSON.stringify({ base64: image.base64, mimeType: image.mimeType, hint }),
+      timeoutMs: AI_TIMEOUT_MS,
     });
   }
 
@@ -186,6 +208,7 @@ export class ApiClient {
     return this.#request<MealDetail>(`/api/meals/${encodeURIComponent(id)}/revise`, {
       method: 'POST',
       body: JSON.stringify({ instruction }),
+      timeoutMs: AI_TIMEOUT_MS,
     });
   }
 

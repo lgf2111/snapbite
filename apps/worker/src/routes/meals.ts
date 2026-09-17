@@ -281,15 +281,31 @@ export function mealsRoutes(
       return c.json({ error: 'Server error', detail: 'Could not decrypt key' }, 500);
     }
 
+    // Bound the provider call so a hung model returns a clean 504 instead of
+    // Cloudflare cutting the connection with a 524 (~100s edge limit).
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), REVISE_TIMEOUT_MS);
     try {
       const provider = providerFactory({ apiKey, provider: row.aiProvider, model: row.aiModel });
-      const analysis = await provider.reviseMeal(detailToAnalysis(detail), instruction);
+      const analysis = await provider.reviseMeal(detailToAnalysis(detail), instruction, {
+        signal: ac.signal,
+      });
       const meal = resolveMeal(analysis);
       const ok = await updateMeal(mealsDb, id, c.get('userId'), meal);
       if (!ok) return c.json({ error: 'Not found' }, 404);
       const updated = await getMealDetail(mealsDb, id, c.get('userId'));
       return c.json(updated);
     } catch (err) {
+      if (ac.signal.aborted) {
+        return c.json(
+          {
+            error: 'Revision timed out',
+            detail: 'The AI took too long to respond. Please try again.',
+            kind: 'timeout',
+          },
+          504,
+        );
+      }
       const e = err as { kind?: string; status?: number; message?: string; cause?: unknown };
       const status = e.kind === 'http' && e.status === 401 ? 400 : 502;
       const providerDetail = extractProviderMessage(e.cause);
@@ -301,11 +317,17 @@ export function mealsRoutes(
         },
         status,
       );
+    } finally {
+      clearTimeout(timer);
     }
   });
 
   return app;
 }
+
+/** Max time to wait on the AI revise call before returning a 504 (well under
+ * Cloudflare's ~100s edge timeout so the client gets a real error). */
+const REVISE_TIMEOUT_MS = 45_000;
 
 /**
  * Reconstructs an {@link AIFoodAnalysis} from a stored meal so it can be sent

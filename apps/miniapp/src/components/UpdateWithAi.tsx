@@ -1,5 +1,5 @@
-import { Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { Loader2, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -39,6 +39,29 @@ export function UpdateWithAi({
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState('');
+
+  // While the AI runs, cycle a status message so it visibly progresses instead
+  // of looking hung on a static "Updating…".
+  useEffect(() => {
+    if (!busy) {
+      setStatus('');
+      return;
+    }
+    const steps = [
+      'Reading your meal…',
+      'Asking the AI…',
+      'Recalculating nutrition…',
+      'Almost there…',
+    ];
+    let i = 0;
+    setStatus(steps[0] ?? '');
+    const id = setInterval(() => {
+      i = (i + 1) % steps.length;
+      setStatus(steps[i] ?? '');
+    }, 2500);
+    return () => clearInterval(id);
+  }, [busy]);
 
   async function submit() {
     const instruction = text.trim();
@@ -100,12 +123,28 @@ export function UpdateWithAi({
               if (e.key === 'Enter') void submit();
             }}
           />
+          {busy && (
+            <p
+              className="text-muted-foreground flex items-center gap-2 text-sm"
+              aria-live="polite"
+            >
+              <Loader2 className="size-4 animate-spin" />
+              {status}
+            </p>
+          )}
           <DialogFooter>
             <Button variant="secondary" disabled={busy} onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button disabled={busy || !text.trim()} onClick={() => void submit()}>
-              {busy ? 'Updating…' : 'Update'}
+              {busy ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Updating…
+                </>
+              ) : (
+                'Update'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
