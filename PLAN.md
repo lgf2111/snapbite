@@ -404,3 +404,9 @@ Per the user: **Update with AI must edit the draft, not persist immediately.** T
   - **Settings profile card:** view goal + targets, edit via the shared `ProfileForm` (units picker metric/imperial, simple/advanced toggle with manual overrides, live target preview).
   - **Update-with-AI = review before save:** the AI edit applies to the editable draft (marks it dirty) instead of persisting. AI-removed foods aren't dropped — they show struck-through as "will be removed" with an Undo, and are only dropped on Save. The **X** button discards changes (confirms if dirty). The Home row's ✨ icon opens the meal detail and starts the AI edit there, so review+save always happen on one surface.
 - **No DB migration** — the profile is stored in the pre-existing `settings.preferences_json` column. New Mini App deps: none beyond the earlier calendar work (uses the existing shadcn primitives).
+
+### 12.7 Follow-up: free-tier resilience (fallback provider + friendlier errors)
+
+Hitting Gemini's free-tier caps surfaced two gaps. Fixes (Worker `dfdd98fc`, Pages redeployed):
+- **Friendlier bot-photo errors:** a 429 (quota/rate limit) and 503 (overloaded) now get tailored guidance instead of raw provider text, and a transient 503 on the primary is retried once after a short backoff.
+- **Fallback provider:** `PUT /api/settings/fallback` stores an optional second provider + encrypted key (in `preferences_json`, no migration; never returned raw — only last 4). When logging a photo, if the primary fails with a quota/overload error, the Worker fails over to the fallback (`tryFallback` in the webhook) and logs with it. `GET /api/settings` reports fallback status. Settings has a "Fallback provider" card (pick provider + model + key, or Remove) and a free-tier limits note on the primary key. Great for pairing Gemini (primary) with DeepSeek (fallback). Worker test covers the 429→fallback failover.

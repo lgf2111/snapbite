@@ -133,4 +133,51 @@ describe('POST /webhook', () => {
     ).json()) as { meals: unknown[] };
     expect(list.meals.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('fails over to the fallback provider when the primary hits a quota error', async () => {
+    const tgId = 8300;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
+    const setup = createApp();
+    // Primary key (gemini) + a fallback (deepseek).
+    await setup.request(
+      '/api/settings',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }) },
+      env,
+    );
+    await setup.request(
+      '/api/settings/fallback',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'fallback-key', aiProvider: 'deepseek' }) },
+      env,
+    );
+
+    // Provider factory: the primary key throws a 429; the fallback key succeeds.
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({
+      botClientFactory: () => mockBot(sent),
+      providerFactory: ({ apiKey }) => {
+        if (apiKey === 'fallback-key') return new MockAIProvider();
+        return {
+          id: 'primary',
+          analyzeMeal: async () => {
+            throw Object.assign(new Error('quota exceeded'), { kind: 'http', status: 429 });
+          },
+          reviseMeal: async () => {
+            throw new Error('n/a');
+          },
+        };
+      },
+    });
+
+    const res = await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    // The fallback produced a successful log rather than an error message.
+    expect(sent[0]?.reply.text).toContain('Logged');
+  });
 });

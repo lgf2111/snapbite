@@ -10,20 +10,34 @@ import {
   UserProfile,
 } from '@foodlog/core';
 import { Hono } from 'hono';
-import { createSettingsDb, getSettings, saveEncryptedKey, savePreferences } from '../db/settings.js';
+import {
+  createSettingsDb,
+  getSettings,
+  parsePreferences,
+  type Preferences,
+  saveEncryptedKey,
+  savePreferences,
+} from '../db/settings.js';
 import type { AppBindings } from '../env.js';
 
-/** Parses the stored preferences JSON into a validated profile (or null). */
-function parseProfile(preferencesJson: string | null): UserProfile | null {
-  if (!preferencesJson) return null;
-  try {
-    const parsed: unknown = JSON.parse(preferencesJson);
-    const profileField = (parsed as { profile?: unknown })?.profile ?? parsed;
-    const result = UserProfile.safeParse(profileField);
-    return result.success ? result.data : null;
-  } catch {
-    return null;
-  }
+/** Extracts a validated profile from parsed preferences (or null). */
+function profileFrom(prefs: Preferences): UserProfile | null {
+  const result = UserProfile.safeParse(prefs.profile);
+  return result.success ? result.data : null;
+}
+
+/** Persists preferences, preserving the fields the caller didn't touch. */
+async function mergePreferences(
+  db: ReturnType<typeof createSettingsDb>,
+  userId: string,
+  patch: Partial<Preferences>,
+): Promise<void> {
+  const current = parsePreferences((await getSettings(db, userId))?.preferencesJson);
+  await savePreferences(
+    db,
+    userId,
+    JSON.stringify({ ...current, ...patch, updatedAt: Date.now() }),
+  );
 }
 
 /**
@@ -54,8 +68,24 @@ export function settingsRoutes() {
       }
     }
 
-    const profile = parseProfile(row?.preferencesJson ?? null);
+    const prefs = parsePreferences(row?.preferencesJson);
+    const profile = profileFrom(prefs);
     const targets: DailyTargets | null = profile ? computeTargets(profile) : null;
+
+    // Fallback provider status — never returns the key, only last 4.
+    const fb = prefs.fallback;
+    let fallbackKeyLast4: string | null = null;
+    if (fb?.keyCiphertext && fb?.keyIv && c.env.ENCRYPTION_KEY) {
+      try {
+        const key = await decryptSecret(
+          { ciphertext: fb.keyCiphertext, iv: fb.keyIv },
+          c.env.ENCRYPTION_KEY,
+        );
+        fallbackKeyLast4 = lastFour(key);
+      } catch {
+        fallbackKeyLast4 = null;
+      }
+    }
 
     return c.json({
       aiProvider: row?.aiProvider ?? DEFAULT_PROVIDER_ID,
@@ -64,6 +94,10 @@ export function settingsRoutes() {
       keyLast4,
       profile,
       targets,
+      fallbackConnected: Boolean(fb?.keyCiphertext && fb?.keyIv),
+      fallbackProvider: fb?.provider ?? null,
+      fallbackModel: fb?.model ?? null,
+      fallbackKeyLast4,
     });
   });
 
@@ -85,12 +119,49 @@ export function settingsRoutes() {
     }
 
     const db = createSettingsDb(c.env.DB);
-    await savePreferences(
-      db,
-      c.get('userId'),
-      JSON.stringify({ profile: parsed.data, updatedAt: Date.now() }),
-    );
+    await mergePreferences(db, c.get('userId'), { profile: parsed.data });
     return c.json({ ok: true, profile: parsed.data, targets: computeTargets(parsed.data) });
+  });
+
+  // PUT /api/settings/fallback — store (or clear) a fallback provider + key.
+  // Used when the primary provider hits a quota/overload error. An empty apiKey
+  // clears the fallback.
+  app.put('/fallback', async (c) => {
+    if (!c.env.ENCRYPTION_KEY) {
+      return c.json({ error: 'Server misconfigured', detail: 'No encryption key' }, 500);
+    }
+    let body: { apiKey?: unknown; aiProvider?: unknown; aiModel?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
+    }
+    const db = createSettingsDb(c.env.DB);
+    const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+
+    // Empty key clears the fallback.
+    if (!apiKey) {
+      await mergePreferences(db, c.get('userId'), { fallback: undefined });
+      return c.json({ ok: true, fallbackConnected: false });
+    }
+
+    const provider =
+      typeof body.aiProvider === 'string' && isProviderId(body.aiProvider)
+        ? body.aiProvider
+        : 'deepseek';
+    const model =
+      typeof body.aiModel === 'string' && body.aiModel.trim() ? body.aiModel.trim() : null;
+    const enc = await encryptSecret(apiKey, c.env.ENCRYPTION_KEY);
+    await mergePreferences(db, c.get('userId'), {
+      fallback: { provider, model, keyCiphertext: enc.ciphertext, keyIv: enc.iv },
+    });
+    return c.json({
+      ok: true,
+      fallbackConnected: true,
+      fallbackProvider: provider,
+      fallbackModel: model,
+      fallbackKeyLast4: lastFour(apiKey),
+    });
   });
 
   // PUT /api/settings — store an encrypted API key + provider/model.

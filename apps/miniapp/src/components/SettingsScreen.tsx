@@ -41,6 +41,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [deleting, setDeleting] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [fbProvider, setFbProvider] = useState<ProviderId>('deepseek');
+  const [fbModel, setFbModel] = useState('');
+  const [fbKey, setFbKey] = useState('');
+  const [savingFb, setSavingFb] = useState(false);
 
   useEffect(() => {
     backend
@@ -51,6 +55,14 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           setProvider(s.aiProvider);
         }
         if (s.aiModel) setModel(s.aiModel);
+        if (
+          s.fallbackProvider === 'gemini' ||
+          s.fallbackProvider === 'openai' ||
+          s.fallbackProvider === 'deepseek'
+        ) {
+          setFbProvider(s.fallbackProvider);
+        }
+        if (s.fallbackModel) setFbModel(s.fallbackModel);
       })
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to load settings'));
   }, [backend]);
@@ -71,6 +83,36 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       toast.error(e instanceof Error ? e.message : 'Could not save key');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveFallback() {
+    const key = fbKey.trim();
+    if (!key) return;
+    setSavingFb(true);
+    try {
+      const updated = await backend.saveFallback(key, fbProvider, fbModel.trim() || undefined);
+      setSettings(updated);
+      setFbKey('');
+      toast.success('Fallback saved');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save fallback');
+    } finally {
+      setSavingFb(false);
+    }
+  }
+
+  async function handleClearFallback() {
+    setSavingFb(true);
+    try {
+      const updated = await backend.saveFallback('');
+      setSettings(updated);
+      setFbKey('');
+      toast.success('Fallback removed');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not remove fallback');
+    } finally {
+      setSavingFb(false);
     }
   }
 
@@ -269,6 +311,88 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               <p className="text-muted-foreground text-xs">
                 Your key is sent over HTTPS, encrypted at rest, and never shown again or logged.
               </p>
+              <p className="text-muted-foreground text-xs">
+                Heads up: free tiers have limits — Gemini's free tier allows about 20 requests/day
+                on <code>gemini-3.6-flash</code> plus a per-minute cap, and returns a "quota
+                exceeded" error once hit. Add billing to your key, or set a fallback below.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Fallback provider</span>
+                {settings?.fallbackConnected ? (
+                  <span className="text-primary text-sm">
+                    {settings.fallbackProvider}
+                    {settings.fallbackKeyLast4 ? ` · …${settings.fallbackKeyLast4}` : ''}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground text-sm">Off</span>
+                )}
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Optional. If your main provider hits a rate limit or is overloaded, FoodLog retries
+                the photo with this provider automatically. Great for pairing Gemini with DeepSeek.
+              </p>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="fb-provider">Provider</Label>
+                <select
+                  id="fb-provider"
+                  value={fbProvider}
+                  onChange={(e) => {
+                    setFbProvider(e.target.value as ProviderId);
+                    setFbModel('');
+                  }}
+                  className="border-input h-9 rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                  {PROVIDERS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="fb-model">Model (optional)</Label>
+                <Input
+                  id="fb-model"
+                  placeholder={PROVIDER_PRESETS[fbProvider].defaultModel}
+                  value={fbModel}
+                  onChange={(e) => setFbModel(e.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="fb-key">Fallback API key</Label>
+                <Input
+                  id="fb-key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="paste your fallback key"
+                  value={fbKey}
+                  onChange={(e) => setFbKey(e.target.value)}
+                />
+                <p className="text-muted-foreground text-xs">{PROVIDER_PRESETS[fbProvider].keyHint}</p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button className="flex-1" disabled={!fbKey.trim() || savingFb} onClick={handleSaveFallback}>
+                  {savingFb ? 'Saving…' : 'Save fallback'}
+                </Button>
+                {settings?.fallbackConnected && (
+                  <Button
+                    variant="secondary"
+                    disabled={savingFb}
+                    onClick={handleClearFallback}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         </>

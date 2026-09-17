@@ -16,6 +16,37 @@ export async function getSettings(
   return rows[0];
 }
 
+/**
+ * A fallback AI provider used when the primary hits a quota/overload error.
+ * The key is stored encrypted (same master key as the primary), inside
+ * `preferences_json` so no schema migration is needed. Never returned raw.
+ */
+export interface FallbackConfig {
+  provider: string;
+  model: string | null;
+  keyCiphertext: string;
+  keyIv: string;
+}
+
+/** The parsed shape of the `preferences_json` column. */
+export interface Preferences {
+  /** Raw profile JSON (validated by the route via the core schema). */
+  profile?: unknown;
+  fallback?: FallbackConfig;
+  updatedAt?: number;
+}
+
+/** Parses `preferences_json` into a Preferences object ({} on missing/invalid). */
+export function parsePreferences(preferencesJson: string | null | undefined): Preferences {
+  if (!preferencesJson) return {};
+  try {
+    const parsed: unknown = JSON.parse(preferencesJson);
+    return parsed && typeof parsed === 'object' ? (parsed as Preferences) : {};
+  } catch {
+    return {};
+  }
+}
+
 export interface SaveKeyInput {
   userId: string;
   aiProvider: string;

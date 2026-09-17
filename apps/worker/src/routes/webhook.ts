@@ -10,7 +10,7 @@ import {
 } from '@foodlog/core';
 import { type Context, Hono } from 'hono';
 import { createMealsDb, saveMeal } from '../db/meals.js';
-import { createSettingsDb, getSettings } from '../db/settings.js';
+import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
@@ -153,6 +153,43 @@ function friendlyPhotoError(e: ProviderErrorLike): string {
   return `Sorry — couldn't log that photo: ${raw || 'unknown error'}`;
 }
 
+/** Errors worth failing over to the fallback provider for. */
+function isFailoverError(err: unknown): boolean {
+  const status = (err as { status?: number }).status;
+  if (status === 429 || status === 503) return true;
+  const raw = providerMessage((err as { cause?: unknown }).cause) ?? '';
+  return /quota|rate limit|resource_exhausted|overloaded|high demand|unavailable/i.test(raw);
+}
+
+/**
+ * Retries meal analysis with the user's configured fallback provider when the
+ * primary hits a quota/overload error. If there's no fallback (or the error
+ * isn't a failover case), the original error is rethrown so the caller reports
+ * it. Keeps the pipeline resilient to a single provider's free-tier limits.
+ */
+async function tryFallback(
+  c: Context<AppBindings>,
+  primaryErr: unknown,
+  image: { base64: string; mimeType: 'image/jpeg' },
+  opts: { hint?: string },
+  providerFactory: ProviderFactory,
+  userId: string,
+): Promise<Awaited<ReturnType<ReturnType<ProviderFactory>['analyzeMeal']>>> {
+  if (!isFailoverError(primaryErr) || !c.env.ENCRYPTION_KEY) throw primaryErr;
+
+  const settingsDb = createSettingsDb(c.env.DB);
+  const row = await getSettings(settingsDb, userId);
+  const fb = parsePreferences(row?.preferencesJson).fallback;
+  if (!fb?.keyCiphertext || !fb?.keyIv) throw primaryErr;
+
+  const fbKey = await decryptSecret(
+    { ciphertext: fb.keyCiphertext, iv: fb.keyIv },
+    c.env.ENCRYPTION_KEY,
+  );
+  const fbProvider = providerFactory({ apiKey: fbKey, provider: fb.provider, model: fb.model });
+  return fbProvider.analyzeMeal(image, opts);
+}
+
 interface PhotoJob {
   fileId: string;
   fromId: number;
@@ -221,7 +258,7 @@ async function handlePhoto(
   const opts = caption ? { hint: caption } : {};
 
   // A 503 (model overloaded) is usually a transient demand spike — retry once
-  // after a short backoff before giving up. Quota/other errors are not retried.
+  // after a short backoff. Quota/other errors are not retried on the primary.
   let analysis: Awaited<ReturnType<typeof provider.analyzeMeal>>;
   try {
     analysis = await provider.analyzeMeal(image, opts);
@@ -229,9 +266,13 @@ async function handlePhoto(
     const status = (err as { status?: number }).status;
     if (status === 503) {
       await new Promise((r) => setTimeout(r, 1500));
-      analysis = await provider.analyzeMeal(image, opts);
+      try {
+        analysis = await provider.analyzeMeal(image, opts);
+      } catch (retryErr) {
+        analysis = await tryFallback(c, retryErr, image, opts, providerFactory, user.id);
+      }
     } else {
-      throw err;
+      analysis = await tryFallback(c, err, image, opts, providerFactory, user.id);
     }
   }
   const meal = resolveMeal(analysis);

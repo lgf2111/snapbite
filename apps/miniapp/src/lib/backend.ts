@@ -55,6 +55,8 @@ export interface Backend {
   saveApiKey(apiKey: string, aiProvider?: string, aiModel?: string): Promise<SettingsView>;
   /** Stores the user's profile + goal; returns the computed daily targets. */
   saveProfile(profile: UserProfile): Promise<DailyTargets>;
+  /** Stores or clears a fallback provider + key (empty key clears it). */
+  saveFallback(apiKey: string, aiProvider?: string, aiModel?: string): Promise<SettingsView>;
   /** Full JSON export of the user's data (never includes the API key). */
   exportData(): Promise<UserExport>;
   /**
@@ -114,6 +116,10 @@ export function createBackend(): Backend {
       async saveProfile(profile) {
         const res = await api.saveProfile(profile);
         return res.targets;
+      },
+      async saveFallback(apiKey, aiProvider, aiModel) {
+        await api.saveFallback(apiKey, aiProvider, aiModel);
+        return api.getSettings();
       },
       exportData() {
         return api.exportData();
@@ -188,6 +194,18 @@ export function createBackend(): Backend {
     async saveProfile(profile) {
       saveProfileLocal(profile);
       return computeTargets(profile);
+    },
+    async saveFallback() {
+      // No-op in local/demo mode (the mock analyzer needs no key or fallback).
+      const profile = loadProfile();
+      return {
+        aiProvider: 'mock',
+        aiModel: null,
+        connected: true,
+        keyLast4: null,
+        profile,
+        targets: profile ? computeTargets(profile) : null,
+      };
     },
     async exportData() {
       return localExport(loadMeals());

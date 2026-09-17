@@ -64,6 +64,10 @@ export interface SettingsView {
   keyLast4: string | null;
   profile?: UserProfile | null;
   targets?: DailyTargets | null;
+  fallbackConnected?: boolean;
+  fallbackProvider?: string | null;
+  fallbackModel?: string | null;
+  fallbackKeyLast4?: string | null;
 }
 
 /**
@@ -250,6 +254,21 @@ export class ApiClient {
     return this.#request('/api/settings/profile', {
       method: 'PUT',
       body: JSON.stringify({ profile }),
+    });
+  }
+
+  /**
+   * Stores (or clears, with an empty key) a fallback provider + key used when
+   * the primary provider hits a quota/overload error.
+   */
+  saveFallback(
+    apiKey: string,
+    aiProvider?: string,
+    aiModel?: string,
+  ): Promise<{ ok: boolean; fallbackConnected: boolean; fallbackKeyLast4?: string }> {
+    return this.#request('/api/settings/fallback', {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey, aiProvider, aiModel }),
     });
   }
 

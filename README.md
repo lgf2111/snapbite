@@ -90,6 +90,8 @@ FoodLog is provider-agnostic. Pick a provider and paste your key in **Settings**
 
 All three are called through the same OpenAI-compatible Chat Completions shape; only the base URL, model, and whether `image_url.detail` is honored differ. Image detail defaults to `high` for better recognition. The model is overridable per user (versions rotate).
 
+**Free-tier limits & fallback.** Provider free tiers are rate-limited — e.g. Gemini's free tier allows roughly 20 requests/day on `gemini-3.6-flash` plus a per-minute cap, and returns a "quota exceeded" (429) error once hit; models can also be temporarily "overloaded" (503). Settings surfaces this, and you can configure a **fallback provider** (e.g. DeepSeek): if the primary hits a quota/overload error while logging a photo, the Worker automatically retries with the fallback (and retries a transient 503 on the primary once first). The fallback key is encrypted at rest like the primary and stored in `preferences_json`.
+
 ## Status
 
 The full core build (Tasks 1–12) is done and deployed, plus full CRUD, editable macros, bot-photo auto-log, and photos-in-logs. Multi-provider AI (Gemini / OpenAI / DeepSeek) with in-app provider + model selection is live. Privacy & data control shipped: **export** your data (`GET /api/account/export` → downloadable JSON; the encrypted API key is never included) and **delete** your account (`DELETE /api/account`, cascading to all meals/photos/settings), both surfaced in Settings alongside a plain-language privacy explanation.
