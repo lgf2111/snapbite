@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Collapsible } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { InfoDisclosure } from './InfoDisclosure.js';
 import { MacroLine } from './MacroLine.js';
 import { NumberField } from './NumberField.js';
 
@@ -302,6 +303,34 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
           fatG={targets.fatG}
         />
       </div>
+
+      <InfoDisclosure title="How are these calculated?">
+        <p>
+          Estimates from your details — not medical advice. Editable in Advanced mode.
+        </p>
+        <p>
+          <strong>Calories:</strong> BMR (Mifflin–St Jeor) × activity, then adjusted for your goal
+          (lose −20% · maintain · gain +10%), floored at 1200 kcal.
+        </p>
+        <p>
+          <strong>BMR</strong> = 10·kg + 6.25·cm − 5·age {sex === 'male' ? '+ 5' : '− 161'}.
+        </p>
+        <p>
+          <strong>Activity ×:</strong> sedentary 1.2 · light 1.375 · moderate 1.55 · active 1.725 ·
+          very active 1.9.
+        </p>
+        <p>
+          <strong>Macros:</strong> protein 1.8 g/kg · fat 25% of calories · carbs the rest.
+        </p>
+        <a
+          href="https://pubmed.ncbi.nlm.nih.gov/2305711/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline"
+        >
+          Source: Mifflin–St Jeor (1990)
+        </a>
+      </InfoDisclosure>
 
       <Button disabled={saving} onClick={() => onSubmit(profile)}>
         {saving ? 'Saving…' : submitLabel}

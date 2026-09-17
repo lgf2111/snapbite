@@ -19,6 +19,7 @@ import { Switch } from '@/components/ui/switch';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
 import { downloadViaTelegram, openExportUrl } from '@/lib/telegram';
+import { InfoDisclosure } from './InfoDisclosure.js';
 import { MacroLine } from './MacroLine.js';
 import { ProfileForm } from './ProfileForm.js';
 
@@ -31,6 +32,56 @@ interface SettingsScreenProps {
 const GOAL_LABEL: Record<string, string> = { lose: 'Lose weight', maintain: 'Maintain', gain: 'Gain' };
 
 const PROVIDERS = Object.values(PROVIDER_PRESETS);
+
+/** Per-provider "how to get a key" steps + the console URL. */
+const KEY_GUIDE: Record<ProviderId, { url: string; steps: string[] }> = {
+  gemini: {
+    url: 'https://aistudio.google.com/apikey',
+    steps: [
+      'Open Google AI Studio and sign in with a Google account.',
+      'Click "Create API key" (a project is auto-created for new users).',
+      'Copy the key and paste it above. Free tier works; add billing to lift limits.',
+    ],
+  },
+  openai: {
+    url: 'https://platform.openai.com/api-keys',
+    steps: [
+      'Open the OpenAI API keys page and sign in.',
+      'Click "Create new secret key" and copy it (shown only once).',
+      'Add a payment method under Settings → Billing (no free tier).',
+    ],
+  },
+  deepseek: {
+    url: 'https://platform.deepseek.com',
+    steps: [
+      'Open the DeepSeek platform and sign up.',
+      'Go to "API keys" and click "Create new API key"; copy it now.',
+      'Add credit in the console (pay-as-you-go).',
+    ],
+  },
+};
+
+/** An expandable "how to get a key" guide for the given provider. */
+function KeyGuide({ provider }: { provider: ProviderId }) {
+  const guide = KEY_GUIDE[provider];
+  return (
+    <InfoDisclosure title={`How to get a ${PROVIDER_PRESETS[provider].label} key`}>
+      <ol className="list-decimal space-y-1 pl-4">
+        {guide.steps.map((s) => (
+          <li key={s}>{s}</li>
+        ))}
+      </ol>
+      <a
+        href={guide.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary underline"
+      >
+        Open {new URL(guide.url).host} ↗
+      </a>
+    </InfoDisclosure>
+  );
+}
 
 export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps) {
   const [settings, setSettings] = useState<SettingsView | null>(null);
@@ -329,6 +380,8 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                 <p className="text-muted-foreground text-xs">{preset.keyHint}</p>
               </div>
 
+              <KeyGuide provider={provider} />
+
               <Button disabled={!apiKey.trim() || saving} onClick={handleSave}>
                 {saving ? 'Saving…' : 'Save'}
               </Button>
@@ -417,6 +470,8 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                       {PROVIDER_PRESETS[fbProvider].keyHint}
                     </p>
                   </div>
+
+                  <KeyGuide provider={fbProvider} />
 
                   <div className="flex gap-2">
                     <Button
