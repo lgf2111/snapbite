@@ -5,9 +5,16 @@ import {
   type MealDetail,
   type MealSummary,
   type SettingsView,
+  type UserExport,
 } from './api.js';
 import { readConfig } from './config.js';
-import { deleteSavedMeal, loadMeals, type SavedMeal, updateSavedMeal } from './store.js';
+import {
+  clearMeals,
+  deleteSavedMeal,
+  loadMeals,
+  type SavedMeal,
+  updateSavedMeal,
+} from './store.js';
 import { getRawInitData } from './telegram.js';
 
 /** A unified recent-meal shape the home screen renders, from either source. */
@@ -41,6 +48,10 @@ export interface Backend {
   analytics(days?: number): Promise<AnalyticsSummary>;
   getSettings(): Promise<SettingsView>;
   saveApiKey(apiKey: string, aiProvider?: string, aiModel?: string): Promise<SettingsView>;
+  /** Full JSON export of the user's data (never includes the API key). */
+  exportData(): Promise<UserExport>;
+  /** Permanently deletes the user and all their data. */
+  deleteAccount(): Promise<void>;
   /** Photo URL for a meal (worker mode with a telegram file); null otherwise. */
   photoUrl(id: string): string | null;
 }
@@ -93,6 +104,12 @@ export function createBackend(): Backend {
           keyLast4: res.keyLast4,
         };
       },
+      exportData() {
+        return api.exportData();
+      },
+      async deleteAccount() {
+        await api.deleteAccount();
+      },
       photoUrl(id) {
         return api.photoUrl(id);
       },
@@ -135,10 +152,46 @@ export function createBackend(): Backend {
     async saveApiKey() {
       return { aiProvider: 'mock', aiModel: null, connected: true, keyLast4: null };
     },
+    async exportData() {
+      return localExport(loadMeals());
+    },
+    async deleteAccount() {
+      clearMeals();
+    },
     photoUrl(id) {
       // Local mode stores a data-URL preview on the saved meal, if any.
       return loadMeals().find((m) => m.id === id)?.previewUrl ?? null;
     },
+  };
+}
+
+/** Builds a UserExport-shaped payload from locally stored meals. */
+function localExport(saved: SavedMeal[]): UserExport {
+  return {
+    exportedAt: new Date().toISOString(),
+    user: { telegramUserId: 0, createdAt: Date.now() },
+    settings: { aiProvider: 'mock', aiModel: null },
+    meals: saved.map((s) => ({
+      id: s.id,
+      loggedAt: new Date(s.savedAt).getTime(),
+      createdAt: new Date(s.savedAt).getTime(),
+      notes: s.meal.notes ?? null,
+      confidence: s.meal.confidence,
+      telegramFileId: null,
+      total: s.meal.total,
+      foods: s.meal.foods.map((f) => ({
+        name: f.food.name,
+        estimatedWeightG: f.food.estimatedWeightG,
+        portion: f.food.portion ?? null,
+        quantity: f.food.quantity,
+        confidence: f.food.confidence,
+        energyKcal: f.nutrition.energyKcal,
+        proteinG: f.nutrition.proteinG,
+        carbsG: f.nutrition.carbsG,
+        fatG: f.nutrition.fatG,
+        nutritionSource: f.nutrition.source,
+      })),
+    })),
   };
 }
 

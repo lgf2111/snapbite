@@ -1,9 +1,17 @@
 import { PROVIDER_PRESETS, type ProviderId } from '@foodlog/core';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Download, ShieldCheck, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { SettingsView } from '@/lib/api';
@@ -21,6 +29,9 @@ export function SettingsScreen({ backend }: SettingsScreenProps) {
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     backend
@@ -51,6 +62,43 @@ export function SettingsScreen({ backend }: SettingsScreenProps) {
       toast.error(e instanceof Error ? e.message : 'Could not save key');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const data = await backend.exportData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `foodlog-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Export downloaded');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not export data');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    try {
+      await backend.deleteAccount();
+      setConfirmDelete(false);
+      setSettings(null);
+      setApiKey('');
+      setModel('');
+      toast.success('Account deleted');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete account');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -137,6 +185,63 @@ export function SettingsScreen({ backend }: SettingsScreenProps) {
           </Card>
         </>
       )}
+
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="text-primary size-5" />
+            <span className="font-medium">Privacy &amp; your data</span>
+          </div>
+          <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
+            <li>We store your logged meals: foods, nutrition, notes, and timestamps.</li>
+            <li>
+              Meal photos are only kept for meals you send to the Telegram bot, and are served
+              back only to you.
+            </li>
+            <li>Your AI API key is encrypted at rest and never included in exports or logs.</li>
+            <li>You can export everything or delete your account at any time below.</li>
+          </ul>
+
+          <div className="flex flex-col gap-2 pt-1 sm:flex-row">
+            <Button
+              variant="secondary"
+              className="gap-2"
+              disabled={exporting}
+              onClick={handleExport}
+            >
+              <Download className="size-4" />
+              {exporting ? 'Exporting…' : 'Export my data'}
+            </Button>
+            <Button
+              variant="destructive"
+              className="gap-2"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="size-4" />
+              Delete account
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete your account?</DialogTitle>
+            <DialogDescription>
+              This permanently deletes all your meals, photos, and settings. This can't be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" disabled={deleting} onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" disabled={deleting} onClick={handleDeleteAccount}>
+              {deleting ? 'Deleting…' : 'Delete everything'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

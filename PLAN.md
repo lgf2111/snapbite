@@ -152,7 +152,7 @@ This section tracks what was actually built, including work beyond the original 
 
 ### Delivered
 
-**Tasks 1–11 (core build), all with tests, typecheck, and per-task commits:**
+**Tasks 1–12 (core build), all with tests, typecheck, and per-task commits:**
 1. Monorepo + `packages/core` (pnpm workspaces, TS project refs, Vitest, Biome) + Zod schemas.
 2. `AIProvider` interface + DeepSeek adapter (OpenAI-compatible, inline base64 `image_url`, JSON mode). Verified against the real API.
 3. Nutrition resolver + bundled per-100g table (table-first, AI fallback, source-tagged, aggregation).
@@ -164,6 +164,7 @@ This section tracks what was actually built, including work beyond the original 
 9. History + detail + search (owner-scoped, day-grouped, LIKE search with escaped wildcards).
 10. Analytics (aggregate SQL only — totals, daily trend, common foods, macro averages).
 11. Bot launcher + notification feed (webhook, `/start /help /settings`, web_app launch button, post-save message).
+12. Privacy + data control — `GET /api/account/export` (full owner-scoped JSON: meals, foods, per-food + total nutrition, notes, timestamps, and the provider/model preference; **never** the encrypted API key) and `DELETE /api/account` (deletes the `users` row, cascading to settings/meals/food_items/nutrition). Mini App Settings gained a privacy-explanation card, an "Export my data" download (JSON blob), and a "Delete account" confirm dialog. Tests: export has data but no secrets, delete cascades and leaves a fresh empty user, other users untouched.
 
 **Extras delivered beyond the original plan:**
 - **Full meal CRUD** — `PUT`/`DELETE /api/meals/:id` (owner-scoped, cascade delete verified); editable + deletable meal detail screen in the Mini App.

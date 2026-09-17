@@ -66,6 +66,43 @@ export interface SettingsView {
   keyLast4: string | null;
 }
 
+/**
+ * Full export of a user's data. Mirrors the Worker's `UserExport`. The
+ * encrypted API key is deliberately never included — only provider/model.
+ */
+export interface UserExport {
+  exportedAt: string;
+  user: { telegramUserId: number; createdAt: number };
+  settings: { aiProvider: string; aiModel: string | null } | null;
+  meals: Array<{
+    id: string;
+    loggedAt: number;
+    createdAt: number;
+    notes: string | null;
+    confidence: number | null;
+    telegramFileId: string | null;
+    total: {
+      energyKcal: number;
+      proteinG: number;
+      carbsG: number;
+      fatG: number;
+      source: string;
+    } | null;
+    foods: Array<{
+      name: string;
+      estimatedWeightG: number | null;
+      portion: string | null;
+      quantity: number;
+      confidence: number | null;
+      energyKcal: number | null;
+      proteinG: number | null;
+      carbsG: number | null;
+      fatG: number | null;
+      nutritionSource: string | null;
+    }>;
+  }>;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   constructor(status: number, message: string) {
@@ -176,5 +213,15 @@ export class ApiClient {
       method: 'PUT',
       body: JSON.stringify({ apiKey, aiProvider, aiModel }),
     });
+  }
+
+  /** Full export of the user's data as JSON (never includes the API key). */
+  exportData(): Promise<UserExport> {
+    return this.#request<UserExport>('/api/account/export');
+  }
+
+  /** Permanently deletes the user and all their data. */
+  deleteAccount(): Promise<{ ok: boolean }> {
+    return this.#request<{ ok: boolean }>('/api/account', { method: 'DELETE' });
   }
 }

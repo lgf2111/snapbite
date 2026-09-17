@@ -57,6 +57,15 @@ export function updateSavedMeal(id: string, meal: MealResult): boolean {
   return true;
 }
 
+/** Removes every saved meal (used by local-mode account deletion). */
+export function clearMeals(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage unavailable — non-fatal.
+  }
+}
+
 /** Removes a saved meal by id. Returns true if it existed. */
 export function deleteSavedMeal(id: string): boolean {
   const all = loadMeals();
