@@ -14,6 +14,8 @@ export interface SaveMealInput {
   meal: MealResult;
   telegramFileId?: string;
   loggedAt?: number;
+  /** AI provider that analyzed this meal (e.g. 'gemini'); omit for manual. */
+  aiProvider?: string | null;
 }
 
 /**
@@ -33,6 +35,7 @@ export async function saveMeal(db: MealsDb, input: SaveMealInput): Promise<strin
       telegramFileId: input.telegramFileId ?? null,
       notes: m.notes ?? null,
       confidence: m.confidence,
+      aiProvider: input.aiProvider ?? null,
       createdAt: now,
       loggedAt,
     }),
@@ -77,6 +80,7 @@ export interface MealSummary {
   carbsG: number | null;
   fatG: number | null;
   source: string | null;
+  aiProvider: string | null;
   foods: string[];
   hasPhoto: boolean;
 }
@@ -106,6 +110,7 @@ export async function listMeals(db: MealsDb, userId: string, limit = 50): Promis
       carbsG: nut[0]?.carbsG ?? null,
       fatG: nut[0]?.fatG ?? null,
       source: nut[0]?.source ?? null,
+      aiProvider: meal.aiProvider ?? null,
       foods: foods.map((f) => f.name),
       hasPhoto: Boolean(meal.telegramFileId),
     });
@@ -195,6 +200,7 @@ export interface MealDetail {
   notes: string | null;
   confidence: number | null;
   telegramFileId: string | null;
+  aiProvider: string | null;
   foods: Array<{
     id: string;
     name: string;
@@ -244,6 +250,7 @@ export async function getMealDetail(
     notes: meal.notes,
     confidence: meal.confidence,
     telegramFileId: meal.telegramFileId,
+    aiProvider: meal.aiProvider,
     foods: foods.map((f: FoodItemRow) => ({
       id: f.id,
       name: f.name,

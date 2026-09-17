@@ -51,3 +51,26 @@ export function MacroLine({
     </div>
   );
 }
+
+/** What each macro emoji means — shown once so the icons are self-explaining. */
+export const MACRO_LEGEND: Array<{ icon: string; label: string }> = [
+  { icon: '🔥', label: 'calories' },
+  { icon: '🥩', label: 'protein' },
+  { icon: '🍚', label: 'carbs' },
+  { icon: '🧈', label: 'fat' },
+];
+
+/** A small inline legend explaining the macro emojis (🔥/🥩/🍚/🧈). */
+export function MacroLegend({ className }: { className?: string }) {
+  return (
+    <div
+      className={`text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs ${className ?? ''}`}
+    >
+      {MACRO_LEGEND.map((m) => (
+        <span key={m.label} className="whitespace-nowrap">
+          {m.icon} {m.label}
+        </span>
+      ))}
+    </div>
+  );
+}

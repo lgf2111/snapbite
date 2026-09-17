@@ -1,0 +1,1 @@
+ALTER TABLE `meals` ADD `ai_provider` text;

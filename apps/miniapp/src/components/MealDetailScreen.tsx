@@ -1,4 +1,11 @@
-import { aggregate, type FoodItem, type MealResult, resolveFoodNutrition, sourceLabel } from '@foodlog/core';
+import {
+  aggregate,
+  type FoodItem,
+  type MealResult,
+  PROVIDER_PRESETS,
+  resolveFoodNutrition,
+  sourceLabel,
+} from '@foodlog/core';
 import { RotateCcw, Sparkles, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -17,7 +24,7 @@ import type { Backend } from '@/lib/backend';
 import { hapticImpact } from '@/lib/telegram';
 import { useBackButton, useMainButton } from '@/lib/useTelegramButtons';
 import { cn } from '@/lib/utils';
-import { MacroLine } from './MacroLine.js';
+import { MacroLegend, MacroLine } from './MacroLine.js';
 import { ReviseWithAiDialog } from './UpdateWithAi.js';
 
 type ToastKind = 'success' | 'error' | 'info';
@@ -33,6 +40,11 @@ interface MealDetailScreenProps {
 }
 
 type MacroKey = 'energyKcal' | 'proteinG' | 'carbsG' | 'fatG';
+
+/** Short human labels for the provider id shown in the detail header. */
+const PROVIDER_LABEL: Record<string, string> = Object.fromEntries(
+  Object.values(PROVIDER_PRESETS).map((p) => [p.id, p.label]),
+);
 
 /** A draft food row: the editable food plus a pending-remove flag. */
 interface DraftFood extends FoodItem {
@@ -264,6 +276,7 @@ export function MealDetailScreen({
         <>
           <p className="text-muted-foreground text-sm">
             {new Date(detail.loggedAt).toLocaleString()}
+            {detail.aiProvider ? ` · analyzed by ${PROVIDER_LABEL[detail.aiProvider] ?? detail.aiProvider}` : ''}
           </p>
           {detail.telegramFileId && backend.photoUrl(mealId) && (
             <img
@@ -371,6 +384,7 @@ export function MealDetailScreen({
                   sourceLabel={sourceLabel(resolved.total.source)}
                 />
               </div>
+              <MacroLegend className="pt-1" />
             </CardContent>
           </Card>
 

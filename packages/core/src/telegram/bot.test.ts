@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mealLoggedMessage, parseUpdate, replyForCommand } from './bot.js';
+import { mealLoggedMessage, parseUpdate, photoLoggedReply, replyForCommand } from './bot.js';
 
 const CONFIG = { miniAppUrl: 'https://app.example.com' };
 
@@ -64,5 +64,27 @@ describe('mealLoggedMessage', () => {
 
   it('handles no kcal', () => {
     expect(mealLoggedMessage(['soup'], null)).toBe('✅ Logged soup.');
+  });
+});
+
+describe('photoLoggedReply', () => {
+  const totals = { energyKcal: 530.4, proteinG: 22.25, carbsG: 60, fatG: 18 };
+
+  it('summarizes the foods and total calories + macros', () => {
+    const reply = photoLoggedReply(['rice', 'chicken'], totals, CONFIG);
+    expect(reply.text).toContain('rice, chicken');
+    expect(reply.text).toContain('530.4 kcal');
+    expect(reply.text).toContain('Protein 22.3 g'); // rounded to 1 dp
+    expect(reply.text).toContain('Carbs 60 g');
+    expect(reply.text).toContain('Fat 18 g');
+    expect(reply.text.toLowerCase()).toContain('estimate');
+    // Launch button present when a mini app URL is configured.
+    expect(reply.replyMarkup?.inline_keyboard[0]?.[0]?.web_app?.url).toBe('https://app.example.com');
+  });
+
+  it('omits the launch button when no mini app URL is set', () => {
+    const reply = photoLoggedReply(['soup'], totals, { miniAppUrl: '' });
+    expect(reply.replyMarkup).toBeUndefined();
+    expect(reply.text).toContain('soup');
   });
 });

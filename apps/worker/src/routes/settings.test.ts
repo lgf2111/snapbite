@@ -175,6 +175,68 @@ describe('PUT /api/settings/profile', () => {
   });
 });
 
+describe('PUT /api/settings/fallback', () => {
+  it('stores a fallback key and reports it connected + enabled', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(1301)), 'content-type': 'application/json' };
+    await app.request(
+      '/api/settings/fallback',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'fb-abcd', aiProvider: 'openai' }) },
+      env,
+    );
+    const res = await app.request('/api/settings', { headers: await authHeaders(1301) }, env);
+    const body = (await res.json()) as {
+      fallbackConnected: boolean;
+      fallbackEnabled: boolean;
+      fallbackProvider: string | null;
+      fallbackKeyLast4: string | null;
+    };
+    expect(body.fallbackConnected).toBe(true);
+    expect(body.fallbackEnabled).toBe(true);
+    expect(body.fallbackProvider).toBe('openai');
+    expect(body.fallbackKeyLast4).toBe('abcd');
+  });
+
+  it('disabling via { enabled:false } KEEPS the stored key', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(1302)), 'content-type': 'application/json' };
+    await app.request(
+      '/api/settings/fallback',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'fb-keep', aiProvider: 'openai' }) },
+      env,
+    );
+    // Toggle off.
+    await app.request(
+      '/api/settings/fallback',
+      { method: 'PUT', headers, body: JSON.stringify({ enabled: false }) },
+      env,
+    );
+    const res = await app.request('/api/settings', { headers: await authHeaders(1302) }, env);
+    const body = (await res.json()) as { fallbackConnected: boolean; fallbackEnabled: boolean };
+    // Still connected (key retained) but not enabled.
+    expect(body.fallbackConnected).toBe(true);
+    expect(body.fallbackEnabled).toBe(false);
+  });
+
+  it('remove:true permanently deletes the fallback', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(1303)), 'content-type': 'application/json' };
+    await app.request(
+      '/api/settings/fallback',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'fb-gone', aiProvider: 'openai' }) },
+      env,
+    );
+    await app.request(
+      '/api/settings/fallback',
+      { method: 'PUT', headers, body: JSON.stringify({ remove: true }) },
+      env,
+    );
+    const res = await app.request('/api/settings', { headers: await authHeaders(1303) }, env);
+    const body = (await res.json()) as { fallbackConnected: boolean };
+    expect(body.fallbackConnected).toBe(false);
+  });
+});
+
 describe('POST /api/settings/test', () => {
   it('returns 400 when no key is saved', async () => {
     const app = createApp();

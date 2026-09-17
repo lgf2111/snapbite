@@ -37,6 +37,8 @@ export const meals = sqliteTable(
     telegramFileId: text('telegram_file_id'),
     notes: text('notes'),
     confidence: real('confidence'),
+    /** AI provider that analyzed this meal (e.g. 'gemini', 'openai'); null for manual/older meals. */
+    aiProvider: text('ai_provider'),
     createdAt: integer('created_at').notNull(),
     loggedAt: integer('logged_at').notNull(),
   },

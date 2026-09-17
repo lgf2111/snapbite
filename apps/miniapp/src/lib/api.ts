@@ -18,6 +18,7 @@ export interface MealSummary {
   carbsG: number | null;
   fatG: number | null;
   source: string | null;
+  aiProvider: string | null;
   foods: string[];
   hasPhoto: boolean;
 }
@@ -35,6 +36,7 @@ export interface MealDetail {
   notes: string | null;
   confidence: number | null;
   telegramFileId: string | null;
+  aiProvider: string | null;
   foods: Array<{
     id: string;
     name: string;
@@ -65,6 +67,7 @@ export interface SettingsView {
   profile?: UserProfile | null;
   targets?: DailyTargets | null;
   fallbackConnected?: boolean;
+  fallbackEnabled?: boolean;
   fallbackProvider?: string | null;
   fallbackModel?: string | null;
   fallbackKeyLast4?: string | null;
@@ -257,10 +260,7 @@ export class ApiClient {
     });
   }
 
-  /**
-   * Stores (or clears, with an empty key) a fallback provider + key used when
-   * the primary provider hits a quota/overload error.
-   */
+  /** Stores/replaces the fallback provider + key (enabled). */
   saveFallback(
     apiKey: string,
     aiProvider?: string,
@@ -269,6 +269,22 @@ export class ApiClient {
     return this.#request('/api/settings/fallback', {
       method: 'PUT',
       body: JSON.stringify({ apiKey, aiProvider, aiModel }),
+    });
+  }
+
+  /** Enables/disables the fallback without touching the stored key. */
+  setFallbackEnabled(enabled: boolean): Promise<{ ok: boolean; fallbackEnabled: boolean }> {
+    return this.#request('/api/settings/fallback', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
+  /** Permanently removes the fallback provider + key. */
+  removeFallback(): Promise<{ ok: boolean; fallbackConnected: boolean }> {
+    return this.#request('/api/settings/fallback', {
+      method: 'PUT',
+      body: JSON.stringify({ remove: true }),
     });
   }
 

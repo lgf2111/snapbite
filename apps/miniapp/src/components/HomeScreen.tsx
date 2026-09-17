@@ -1,4 +1,4 @@
-import type { DailyTargets } from '@foodlog/core';
+import { type DailyTargets, PROVIDER_PRESETS } from '@foodlog/core';
 import { Camera, Sparkles, Target } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -7,11 +7,19 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { Backend, RecentMeal } from '@/lib/backend';
 import { hapticNotify } from '@/lib/telegram';
 import { DateSelector } from './DateSelector.js';
-import { MacroLine } from './MacroLine.js';
+import { MacroLegend, MacroLine } from './MacroLine.js';
 import { ProgressRing } from './ProgressRing.js';
 import { SwipeableRow } from './SwipeableRow.js';
 
 type ToastKind = 'success' | 'error' | 'info';
+
+/** Short human labels for the provider id shown on meal cards. */
+const PROVIDER_LABEL: Record<string, string> = {
+  gemini: 'Gemini',
+  openai: 'OpenAI',
+  deepseek: 'DeepSeek',
+  ...Object.fromEntries(Object.values(PROVIDER_PRESETS).map((p) => [p.id, p.label])),
+};
 
 interface HomeScreenProps {
   backend: Backend;
@@ -192,7 +200,14 @@ export function HomeScreen({
                     onClick={() => onOpenMeal(m.id)}
                   >
                     <div className="truncate font-medium">{m.label}</div>
-                    <MacroLine energyKcal={m.energyKcal} compact />
+                    <div className="flex items-center gap-2">
+                      <MacroLine energyKcal={m.energyKcal} compact />
+                      {m.aiProvider && (
+                        <span className="text-muted-foreground text-[10px] uppercase tracking-wide">
+                          {PROVIDER_LABEL[m.aiProvider] ?? m.aiProvider}
+                        </span>
+                      )}
+                    </div>
                   </button>
                   <Button
                     variant="ghost"
@@ -209,6 +224,7 @@ export function HomeScreen({
               </Card>
             </SwipeableRow>
           ))}
+          <MacroLegend className="justify-center pt-1" />
         </div>
       )}
     </div>

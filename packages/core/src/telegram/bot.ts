@@ -128,13 +128,42 @@ export function mealLoggedMessage(foods: string[], energyKcal: number | null): s
   return `✅ Logged ${list}${kcal}.`;
 }
 
-/** Reply shown when a photo is logged straight from the bot chat. */
+/** The macro/energy totals shown in the detailed photo-logged reply. */
+export interface PhotoLoggedTotals {
+  energyKcal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+}
+
+/** Rounds to one decimal for display. */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/**
+ * Reply shown when a photo is logged straight from the bot chat. Summarizes
+ * what the AI interpreted: the foods and the meal's total calories + macros
+ * (protein/carbs/fat), all framed as estimates and correctable in the app.
+ */
 export function photoLoggedReply(
   foods: string[],
-  energyKcal: number | null,
+  totals: PhotoLoggedTotals,
   config: BotConfig,
 ): BotReply {
-  const text = `${mealLoggedMessage(foods, energyKcal)}\nOpen the app to review or correct it.`;
+  const list = foods.length > 0 ? foods.join(', ') : 'your meal';
+  const lines = [
+    `✅ Logged: ${list}`,
+    '',
+    'Estimated totals:',
+    `🔥 ${round1(totals.energyKcal)} kcal`,
+    `🥩 Protein ${round1(totals.proteinG)} g`,
+    `🍚 Carbs ${round1(totals.carbsG)} g`,
+    `🧈 Fat ${round1(totals.fatG)} g`,
+    '',
+    'These are estimates — open the app to review or correct.',
+  ];
+  const text = lines.join('\n');
   if (config.miniAppUrl) {
     return {
       text,

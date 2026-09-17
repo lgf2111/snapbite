@@ -27,6 +27,7 @@ export interface RecentMeal {
   proteinG: number | null;
   carbsG: number | null;
   fatG: number | null;
+  aiProvider: string | null;
   when: number;
   previewUrl?: string;
 }
@@ -55,8 +56,12 @@ export interface Backend {
   saveApiKey(apiKey: string, aiProvider?: string, aiModel?: string): Promise<SettingsView>;
   /** Stores the user's profile + goal; returns the computed daily targets. */
   saveProfile(profile: UserProfile): Promise<DailyTargets>;
-  /** Stores or clears a fallback provider + key (empty key clears it). */
+  /** Stores/replaces the fallback provider + key (enabled). Returns fresh settings. */
   saveFallback(apiKey: string, aiProvider?: string, aiModel?: string): Promise<SettingsView>;
+  /** Enables/disables the fallback without wiping the stored key. */
+  setFallbackEnabled(enabled: boolean): Promise<SettingsView>;
+  /** Permanently removes the fallback. */
+  removeFallback(): Promise<SettingsView>;
   /** Full JSON export of the user's data (never includes the API key). */
   exportData(): Promise<UserExport>;
   /**
@@ -119,6 +124,14 @@ export function createBackend(): Backend {
       },
       async saveFallback(apiKey, aiProvider, aiModel) {
         await api.saveFallback(apiKey, aiProvider, aiModel);
+        return api.getSettings();
+      },
+      async setFallbackEnabled(enabled) {
+        await api.setFallbackEnabled(enabled);
+        return api.getSettings();
+      },
+      async removeFallback() {
+        await api.removeFallback();
         return api.getSettings();
       },
       exportData() {
@@ -195,17 +208,15 @@ export function createBackend(): Backend {
       saveProfileLocal(profile);
       return computeTargets(profile);
     },
+    // No-op in local/demo mode (the mock analyzer needs no key or fallback).
     async saveFallback() {
-      // No-op in local/demo mode (the mock analyzer needs no key or fallback).
-      const profile = loadProfile();
-      return {
-        aiProvider: 'mock',
-        aiModel: null,
-        connected: true,
-        keyLast4: null,
-        profile,
-        targets: profile ? computeTargets(profile) : null,
-      };
+      return localMockSettings();
+    },
+    async setFallbackEnabled() {
+      return localMockSettings();
+    },
+    async removeFallback() {
+      return localMockSettings();
     },
     async exportData() {
       return localExport(loadMeals());
@@ -221,6 +232,19 @@ export function createBackend(): Backend {
       // Local mode stores a data-URL preview on the saved meal, if any.
       return loadMeals().find((m) => m.id === id)?.previewUrl ?? null;
     },
+  };
+}
+
+/** The mock SettingsView returned by local/demo mode. */
+function localMockSettings(): SettingsView {
+  const profile = loadProfile();
+  return {
+    aiProvider: 'mock',
+    aiModel: null,
+    connected: true,
+    keyLast4: null,
+    profile,
+    targets: profile ? computeTargets(profile) : null,
   };
 }
 
@@ -262,6 +286,7 @@ function savedToDetail(s: SavedMeal): MealDetail {
     notes: s.meal.notes ?? null,
     confidence: s.meal.confidence,
     telegramFileId: null,
+    aiProvider: null,
     foods: s.meal.foods.map((f, i) => ({
       id: String(i),
       name: f.food.name,
@@ -287,6 +312,7 @@ function toRecent(m: MealSummary, photoUrl?: (id: string) => string): RecentMeal
     proteinG: m.proteinG,
     carbsG: m.carbsG,
     fatG: m.fatG,
+    aiProvider: m.aiProvider,
     when: m.loggedAt,
     ...(m.hasPhoto && photoUrl ? { previewUrl: photoUrl(m.id) } : {}),
   };
@@ -300,6 +326,7 @@ function fromSaved(m: SavedMeal): RecentMeal {
     proteinG: m.meal.total.proteinG,
     carbsG: m.meal.total.carbsG,
     fatG: m.meal.total.fatG,
+    aiProvider: null,
     when: new Date(m.savedAt).getTime(),
     ...(m.previewUrl ? { previewUrl: m.previewUrl } : {}),
   };

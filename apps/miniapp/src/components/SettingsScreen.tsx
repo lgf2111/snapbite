@@ -66,7 +66,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           setFbProvider(s.fallbackProvider);
         }
         if (s.fallbackModel) setFbModel(s.fallbackModel);
-        if (s.fallbackConnected) setFbEnabled(true);
+        setFbEnabled(Boolean(s.fallbackEnabled));
       })
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to load settings'));
   }, [backend]);
@@ -75,11 +75,22 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const isLocal = backend.mode === 'local';
   const primaryConnected = Boolean(settings?.connected);
 
-  function handleToggleFallback(on: boolean) {
+  async function handleToggleFallback(on: boolean) {
     setFbEnabled(on);
-    // Turning off with a saved fallback clears it; turning off an unsaved draft
-    // just collapses the section.
-    if (!on && settings?.fallbackConnected) void handleClearFallback();
+    // Toggling only flips enabled — the stored key is KEPT so the user can
+    // re-enable without re-entering it. (An unsaved draft just expands/collapses.)
+    if (settings?.fallbackConnected) {
+      setSavingFb(true);
+      try {
+        const updated = await backend.setFallbackEnabled(on);
+        setSettings(updated);
+      } catch (e) {
+        setFbEnabled(!on); // revert on failure
+        toast.error(e instanceof Error ? e.message : 'Could not update fallback');
+      } finally {
+        setSavingFb(false);
+      }
+    }
   }
 
   async function handleSave() {
@@ -114,12 +125,13 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     }
   }
 
-  async function handleClearFallback() {
+  async function handleRemoveFallback() {
     setSavingFb(true);
     try {
-      const updated = await backend.saveFallback('');
+      const updated = await backend.removeFallback();
       setSettings(updated);
       setFbKey('');
+      setFbEnabled(false);
       toast.success('Fallback removed');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not remove fallback');
@@ -298,7 +310,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                 <Label htmlFor="model">Model (optional)</Label>
                 <Input
                   id="model"
-                  placeholder={preset.defaultModel}
+                  placeholder={`default: ${preset.defaultModel}`}
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                 />
@@ -337,11 +349,11 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                 <div className="flex flex-col">
                   <span className="font-medium">Fallback provider</span>
                   <span className="text-muted-foreground text-xs">
-                    {settings?.fallbackConnected
-                      ? `${settings.fallbackProvider}${settings.fallbackKeyLast4 ? ` · …${settings.fallbackKeyLast4}` : ''}`
-                      : primaryConnected
-                        ? 'Off'
-                        : 'Connect your main provider first'}
+                    {!primaryConnected
+                      ? 'Connect your main provider first'
+                      : settings?.fallbackConnected
+                        ? `${settings.fallbackProvider}${settings.fallbackKeyLast4 ? ` · …${settings.fallbackKeyLast4}` : ''}${settings.fallbackEnabled ? '' : ' · saved (off)'}`
+                        : 'Off'}
                   </span>
                 </div>
                 <Switch
@@ -383,7 +395,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                     <Label htmlFor="fb-model">Model (optional)</Label>
                     <Input
                       id="fb-model"
-                      placeholder={PROVIDER_PRESETS[fbProvider].defaultModel}
+                      placeholder={`default: ${PROVIDER_PRESETS[fbProvider].defaultModel}`}
                       value={fbModel}
                       onChange={(e) => setFbModel(e.target.value)}
                     />
@@ -406,13 +418,20 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                     </p>
                   </div>
 
-                  <Button
-                    className="w-full"
-                    disabled={!fbKey.trim() || savingFb}
-                    onClick={handleSaveFallback}
-                  >
-                    {savingFb ? 'Saving…' : 'Save fallback'}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1"
+                      disabled={!fbKey.trim() || savingFb}
+                      onClick={handleSaveFallback}
+                    >
+                      {savingFb ? 'Saving…' : settings?.fallbackConnected ? 'Replace key' : 'Save fallback'}
+                    </Button>
+                    {settings?.fallbackConnected && (
+                      <Button variant="secondary" disabled={savingFb} onClick={handleRemoveFallback}>
+                        Remove
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </Collapsible>
             </CardContent>

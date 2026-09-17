@@ -26,6 +26,12 @@ export interface FallbackConfig {
   model: string | null;
   keyCiphertext: string;
   keyIv: string;
+  /**
+   * Whether the fallback is active. Toggling it off in the UI sets this false
+   * but KEEPS the stored key, so the user can re-enable without re-entering it.
+   * Treated as enabled when absent (back-compat with earlier saves).
+   */
+  enabled?: boolean;
 }
 
 /** The parsed shape of the `preferences_json` column. */

@@ -140,7 +140,13 @@ interface ProviderErrorLike {
  */
 function friendlyPhotoError(e: ProviderErrorLike): string {
   const raw = providerMessage(e.cause) ?? e.message ?? '';
-  if (e.status === 429 || /quota|rate limit|resource_exhausted/i.test(raw)) {
+  if (e.status === 402 || /credit|billing|insufficient|balance|payment|prepay/i.test(raw)) {
+    return (
+      "Sorry — your AI provider needs billing set up (it reported a credit/billing problem). " +
+      'Add credit/billing to that key, or set a working fallback provider in FoodLog → Settings.'
+    );
+  }
+  if (e.status === 429 || /quota|rate limit|resource_exhausted|exceeded/i.test(raw)) {
     return (
       "Sorry — your AI provider's rate limit was hit. On the free tier this is usually a daily " +
       'cap or a short per-minute limit. Wait a bit and send the photo again, or switch model/' +
@@ -153,19 +159,39 @@ function friendlyPhotoError(e: ProviderErrorLike): string {
   return `Sorry — couldn't log that photo: ${raw || 'unknown error'}`;
 }
 
-/** Errors worth failing over to the fallback provider for. */
+/**
+ * Errors worth failing over to the fallback provider for. Covers rate limits
+ * (429), overload (503), billing/credit problems (402, e.g. "prepayment credits
+ * are needed" / "insufficient balance"), and any other server/quota-ish failure
+ * — essentially anything except a clearly non-recoverable client error (400
+ * bad request) or an auth failure (401/403), where a different provider's key
+ * wouldn't help and should surface the real message instead.
+ */
 function isFailoverError(err: unknown): boolean {
   const status = (err as { status?: number }).status;
-  if (status === 429 || status === 503) return true;
-  const raw = providerMessage((err as { cause?: unknown }).cause) ?? '';
-  return /quota|rate limit|resource_exhausted|overloaded|high demand|unavailable/i.test(raw);
+  if (status === 429 || status === 503 || status === 402) return true;
+  // Any other 4xx/5xx except bad-request/auth is worth trying the fallback.
+  if (typeof status === 'number' && status >= 402 && status !== 403) return true;
+
+  const raw = (providerMessage((err as { cause?: unknown }).cause) ?? '') +
+    ' ' +
+    ((err as { message?: string }).message ?? '');
+  return /quota|rate limit|resource_exhausted|overloaded|high demand|unavailable|credit|billing|insufficient|balance|payment|prepay|exceeded/i.test(
+    raw,
+  );
 }
+
+/** The result of an analysis, tagged with which provider actually produced it. */
+type AnalysisResult = {
+  analysis: Awaited<ReturnType<ReturnType<ProviderFactory>['analyzeMeal']>>;
+  provider: string;
+};
 
 /**
  * Retries meal analysis with the user's configured fallback provider when the
  * primary hits a quota/overload error. If there's no fallback (or the error
  * isn't a failover case), the original error is rethrown so the caller reports
- * it. Keeps the pipeline resilient to a single provider's free-tier limits.
+ * it. Returns the revised analysis tagged with the fallback provider id.
  */
 async function tryFallback(
   c: Context<AppBindings>,
@@ -174,20 +200,22 @@ async function tryFallback(
   opts: { hint?: string },
   providerFactory: ProviderFactory,
   userId: string,
-): Promise<Awaited<ReturnType<ReturnType<ProviderFactory>['analyzeMeal']>>> {
+): Promise<AnalysisResult> {
   if (!isFailoverError(primaryErr) || !c.env.ENCRYPTION_KEY) throw primaryErr;
 
   const settingsDb = createSettingsDb(c.env.DB);
   const row = await getSettings(settingsDb, userId);
   const fb = parsePreferences(row?.preferencesJson).fallback;
-  if (!fb?.keyCiphertext || !fb?.keyIv) throw primaryErr;
+  // No fallback stored, or it's been toggled off — surface the primary error.
+  if (!fb?.keyCiphertext || !fb?.keyIv || fb.enabled === false) throw primaryErr;
 
   const fbKey = await decryptSecret(
     { ciphertext: fb.keyCiphertext, iv: fb.keyIv },
     c.env.ENCRYPTION_KEY,
   );
   const fbProvider = providerFactory({ apiKey: fbKey, provider: fb.provider, model: fb.model });
-  return fbProvider.analyzeMeal(image, opts);
+  const analysis = await fbProvider.analyzeMeal(image, opts);
+  return { analysis, provider: fb.provider };
 }
 
 interface PhotoJob {
@@ -259,7 +287,9 @@ async function handlePhoto(
 
   // A 503 (model overloaded) is usually a transient demand spike — retry once
   // after a short backoff. Quota/other errors are not retried on the primary.
+  // Track which provider actually produced the analysis (primary or fallback).
   let analysis: Awaited<ReturnType<typeof provider.analyzeMeal>>;
+  let usedProvider = settings.aiProvider;
   try {
     analysis = await provider.analyzeMeal(image, opts);
   } catch (err) {
@@ -269,18 +299,39 @@ async function handlePhoto(
       try {
         analysis = await provider.analyzeMeal(image, opts);
       } catch (retryErr) {
-        analysis = await tryFallback(c, retryErr, image, opts, providerFactory, user.id);
+        const fb = await tryFallback(c, retryErr, image, opts, providerFactory, user.id);
+        analysis = fb.analysis;
+        usedProvider = fb.provider;
       }
     } else {
-      analysis = await tryFallback(c, err, image, opts, providerFactory, user.id);
+      const fb = await tryFallback(c, err, image, opts, providerFactory, user.id);
+      analysis = fb.analysis;
+      usedProvider = fb.provider;
     }
   }
   const meal = resolveMeal(analysis);
 
   // Persist, keeping the Telegram file_id so the photo can be shown later.
   const mealsDb = createMealsDb(c.env.DB);
-  await saveMeal(mealsDb, { userId: user.id, meal, telegramFileId: fileId });
+  await saveMeal(mealsDb, {
+    userId: user.id,
+    meal,
+    telegramFileId: fileId,
+    aiProvider: usedProvider,
+  });
 
   const foods = meal.foods.map((f) => f.food.name);
-  await bot.sendMessage(chatId, photoLoggedReply(foods, meal.total.energyKcal, { miniAppUrl }));
+  await bot.sendMessage(
+    chatId,
+    photoLoggedReply(
+      foods,
+      {
+        energyKcal: meal.total.energyKcal,
+        proteinG: meal.total.proteinG,
+        carbsG: meal.total.carbsG,
+        fatG: meal.total.fatG,
+      },
+      { miniAppUrl },
+    ),
+  );
 }

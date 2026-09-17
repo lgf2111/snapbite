@@ -22,6 +22,13 @@
       "when": 1789605157504,
       "tag": "0002_empty_mockingbird",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789630502892,
+      "tag": "0003_omniscient_shinko_yamashiro",
+      "breakpoints": true
     }
   ]
 }

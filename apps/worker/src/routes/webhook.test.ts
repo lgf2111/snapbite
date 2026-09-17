@@ -127,11 +127,12 @@ describe('POST /webhook', () => {
     expect(res.status).toBe(200);
     expect(sent[0]?.reply.text).toContain('Logged');
 
-    // The meal should now be listed for that user.
+    // The meal should now be listed for that user, tagged with the provider used.
     const list = (await (
       await createApp().request('/api/meals', { headers: { [INIT_DATA_HEADER]: initData } }, env)
-    ).json()) as { meals: unknown[] };
+    ).json()) as { meals: Array<{ aiProvider: string | null }> };
     expect(list.meals.length).toBeGreaterThanOrEqual(1);
+    expect(list.meals[0]?.aiProvider).toBe('gemini');
   });
 
   it('fails over to the fallback provider when the primary hits a quota error', async () => {
@@ -179,5 +180,111 @@ describe('POST /webhook', () => {
     expect(res.status).toBe(200);
     // The fallback produced a successful log rather than an error message.
     expect(sent[0]?.reply.text).toContain('Logged');
+    // And the meal is tagged with the fallback provider that actually ran it.
+    const list = (await (
+      await createApp().request('/api/meals', { headers: { [INIT_DATA_HEADER]: initData } }, env)
+    ).json()) as { meals: Array<{ aiProvider: string | null }> };
+    expect(list.meals[0]?.aiProvider).toBe('deepseek');
+  });
+
+  it('fails over to the fallback on a billing/credit (402) error', async () => {
+    const tgId = 8301;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
+    const setup = createApp();
+    await setup.request(
+      '/api/settings',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }) },
+      env,
+    );
+    await setup.request(
+      '/api/settings/fallback',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'fallback-key', aiProvider: 'openai' }) },
+      env,
+    );
+
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({
+      botClientFactory: () => mockBot(sent),
+      providerFactory: ({ apiKey }) => {
+        if (apiKey === 'fallback-key') return new MockAIProvider();
+        return {
+          id: 'primary',
+          analyzeMeal: async () => {
+            // Mirrors the real provider: HTTP 402 with a credit body in `cause`.
+            throw Object.assign(new Error('primary returned HTTP 402'), {
+              kind: 'http',
+              status: 402,
+              cause: JSON.stringify({ error: { message: 'prepayment credits are needed' } }),
+            });
+          },
+          reviseMeal: async () => {
+            throw new Error('n/a');
+          },
+        };
+      },
+    });
+
+    const res = await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(sent[0]?.reply.text).toContain('Logged');
+  });
+
+  it('does NOT fail over when the fallback is disabled', async () => {
+    const tgId = 8302;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
+    const setup = createApp();
+    await setup.request(
+      '/api/settings',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }) },
+      env,
+    );
+    // Store a fallback, then disable it (key retained).
+    await setup.request(
+      '/api/settings/fallback',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'fallback-key', aiProvider: 'openai' }) },
+      env,
+    );
+    await setup.request(
+      '/api/settings/fallback',
+      { method: 'PUT', headers, body: JSON.stringify({ enabled: false }) },
+      env,
+    );
+
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({
+      botClientFactory: () => mockBot(sent),
+      providerFactory: ({ apiKey }) => {
+        if (apiKey === 'fallback-key') return new MockAIProvider();
+        return {
+          id: 'primary',
+          analyzeMeal: async () => {
+            throw Object.assign(new Error('quota exceeded'), { kind: 'http', status: 429 });
+          },
+          reviseMeal: async () => {
+            throw new Error('n/a');
+          },
+        };
+      },
+    });
+
+    const res = await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    // Fallback was off → the primary error is surfaced, not a successful log.
+    expect(sent[0]?.reply.text).not.toContain('Logged');
+    expect(sent[0]?.reply.text?.toLowerCase()).toContain('rate limit');
   });
 });

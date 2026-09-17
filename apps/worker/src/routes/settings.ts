@@ -87,6 +87,7 @@ export function settingsRoutes() {
       }
     }
 
+    const fallbackHasKey = Boolean(fb?.keyCiphertext && fb?.keyIv);
     return c.json({
       aiProvider: row?.aiProvider ?? DEFAULT_PROVIDER_ID,
       aiModel: row?.aiModel ?? null,
@@ -94,7 +95,9 @@ export function settingsRoutes() {
       keyLast4,
       profile,
       targets,
-      fallbackConnected: Boolean(fb?.keyCiphertext && fb?.keyIv),
+      // `connected` = a key is stored; `enabled` = active (absent => enabled).
+      fallbackConnected: fallbackHasKey,
+      fallbackEnabled: fallbackHasKey && fb?.enabled !== false,
       fallbackProvider: fb?.provider ?? null,
       fallbackModel: fb?.model ?? null,
       fallbackKeyLast4,
@@ -123,41 +126,74 @@ export function settingsRoutes() {
     return c.json({ ok: true, profile: parsed.data, targets: computeTargets(parsed.data) });
   });
 
-  // PUT /api/settings/fallback — store (or clear) a fallback provider + key.
-  // Used when the primary provider hits a quota/overload error. An empty apiKey
-  // clears the fallback.
+  // PUT /api/settings/fallback — manage the fallback provider + key.
+  // Body variants:
+  //  - { apiKey, aiProvider?, aiModel? }  → store/replace the key (enabled).
+  //  - { enabled: boolean }               → toggle on/off, KEEPING the stored key.
+  //  - { remove: true }                   → permanently delete the fallback.
   app.put('/fallback', async (c) => {
     if (!c.env.ENCRYPTION_KEY) {
       return c.json({ error: 'Server misconfigured', detail: 'No encryption key' }, 500);
     }
-    let body: { apiKey?: unknown; aiProvider?: unknown; aiModel?: unknown };
+    let body: {
+      apiKey?: unknown;
+      aiProvider?: unknown;
+      aiModel?: unknown;
+      enabled?: unknown;
+      remove?: unknown;
+    };
     try {
       body = await c.req.json();
     } catch {
       return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
     }
     const db = createSettingsDb(c.env.DB);
+    const current = parsePreferences((await getSettings(db, c.get('userId')))?.preferencesJson).fallback;
     const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
 
-    // Empty key clears the fallback.
-    if (!apiKey) {
+    // Explicit remove wipes the stored key.
+    if (body.remove === true) {
       await mergePreferences(db, c.get('userId'), { fallback: undefined });
-      return c.json({ ok: true, fallbackConnected: false });
+      return c.json({ ok: true, fallbackConnected: false, fallbackEnabled: false });
+    }
+
+    // Toggle-only (no new key): flip enabled but keep the stored key.
+    if (!apiKey && typeof body.enabled === 'boolean') {
+      if (!current?.keyCiphertext) {
+        // Nothing stored yet — enabling without a key is a no-op we report as off.
+        return c.json({ ok: true, fallbackConnected: false, fallbackEnabled: false });
+      }
+      await mergePreferences(db, c.get('userId'), {
+        fallback: { ...current, enabled: body.enabled },
+      });
+      return c.json({
+        ok: true,
+        fallbackConnected: true,
+        fallbackEnabled: body.enabled,
+        fallbackProvider: current.provider,
+        fallbackModel: current.model,
+      });
+    }
+
+    // No key and no toggle — nothing to do.
+    if (!apiKey) {
+      return c.json({ error: 'Bad request', detail: 'apiKey or enabled required' }, 400);
     }
 
     const provider =
       typeof body.aiProvider === 'string' && isProviderId(body.aiProvider)
         ? body.aiProvider
-        : 'deepseek';
+        : 'openai';
     const model =
       typeof body.aiModel === 'string' && body.aiModel.trim() ? body.aiModel.trim() : null;
     const enc = await encryptSecret(apiKey, c.env.ENCRYPTION_KEY);
     await mergePreferences(db, c.get('userId'), {
-      fallback: { provider, model, keyCiphertext: enc.ciphertext, keyIv: enc.iv },
+      fallback: { provider, model, keyCiphertext: enc.ciphertext, keyIv: enc.iv, enabled: true },
     });
     return c.json({
       ok: true,
       fallbackConnected: true,
+      fallbackEnabled: true,
       fallbackProvider: provider,
       fallbackModel: model,
       fallbackKeyLast4: lastFour(apiKey),
