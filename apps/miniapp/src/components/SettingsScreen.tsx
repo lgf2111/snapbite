@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
-import { downloadViaTelegram, openExternalLink } from '@/lib/telegram';
+import { downloadViaTelegram, openExportUrl } from '@/lib/telegram';
 
 interface SettingsScreenProps {
   backend: Backend;
@@ -68,24 +68,30 @@ export function SettingsScreen({ backend }: SettingsScreenProps) {
 
   async function handleExport() {
     const fileName = `foodlog-export-${new Date().toISOString().slice(0, 10)}.json`;
-    setExporting(true);
-    try {
-      // Inside Telegram, blob URLs don't download — use the native downloader
-      // against the public export URL (auth carried in the query string).
-      const url = backend.exportUrl();
-      if (url && downloadViaTelegram(url, fileName)) {
+    const url = backend.exportUrl();
+
+    // Worker mode: the export has a public, auth-carrying HTTPS URL. Blob
+    // downloads don't work inside Telegram's webview (they strand a blob: URL
+    // that Safari can't open), so hand a real URL off to the platform. Do this
+    // synchronously in the click handler so Telegram's openLink keeps its
+    // required user-gesture. The response's attachment header makes the
+    // browser save it as a file.
+    if (url) {
+      // 1) Native file download prompt (Mini Apps v8+, mainly iOS/Android).
+      if (downloadViaTelegram(url, fileName)) {
         toast.success('Downloading export…');
         return;
       }
-      // Telegram Desktop/macOS lacks native downloadFile: open the public URL
-      // in the external browser, which saves the JSON via its attachment
-      // header (blob: URLs get stranded in the webview / Safari can't open).
-      if (url && openExternalLink(url)) {
-        toast.success('Opening export in your browser…');
-        return;
-      }
+      // 2) Open the public URL — Telegram's openLink if present, else the
+      //    webview's own window.open, both of which reach a real HTTPS URL.
+      openExportUrl(url);
+      toast.success('Opening export…');
+      return;
+    }
 
-      // Plain-browser (or local demo) path: build a blob and click a link.
+    // Local demo (no backend): build the JSON client-side and download a blob.
+    setExporting(true);
+    try {
       const data = await backend.exportData();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const objectUrl = URL.createObjectURL(blob);

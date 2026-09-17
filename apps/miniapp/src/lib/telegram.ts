@@ -270,22 +270,35 @@ export function downloadViaTelegram(url: string, fileName: string): boolean {
 }
 
 /**
- * Opens a URL in the user's external browser via Telegram, escaping the
- * in-app webview (where blob: downloads fail). Used as the export fallback on
- * clients without native `downloadFile`: the browser saves the JSON via the
- * response's attachment header. Returns true if the link was opened.
+ * Opens a public HTTPS URL so the platform (not the in-app webview) handles it.
+ * Used for the data export on clients without native `downloadFile`: the URL's
+ * `Content-Disposition: attachment` header makes the browser save the JSON.
+ *
+ * Tries Telegram's `openLink` (opens in the external browser) first, then falls
+ * back to `window.open`, then a top-level navigation. Never uses a blob URL, so
+ * it can't strand a blob: link in the webview. Must be called synchronously
+ * from a user gesture (Telegram requires it for openLink).
  */
-export function openExternalLink(url: string): boolean {
-  if (!isTelegramEnv()) return false;
+export function openExportUrl(url: string): void {
   try {
     if (available(openLink)) {
       openLink(url);
-      return true;
+      return;
     }
   } catch {
-    // fall through
+    // fall through to plain web APIs
   }
-  return false;
+  try {
+    const win = window.open(url, '_blank');
+    if (win) return;
+  } catch {
+    // popup blocked or unavailable
+  }
+  try {
+    window.location.assign(url);
+  } catch {
+    // nothing more we can do
+  }
 }
 
 // ---------------------------------------------------------------------------
