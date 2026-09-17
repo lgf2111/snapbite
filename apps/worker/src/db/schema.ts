@@ -18,7 +18,8 @@ export const settings = sqliteTable('settings', {
   userId: text('user_id')
     .primaryKey()
     .references(() => users.id, { onDelete: 'cascade' }),
-  aiProvider: text('ai_provider').notNull().default('deepseek'),
+  aiProvider: text('ai_provider').notNull().default('gemini'),
+  aiModel: text('ai_model'),
   apiKeyCiphertext: text('api_key_ciphertext'),
   apiKeyIv: text('api_key_iv'),
   preferencesJson: text('preferences_json'),

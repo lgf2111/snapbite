@@ -56,6 +56,7 @@ export interface AnalyticsSummary {
 
 export interface SettingsView {
   aiProvider: string;
+  aiModel: string | null;
   connected: boolean;
   keyLast4: string | null;
 }
@@ -161,7 +162,14 @@ export class ApiClient {
     return this.#request<SettingsView>('/api/settings');
   }
 
-  saveApiKey(apiKey: string): Promise<SettingsView & { ok: boolean }> {
-    return this.#request('/api/settings', { method: 'PUT', body: JSON.stringify({ apiKey }) });
+  saveApiKey(
+    apiKey: string,
+    aiProvider?: string,
+    aiModel?: string,
+  ): Promise<SettingsView & { ok: boolean }> {
+    return this.#request('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey, aiProvider, aiModel }),
+    });
   }
 }

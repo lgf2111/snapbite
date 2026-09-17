@@ -1,4 +1,11 @@
-import { DeepSeekProvider, decryptSecret, encryptSecret, lastFour } from '@foodlog/core';
+import {
+  createProvider,
+  decryptSecret,
+  DEFAULT_PROVIDER_ID,
+  encryptSecret,
+  isProviderId,
+  lastFour,
+} from '@foodlog/core';
 import { Hono } from 'hono';
 import { createSettingsDb, getSettings, saveEncryptedKey } from '../db/settings.js';
 import type { AppBindings } from '../env.js';
@@ -7,7 +14,7 @@ import type { AppBindings } from '../env.js';
  * Settings routes. The user's BYOK API key is AES-GCM encrypted with the
  * Worker's master key before storage. The plaintext key is never persisted,
  * never logged, and never returned — GET only reports connection status and the
- * last 4 characters.
+ * last 4 characters, plus the chosen provider + model.
  */
 export function settingsRoutes() {
   const app = new Hono<AppBindings>();
@@ -32,19 +39,20 @@ export function settingsRoutes() {
     }
 
     return c.json({
-      aiProvider: row?.aiProvider ?? 'deepseek',
+      aiProvider: row?.aiProvider ?? DEFAULT_PROVIDER_ID,
+      aiModel: row?.aiModel ?? null,
       connected,
       keyLast4,
     });
   });
 
-  // PUT /api/settings — store an encrypted API key.
+  // PUT /api/settings — store an encrypted API key + provider/model.
   app.put('/', async (c) => {
     if (!c.env.ENCRYPTION_KEY) {
       return c.json({ error: 'Server misconfigured', detail: 'No encryption key' }, 500);
     }
 
-    let body: { apiKey?: unknown; aiProvider?: unknown };
+    let body: { apiKey?: unknown; aiProvider?: unknown; aiModel?: unknown };
     try {
       body = await c.req.json();
     } catch {
@@ -55,18 +63,24 @@ export function settingsRoutes() {
     if (!apiKey) {
       return c.json({ error: 'Bad request', detail: 'apiKey is required' }, 400);
     }
-    const aiProvider = typeof body.aiProvider === 'string' ? body.aiProvider : 'deepseek';
+    const aiProvider =
+      typeof body.aiProvider === 'string' && isProviderId(body.aiProvider)
+        ? body.aiProvider
+        : DEFAULT_PROVIDER_ID;
+    const aiModel =
+      typeof body.aiModel === 'string' && body.aiModel.trim() ? body.aiModel.trim() : null;
 
     const enc = await encryptSecret(apiKey, c.env.ENCRYPTION_KEY);
     const db = createSettingsDb(c.env.DB);
     await saveEncryptedKey(db, {
       userId: c.get('userId'),
       aiProvider,
+      aiModel,
       apiKeyCiphertext: enc.ciphertext,
       apiKeyIv: enc.iv,
     });
 
-    return c.json({ ok: true, aiProvider, connected: true, keyLast4: lastFour(apiKey) });
+    return c.json({ ok: true, aiProvider, aiModel, connected: true, keyLast4: lastFour(apiKey) });
   });
 
   // POST /api/settings/test — verify the stored key can reach the provider.
@@ -90,11 +104,10 @@ export function settingsRoutes() {
       return c.json({ ok: false, detail: 'Stored key could not be decrypted' }, 500);
     }
 
-    // Lightweight connectivity check: a tiny image analysis is overkill, so we
-    // just confirm the provider constructs and the key is non-empty. A deeper
-    // check happens naturally on the first real analyze call.
+    // Lightweight check: confirm the provider constructs with the stored key +
+    // provider id. A deeper check happens on the first real analyze call.
     try {
-      new DeepSeekProvider({ apiKey });
+      createProvider({ providerId: row.aiProvider, apiKey, ...(row.aiModel ? { model: row.aiModel } : {}) });
       return c.json({ ok: true });
     } catch (err) {
       return c.json({ ok: false, detail: err instanceof Error ? err.message : 'invalid' }, 400);

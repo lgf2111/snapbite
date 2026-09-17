@@ -19,11 +19,12 @@ export async function getSettings(
 export interface SaveKeyInput {
   userId: string;
   aiProvider: string;
+  aiModel: string | null;
   apiKeyCiphertext: string;
   apiKeyIv: string;
 }
 
-/** Upserts the encrypted API key + provider for a user. */
+/** Upserts the encrypted API key + provider + model for a user. */
 export async function saveEncryptedKey(db: SettingsDb, input: SaveKeyInput): Promise<void> {
   const now = Date.now();
   await db
@@ -31,6 +32,7 @@ export async function saveEncryptedKey(db: SettingsDb, input: SaveKeyInput): Pro
     .values({
       userId: input.userId,
       aiProvider: input.aiProvider,
+      aiModel: input.aiModel,
       apiKeyCiphertext: input.apiKeyCiphertext,
       apiKeyIv: input.apiKeyIv,
       updatedAt: now,
@@ -39,6 +41,7 @@ export async function saveEncryptedKey(db: SettingsDb, input: SaveKeyInput): Pro
       target: settings.userId,
       set: {
         aiProvider: input.aiProvider,
+        aiModel: input.aiModel,
         apiKeyCiphertext: input.apiKeyCiphertext,
         apiKeyIv: input.apiKeyIv,
         updatedAt: now,

@@ -1,6 +1,6 @@
 import {
   type BotReply,
-  DeepSeekProvider,
+  createProvider,
   decryptSecret,
   parseUpdate,
   photoLoggedReply,
@@ -28,7 +28,8 @@ export type BotClientFactory = (token: string) => BotClient;
 
 const defaultBotClientFactory: BotClientFactory = (token) => new TelegramBotClient(token);
 
-const defaultProviderFactory: ProviderFactory = (apiKey) => new DeepSeekProvider({ apiKey });
+const defaultProviderFactory: ProviderFactory = ({ apiKey, provider, model }) =>
+  createProvider({ providerId: provider, apiKey, ...(model ? { model } : {}) });
 
 /** Header Telegram sends with the configured secret on each webhook call. */
 const SECRET_HEADER = 'x-telegram-bot-api-secret-token';
@@ -164,7 +165,11 @@ async function handlePhoto(
     return;
   }
 
-  const provider = providerFactory(apiKey);
+  const provider = providerFactory({
+    apiKey,
+    provider: settings.aiProvider,
+    model: settings.aiModel,
+  });
   const analysis = await provider.analyzeMeal(
     { base64: file.base64, mimeType: file.mimeType as 'image/jpeg' },
     caption ? { hint: caption } : {},

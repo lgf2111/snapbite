@@ -56,7 +56,8 @@ describe('DeepSeekProvider', () => {
     expect(user.role).toBe('user');
     const imageBlock = user.content.find((c: { type: string }) => c.type === 'image_url');
     expect(imageBlock.image_url.url).toBe('data:image/jpeg;base64,QUJD');
-    expect(imageBlock.image_url.detail).toBe('low');
+    // Default detail is now 'high' for better recognition accuracy.
+    expect(imageBlock.image_url.detail).toBe('high');
 
     // Hint is included as data in the text block.
     const textBlock = user.content.find((c: { type: string }) => c.type === 'text');

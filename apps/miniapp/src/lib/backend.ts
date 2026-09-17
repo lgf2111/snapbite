@@ -49,7 +49,7 @@ export interface Backend {
   search(query: string): Promise<RecentMeal[]>;
   analytics(days?: number): Promise<AnalyticsSummary>;
   getSettings(): Promise<SettingsView>;
-  saveApiKey(apiKey: string): Promise<SettingsView>;
+  saveApiKey(apiKey: string, aiProvider?: string, aiModel?: string): Promise<SettingsView>;
   /** Photo URL for a meal (worker mode with a telegram file); null otherwise. */
   photoUrl(id: string): string | null;
 }
@@ -99,9 +99,14 @@ export function createBackend(): Backend {
       getSettings() {
         return api.getSettings();
       },
-      async saveApiKey(apiKey) {
-        const res = await api.saveApiKey(apiKey);
-        return { aiProvider: res.aiProvider, connected: res.connected, keyLast4: res.keyLast4 };
+      async saveApiKey(apiKey, aiProvider, aiModel) {
+        const res = await api.saveApiKey(apiKey, aiProvider, aiModel);
+        return {
+          aiProvider: res.aiProvider,
+          aiModel: res.aiModel,
+          connected: res.connected,
+          keyLast4: res.keyLast4,
+        };
       },
       photoUrl(id) {
         return api.photoUrl(id);
@@ -144,10 +149,10 @@ export function createBackend(): Backend {
     },
     // Local (no-backend) mode uses the mock processor, which needs no key.
     async getSettings() {
-      return { aiProvider: 'mock', connected: true, keyLast4: null };
+      return { aiProvider: 'mock', aiModel: null, connected: true, keyLast4: null };
     },
     async saveApiKey() {
-      return { aiProvider: 'mock', connected: true, keyLast4: null };
+      return { aiProvider: 'mock', aiModel: null, connected: true, keyLast4: null };
     },
     photoUrl(id) {
       // Local mode stores a data-URL preview on the saved meal, if any.

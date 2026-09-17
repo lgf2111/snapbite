@@ -18,7 +18,7 @@ Two ways to log:
 
 Monorepo (pnpm workspaces):
 
-- **`packages/core`** — transport-agnostic domain logic: Zod schemas, the `AIProvider` interface + adapters, prompt builder, nutrition resolver + bundled table, Telegram `initData` verification, bot update parsing, AES-GCM crypto. Zero platform imports; the reason a future Telegram-native port is cheap.
+- **`packages/core`** — transport-agnostic domain logic: Zod schemas, the `AIProvider` interface + a generic OpenAI-compatible adapter with provider presets (Gemini, OpenAI, DeepSeek), prompt builder, nutrition resolver + bundled table, Telegram `initData` verification, bot update parsing, AES-GCM crypto. Zero platform imports; the reason a future Telegram-native port is cheap.
 - **`apps/worker`** — Cloudflare Worker (Hono) + D1 (Drizzle ORM). Auth via Telegram `initData` HMAC, encrypted BYOK, meal analyze/save/CRUD, history/search/analytics, and the bot webhook.
 - **`apps/miniapp`** — React + Vite Mini App (`@telegram-apps/sdk-react`), hosted on Cloudflare Pages. Client-side canvas downscale before upload. Falls back to a mock processor + localStorage when no backend is configured (browser dev).
 - **`apps/cli`** — local harness to run a photo through the pipeline end-to-end (mock by default, real provider via `--real`).
@@ -80,6 +80,16 @@ pnpm --filter @foodlog/miniapp exec wrangler pages deploy dist --project-name=fo
 # Bot: register the webhook (with the secret) and set the Mini App menu button via the Telegram Bot API.
 ```
 
+## AI providers
+
+FoodLog is provider-agnostic. Pick a provider and paste your key in **Settings**:
+
+- **Google Gemini** (default, recommended) — best food-vision value; free tier at aistudio.google.com. Default model `gemini-2.5-flash`.
+- **OpenAI** — `gpt-4o-mini` by default; strong and reliable.
+- **DeepSeek** — cheapest; weaker at food recognition.
+
+All three are called through the same OpenAI-compatible Chat Completions shape; only the base URL, model, and whether `image_url.detail` is honored differ. Image detail defaults to `high` for better recognition. The model is overridable per user (versions rotate).
+
 ## Status
 
-Core build (Tasks 1–11) plus full CRUD, editable macros, bot-photo auto-log, and photos-in-logs are done and deployed. In progress: multi-provider AI (Gemini / OpenAI-compatible) with provider selection, and a Mini App UI/UX pass. See `PLAN.md` §10 for the full progress log and roadmap.
+Core build (Tasks 1–11) plus full CRUD, editable macros, bot-photo auto-log, and photos-in-logs are done and deployed. Multi-provider AI (Gemini / OpenAI / DeepSeek) with in-app provider + model selection is live. In progress: a Mini App UI/UX pass (native Telegram controls, gestures, polish). See `PLAN.md` §10 for the full progress log and roadmap.

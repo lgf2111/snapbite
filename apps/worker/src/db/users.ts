@@ -32,7 +32,7 @@ export async function upsertUser(db: Db, tgUser: TelegramUser): Promise<UserRow>
   await db.insert(users).values(row);
   await db
     .insert(settings)
-    .values({ userId: row.id, aiProvider: 'deepseek', updatedAt: now })
+    .values({ userId: row.id, aiProvider: 'gemini', updatedAt: now })
     .onConflictDoNothing();
   return row;
 }

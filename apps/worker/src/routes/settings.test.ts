@@ -57,6 +57,36 @@ describe('PUT /api/settings', () => {
     expect(row?.apiKeyCiphertext).not.toContain('sk-deepseek-secret');
   });
 
+  it('stores and returns the chosen provider + model', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(1099)), 'content-type': 'application/json' };
+    await app.request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'k-1234', aiProvider: 'gemini', aiModel: 'gemini-2.5-flash' }),
+      },
+      env,
+    );
+    const res = await app.request('/api/settings', { headers: await authHeaders(1099) }, env);
+    const body = (await res.json()) as { aiProvider: string; aiModel: string | null };
+    expect(body.aiProvider).toBe('gemini');
+    expect(body.aiModel).toBe('gemini-2.5-flash');
+  });
+
+  it('defaults an unknown provider to gemini', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(1098)), 'content-type': 'application/json' };
+    const res = await app.request(
+      '/api/settings',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'k', aiProvider: 'bogus' }) },
+      env,
+    );
+    const body = (await res.json()) as { aiProvider: string };
+    expect(body.aiProvider).toBe('gemini');
+  });
+
   it('rejects an empty apiKey', async () => {
     const app = createApp();
     const headers = { ...(await authHeaders(1003)), 'content-type': 'application/json' };

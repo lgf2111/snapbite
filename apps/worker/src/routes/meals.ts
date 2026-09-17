@@ -1,6 +1,6 @@
 import {
   type AIProvider,
-  DeepSeekProvider,
+  createProvider,
   decryptSecret,
   type MealImage,
   mealLoggedMessage,
@@ -26,10 +26,18 @@ import type { BotClientFactory } from './webhook.js';
 
 const defaultBotClientFactory: BotClientFactory = (token) => new TelegramBotClient(token);
 
-/** Injectable provider factory so tests can supply a mock instead of DeepSeek. */
-export type ProviderFactory = (apiKey: string) => AIProvider;
+/** How the chosen provider is described to the factory. */
+export interface ProviderChoice {
+  apiKey: string;
+  provider: string;
+  model: string | null;
+}
 
-const defaultProviderFactory: ProviderFactory = (apiKey) => new DeepSeekProvider({ apiKey });
+/** Injectable provider factory so tests can supply a mock. */
+export type ProviderFactory = (choice: ProviderChoice) => AIProvider;
+
+const defaultProviderFactory: ProviderFactory = ({ apiKey, provider, model }) =>
+  createProvider({ providerId: provider, apiKey, ...(model ? { model } : {}) });
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
@@ -87,7 +95,7 @@ export function mealsRoutes(
     // when the handler returns — nothing is written to storage.
     const image: MealImage = { base64, mimeType: mimeType as MealImage['mimeType'] };
     try {
-      const provider = providerFactory(apiKey);
+      const provider = providerFactory({ apiKey, provider: row.aiProvider, model: row.aiModel });
       const analysis = await provider.analyzeMeal(image, hint ? { hint } : {});
       const meal = resolveMeal(analysis);
       return c.json(meal);
