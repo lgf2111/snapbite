@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
-import { downloadViaTelegram } from '@/lib/telegram';
+import { downloadViaTelegram, openExternalLink } from '@/lib/telegram';
 
 interface SettingsScreenProps {
   backend: Backend;
@@ -75,6 +75,13 @@ export function SettingsScreen({ backend }: SettingsScreenProps) {
       const url = backend.exportUrl();
       if (url && downloadViaTelegram(url, fileName)) {
         toast.success('Downloading export…');
+        return;
+      }
+      // Telegram Desktop/macOS lacks native downloadFile: open the public URL
+      // in the external browser, which saves the JSON via its attachment
+      // header (blob: URLs get stranded in the webview / Safari can't open).
+      if (url && openExternalLink(url)) {
+        toast.success('Opening export in your browser…');
         return;
       }
 

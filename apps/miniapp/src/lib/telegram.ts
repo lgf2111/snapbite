@@ -249,12 +249,12 @@ export function showMainButton(config: MainButtonConfig): (() => void) | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Downloads a file from a public URL using Telegram's native downloader (which
- * shows a "download this file?" prompt and saves it to the device). Blob URLs
- * don't work inside the Telegram webview, so callers must pass a real HTTPS URL
- * whose auth is carried in the query string. Returns true if the native path
- * was taken. Falls back to `openLink` (opening the URL in the external browser)
- * when `downloadFile` isn't available in this client.
+ * Downloads a file from a public URL using Telegram's native downloader, which
+ * shows a "download this file?" prompt and saves it to the device. Only
+ * available on some clients (e.g. iOS/Android); Telegram Desktop/macOS often
+ * lacks it. Returns true only if the native download prompt was actually
+ * invoked. Callers must pass a real HTTPS URL (blob: URLs don't work in the
+ * webview) whose auth is carried in the query string.
  */
 export function downloadViaTelegram(url: string, fileName: string): boolean {
   if (!isTelegramEnv()) return false;
@@ -263,12 +263,27 @@ export function downloadViaTelegram(url: string, fileName: string): boolean {
       void downloadFile(url, fileName);
       return true;
     }
+  } catch {
+    // fall through
+  }
+  return false;
+}
+
+/**
+ * Opens a URL in the user's external browser via Telegram, escaping the
+ * in-app webview (where blob: downloads fail). Used as the export fallback on
+ * clients without native `downloadFile`: the browser saves the JSON via the
+ * response's attachment header. Returns true if the link was opened.
+ */
+export function openExternalLink(url: string): boolean {
+  if (!isTelegramEnv()) return false;
+  try {
     if (available(openLink)) {
       openLink(url);
       return true;
     }
   } catch {
-    // fall through to false so the caller can use the browser blob path
+    // fall through
   }
   return false;
 }
