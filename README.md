@@ -79,6 +79,11 @@ pnpm --filter @foodlog/miniapp exec wrangler pages deploy dist --project-name=fo
 # Bot: register the webhook (with the secret) via the Telegram Bot API. The Mini App is set as
 # the bot's Main Mini App in BotFather, so it launches from the bot profile's "Open App" button
 # (no separate chat menu button needed).
+
+# Bot command menu (the `/` autocomplete): registers /start, /settings, /feedback, /help.
+# Admin-only /errors and /feedback-review are intentionally NOT listed (gated by ADMIN_TELEGRAM_ID).
+TELEGRAM_BOT_TOKEN=<your-bot-token> pnpm --filter @foodlog/worker bot:commands
+# (or drop the token in a gitignored .bot-token file at the repo root and run the command without it)
 ```
 
 ## AI providers
