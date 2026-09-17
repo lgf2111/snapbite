@@ -79,10 +79,18 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
           caption: parsed.caption,
         });
       } catch (err) {
-        console.error('photo log failed', err);
+        const e = err as { message?: string; kind?: string; status?: number; cause?: unknown };
+        // Log rich detail for `wrangler tail`.
+        console.error('photo log failed', {
+          message: e.message,
+          kind: e.kind,
+          status: e.status,
+          cause: typeof e.cause === 'string' ? e.cause : undefined,
+        });
+        const detail = providerMessage(e.cause) ?? e.message ?? 'unknown error';
         try {
           await bot.sendMessage(parsed.chatId, {
-            text: 'Sorry — I could not log that photo. Try again, or open the app.',
+            text: `Sorry — couldn't log that photo: ${detail}`,
           });
         } catch {
           /* ignore */
@@ -104,6 +112,19 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
   });
 
   return app;
+}
+
+/** Extract a human message from a provider error body ({error:{message}}). */
+function providerMessage(cause: unknown): string | undefined {
+  if (typeof cause !== 'string' || !cause.trim()) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(cause);
+    const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+    const msg = (obj as { error?: { message?: unknown } })?.error?.message;
+    return typeof msg === 'string' ? msg : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 interface PhotoJob {
