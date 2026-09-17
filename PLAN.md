@@ -175,12 +175,14 @@ This section tracks what was actually built, including work beyond the original 
 
 ### In progress
 
-- **Multi-provider AI (accuracy upgrade).** DeepSeek's food-vision accuracy is weak. Adding a **Gemini** adapter and a **generic OpenAI-compatible** adapter (e.g. GPT-4o-mini) behind the same `AIProvider` interface, with provider + model selection in Settings, and raising image detail to `high`. Primary target: **Gemini**.
-- **Mini App UI/UX pass.** Telegram theme params, native BackButton/MainButton, haptics; swipeable tabs, swipe-to-delete, pull-to-refresh; confirm-screen polish (quantity steppers, confidence cues, skeleton loaders); home daily-summary card; toasts and empty states.
+_(nothing actively in progress)_
 
 ### Changed
 
-- **Mini App photo capture removed.** Because Mini-App uploads can't retain an image for free (bytes are discarded; no Telegram `file_id`), the camera/upload + confirm flow was removed from the Mini App. Logging is now bot-only (photo → auto-log, photo kept). The Mini App is review/edit/history/search/analytics/settings. Removed `ConfirmScreen`, the client `image.ts` downscale, and the `MealProcessor` from the app layer.
+- **Multi-provider AI (delivered).** Generalized the adapter to any OpenAI-compatible endpoint with presets for **Gemini (default), OpenAI, DeepSeek**; provider + model selectable in Settings; image detail raised to `high`. Default model kept current (`gemini-3.6-flash`) since Gemini retires names.
+- **Mini App photo capture removed.** Because Mini-App uploads can't retain an image for free (bytes are discarded; no Telegram `file_id`), the camera/upload + confirm flow was removed. Logging is now bot-only (photo → auto-log, photo kept). Removed `ConfirmScreen`, `image.ts` downscale, and `MealProcessor` from the app layer.
+- **Per-food nutrition persisted.** `food_items` now stores each food's kcal/P/C/F + source; the detail screen shows stored values instead of re-deriving, so multi-food meals keep every food's macros.
+- **Mini App UI/UX pass (delivered).** Telegram theme params + native BackButton/MainButton + haptics; swipe between tabs; swipe-to-delete on history rows; toasts for save/delete/errors; skeleton loaders and friendly empty states; a home daily-summary card (today's kcal + meal count); and macro icons (🔥/🥩/🍚/🧈) via a shared `MacroLine`. Pull-to-refresh was deferred (low value vs. touch-handling risk; the app refreshes on tab switch and after edits).
 
 ### Future / backlog
 

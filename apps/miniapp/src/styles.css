@@ -322,3 +322,140 @@ body {
   padding: 20px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
 }
+
+.macro-item {
+  white-space: nowrap;
+}
+
+.toast-host {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  z-index: 1100;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  max-width: 440px;
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  text-align: left;
+  color: #06121f;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.toast-success {
+  background: #5fd08a;
+}
+
+.toast-error {
+  background: #e0736b;
+  color: #fff;
+}
+
+.toast-info {
+  background: var(--accent);
+}
+
+.tab-content {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Swipe-to-delete rows */
+.swipe-row {
+  position: relative;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.swipe-delete {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 88px;
+  border: none;
+  background: var(--warn);
+  color: #06121f;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.swipe-content {
+  position: relative;
+  transition: transform 0.18s ease;
+  touch-action: pan-y;
+}
+
+.swipe-content .card {
+  margin-bottom: 0;
+}
+
+/* Skeleton loaders */
+.skeleton-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: 6px;
+}
+
+.skeleton-line {
+  height: 12px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+/* Empty states */
+.empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--muted);
+}
+
+.empty-icon {
+  font-size: 44px;
+  margin-bottom: 8px;
+}
+
+.summary-card {
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+}
+
+.summary-stat {
+  flex: 1;
+}
+
+.summary-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+}

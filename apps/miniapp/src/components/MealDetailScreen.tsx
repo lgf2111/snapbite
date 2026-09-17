@@ -8,16 +8,28 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import type { MealDetail } from '../lib/api.js';
 import type { Backend } from '../lib/backend.js';
+import { hapticImpact } from '../lib/telegram.js';
+import { useBackButton, useMainButton } from '../lib/useTelegramButtons.js';
+import { MacroLine } from './MacroLine.js';
+
+type ToastKind = 'success' | 'error' | 'info';
 
 interface MealDetailScreenProps {
   backend: Backend;
+  onToast?: (kind: ToastKind, message: string) => void;
   mealId: string;
   onBack: () => void;
   onChanged: () => void;
 }
 
 /** Editable, deletable detail of a single logged meal. */
-export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDetailScreenProps) {
+export function MealDetailScreen({
+  backend,
+  mealId,
+  onBack,
+  onChanged,
+  onToast,
+}: MealDetailScreenProps) {
   const [detail, setDetail] = useState<MealDetail | null>(null);
   const [foods, setFoods] = useState<FoodItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -108,10 +120,13 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
     try {
       await backend.update(mealId, meal);
       onChanged();
+      onToast?.('success', 'Meal updated');
       onBack();
     } catch (e) {
       setBusy(null);
-      setError(e instanceof Error ? e.message : 'Could not save');
+      const msg = e instanceof Error ? e.message : 'Could not save';
+      setError(msg);
+      onToast?.('error', msg);
     }
   }
 
@@ -121,12 +136,36 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
     try {
       await backend.remove(mealId);
       onChanged();
+      onToast?.('success', 'Meal deleted');
       onBack();
     } catch (e) {
       setBusy(null);
-      setError(e instanceof Error ? e.message : 'Could not delete');
+      const msg = e instanceof Error ? e.message : 'Could not delete';
+      setError(msg);
+      onToast?.('error', msg);
     }
   }
+
+  function requestDelete() {
+    hapticImpact('medium');
+    setConfirmDelete(true);
+  }
+
+  // Native Telegram back button returns to the list; while a delete dialog is
+  // open, back cancels it instead.
+  useBackButton(true, () => {
+    if (confirmDelete) setConfirmDelete(false);
+    else onBack();
+  });
+
+  // Native Telegram main button drives Save; falls back to the in-page button
+  // when not running in Telegram.
+  const nativeSave = useMainButton(detail !== null && !confirmDelete, {
+    text: busy === 'saving' ? 'Saving…' : 'Save changes',
+    onClick: () => void handleSave(),
+    enabled: busy === null && foods.length > 0,
+    loading: busy === 'saving',
+  });
 
   return (
     <div>
@@ -155,7 +194,8 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
                     onChange={(e) => updateFood(i, { name: e.target.value })}
                   />
                   <div className="macro-edit">
-                    <label>
+                    <label title="calories">
+                      🔥
                       <input
                         aria-label={`Food ${i + 1} kcal`}
                         type="number"
@@ -165,8 +205,8 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
                       />
                       kcal
                     </label>
-                    <label>
-                      P
+                    <label title="protein">
+                      🥩
                       <input
                         aria-label={`Food ${i + 1} protein grams`}
                         type="number"
@@ -174,9 +214,10 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
                         value={mf.nutrition.proteinG}
                         onChange={(e) => setMacro(i, 'proteinG', Number(e.target.value) || 0)}
                       />
+                      g
                     </label>
-                    <label>
-                      C
+                    <label title="carbs">
+                      🍚
                       <input
                         aria-label={`Food ${i + 1} carbs grams`}
                         type="number"
@@ -184,9 +225,10 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
                         value={mf.nutrition.carbsG}
                         onChange={(e) => setMacro(i, 'carbsG', Number(e.target.value) || 0)}
                       />
+                      g
                     </label>
-                    <label>
-                      F
+                    <label title="fat">
+                      🧈
                       <input
                         aria-label={`Food ${i + 1} fat grams`}
                         type="number"
@@ -194,6 +236,7 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
                         value={mf.nutrition.fatG}
                         onChange={(e) => setMacro(i, 'fatG', Number(e.target.value) || 0)}
                       />
+                      g
                     </label>
                     <span className="source-tag">[{sourceLabel(mf.nutrition.source)}]</span>
                   </div>
@@ -225,31 +268,38 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
 
             <div className="total">
               <span>Total</span>
-              <span>
-                {resolved.total.energyKcal} kcal{' '}
-                <span className="source-tag">[{sourceLabel(resolved.total.source)}]</span>
-              </span>
+              <MacroLine
+                energyKcal={resolved.total.energyKcal}
+                proteinG={resolved.total.proteinG}
+                carbsG={resolved.total.carbsG}
+                fatG={resolved.total.fatG}
+                sourceLabel={sourceLabel(resolved.total.source)}
+              />
             </div>
           </div>
 
-          <div className="actions">
-            <button type="button" className="btn secondary full" onClick={onBack}>
-              Back
-            </button>
-            <button
-              type="button"
-              className="btn full"
-              disabled={busy !== null || foods.length === 0}
-              onClick={handleSave}
-            >
-              {busy === 'saving' ? 'Saving…' : 'Save changes'}
-            </button>
-          </div>
+          {/* In-page Save/Back are hidden when the native Telegram MainButton
+              is driving Save (still shown in browser dev). */}
+          {!nativeSave && (
+            <div className="actions">
+              <button type="button" className="btn secondary full" onClick={onBack}>
+                Back
+              </button>
+              <button
+                type="button"
+                className="btn full"
+                disabled={busy !== null || foods.length === 0}
+                onClick={handleSave}
+              >
+                {busy === 'saving' ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          )}
 
           <button
             type="button"
             className="btn secondary full"
-            onClick={() => setConfirmDelete(true)}
+            onClick={requestDelete}
             style={{ marginTop: 12, color: 'var(--warn)' }}
           >
             Delete meal

@@ -20,7 +20,15 @@ export function AnalyticsScreen({ backend }: AnalyticsScreenProps) {
 
   if (error) return <p className="warn">{error}</p>;
   if (!data) return <p className="muted">Loading…</p>;
-  if (data.totalMeals === 0) return <p className="muted">Log some meals to see analytics.</p>;
+  if (data.totalMeals === 0) {
+    return (
+      <div className="empty-state">
+        <div className="empty-icon">📊</div>
+        <p className="food-name">No data yet</p>
+        <p className="muted">Log a few meals via the bot to see your trends here.</p>
+      </div>
+    );
+  }
 
   const maxKcal = Math.max(1, ...data.daily.map((d) => d.kcal));
   // Chart oldest -> newest so it reads left to right.

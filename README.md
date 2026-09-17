@@ -90,4 +90,4 @@ All three are called through the same OpenAI-compatible Chat Completions shape; 
 
 ## Status
 
-Core build (Tasks 1–11) plus full CRUD, editable macros, bot-photo auto-log, and photos-in-logs are done and deployed. Multi-provider AI (Gemini / OpenAI / DeepSeek) with in-app provider + model selection is live. In progress: a Mini App UI/UX pass (native Telegram controls, gestures, polish). See `PLAN.md` §10 for the full progress log and roadmap.
+Core build (Tasks 1–11) plus full CRUD, editable macros, bot-photo auto-log, and photos-in-logs are done and deployed. Multi-provider AI (Gemini / OpenAI / DeepSeek) with in-app provider + model selection is live. The Mini App UI/UX pass is done — Telegram theming, native Back/Main buttons + haptics, swipeable tabs, swipe-to-delete, toasts, skeletons, empty states, a daily-summary card, and macro icons. See `PLAN.md` §10 for the full progress log and roadmap.

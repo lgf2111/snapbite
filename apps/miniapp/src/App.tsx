@@ -1,14 +1,19 @@
-import { useEffect, useState } from 'react';
+import { type TouchEvent as ReactTouchEvent, useEffect, useRef, useState } from 'react';
 import { AnalyticsScreen } from './components/AnalyticsScreen.js';
 import { HistoryScreen } from './components/HistoryScreen.js';
 import { MealDetailScreen } from './components/MealDetailScreen.js';
 import { SearchScreen } from './components/SearchScreen.js';
 import { SettingsScreen } from './components/SettingsScreen.js';
+import { MacroLine } from './components/MacroLine.js';
+import { ToastHost, useToasts } from './components/ToastHost.js';
 import { type Backend, createBackend, type RecentMeal } from './lib/backend.js';
+import { classifySwipe, nextTabIndex } from './lib/gesture.js';
+import { summarizeToday } from './lib/summary.js';
 
-type Tab = 'home' | 'history' | 'search' | 'analytics' | 'settings';
+const TABS = ['home', 'history', 'search', 'analytics', 'settings'] as const;
+type Tab = (typeof TABS)[number];
 
-type View = { name: 'tabs' } | { name: 'detail'; mealId: string } | { name: 'error'; message: string };
+type View = { name: 'tabs' } | { name: 'detail'; mealId: string };
 
 const backend: Backend = createBackend();
 
@@ -16,6 +21,24 @@ export function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [view, setView] = useState<View>({ name: 'tabs' });
   const [recent, setRecent] = useState<RecentMeal[]>([]);
+  const { toasts, notify, dismiss } = useToasts();
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+
+  function onTabTouchStart(e: ReactTouchEvent) {
+    const t = e.touches[0];
+    swipeStart.current = t ? { x: t.clientX, y: t.clientY } : null;
+  }
+  function onTabTouchEnd(e: ReactTouchEvent) {
+    const start = swipeStart.current;
+    const t = e.changedTouches[0];
+    swipeStart.current = null;
+    if (!start || !t) return;
+    const dir = classifySwipe(start, { x: t.clientX, y: t.clientY });
+    if (dir !== 'left' && dir !== 'right') return;
+    const idx = TABS.indexOf(tab);
+    const next = nextTabIndex(idx, dir, TABS.length);
+    if (next !== idx) setTab(TABS[next] as Tab);
+  }
 
   useEffect(() => {
     backend
@@ -34,20 +57,9 @@ export function App() {
           onChanged={() => {
             backend.recent().then(setRecent).catch(() => {});
           }}
+          onToast={notify}
         />
-      </div>
-    );
-  }
-
-  if (view.name === 'error') {
-    return (
-      <div className="app">
-        <div className="center">
-          <p className="warn">{view.message}</p>
-          <button type="button" className="btn" onClick={() => setView({ name: 'tabs' })}>
-            Back
-          </button>
-        </div>
+        <ToastHost toasts={toasts} onDismiss={dismiss} />
       </div>
     );
   }
@@ -56,12 +68,29 @@ export function App() {
 
   return (
     <div className="app">
+      <div className="tab-content" onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd}>
       {tab === 'home' && (
         <>
           <div className="header">
             <h1>FoodLog</h1>
             <span className="muted">{recent.length} logged</span>
           </div>
+
+          {(() => {
+            const today = summarizeToday(recent);
+            return (
+              <div className="card summary-card">
+                <div className="summary-stat">
+                  <div className="summary-value">{today.totalKcal}</div>
+                  <div className="muted">kcal today</div>
+                </div>
+                <div className="summary-stat">
+                  <div className="summary-value">{today.mealCount}</div>
+                  <div className="muted">{today.mealCount === 1 ? 'meal' : 'meals'}</div>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="card" style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 40 }}>📷</div>
@@ -89,7 +118,8 @@ export function App() {
                   <div>
                     <div className="food-name">{m.label}</div>
                     <div className="macro">
-                      {m.energyKcal ?? '—'} kcal · {new Date(m.when).toLocaleString()}
+                      <MacroLine energyKcal={m.energyKcal} compact /> ·{' '}
+                      {new Date(m.when).toLocaleDateString()}
                     </div>
                   </div>
                 </button>
@@ -99,10 +129,13 @@ export function App() {
         </>
       )}
 
-      {tab === 'history' && <HistoryScreen backend={backend} onOpenMeal={openMeal} />}
+      {tab === 'history' && (
+        <HistoryScreen backend={backend} onOpenMeal={openMeal} onToast={notify} />
+      )}
       {tab === 'search' && <SearchScreen backend={backend} onOpenMeal={openMeal} />}
       {tab === 'analytics' && <AnalyticsScreen backend={backend} />}
       {tab === 'settings' && <SettingsScreen backend={backend} />}
+      </div>
 
       <nav className="tabbar">
         <button
@@ -141,6 +174,8 @@ export function App() {
           ⚙️ Settings
         </button>
       </nav>
+
+      <ToastHost toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }
