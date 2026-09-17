@@ -222,8 +222,47 @@ async function tryFallback(
     ...(fb.baseUrl ? { baseUrl: fb.baseUrl } : {}),
     ...(fb.supportsDetail != null ? { supportsDetail: fb.supportsDetail } : {}),
   });
-  const analysis = await fbProvider.analyzeMeal(image, opts);
+  const analysis = await analyzeWithRetry(fbProvider, image, opts);
   return { analysis, provider: fb.provider };
+}
+
+/**
+ * How many times to retry a transient 503 ("model overloaded"). Kept modest so
+ * the whole webhook (multiple AI calls + backoff) stays well under Cloudflare's
+ * request time limit and doesn't 524.
+ */
+const MAX_503_RETRIES = 3;
+/** Base backoff between 503 retries (ms); grows linearly, capped, per attempt. */
+const RETRY_BACKOFF_MS = 1200;
+/** Max backoff for a single retry wait (ms). */
+const RETRY_BACKOFF_CAP_MS = 4000;
+
+/**
+ * Runs `analyzeMeal`, retrying transient 503 (model overloaded) errors up to
+ * {@link MAX_503_RETRIES} times with a short increasing backoff. Any non-503
+ * error is thrown immediately (the caller decides whether to fail over). If the
+ * 503 persists past the limit, the last error is thrown so the caller can fall
+ * back or report it.
+ */
+async function analyzeWithRetry(
+  provider: ReturnType<ProviderFactory>,
+  image: { base64: string; mimeType: 'image/jpeg' },
+  opts: { hint?: string },
+): Promise<Awaited<ReturnType<ReturnType<ProviderFactory>['analyzeMeal']>>> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= MAX_503_RETRIES; attempt++) {
+    try {
+      return await provider.analyzeMeal(image, opts);
+    } catch (err) {
+      lastErr = err;
+      if ((err as { status?: number }).status !== 503) throw err;
+      if (attempt < MAX_503_RETRIES) {
+        const wait = Math.min(RETRY_BACKOFF_MS * (attempt + 1), RETRY_BACKOFF_CAP_MS);
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 interface PhotoJob {
@@ -294,29 +333,16 @@ async function handlePhoto(
   const image = { base64: file.base64, mimeType: file.mimeType as 'image/jpeg' };
   const opts = caption ? { hint: caption } : {};
 
-  // A 503 (model overloaded) is usually a transient demand spike — retry once
-  // after a short backoff. Quota/other errors are not retried on the primary.
-  // Track which provider actually produced the analysis (primary or fallback).
+  // Analyze on the primary, retrying transient 503s a few times, then fall over
+  // to the fallback provider on any failover-worthy error.
   let analysis: Awaited<ReturnType<typeof provider.analyzeMeal>>;
   let usedProvider = settings.aiProvider;
   try {
-    analysis = await provider.analyzeMeal(image, opts);
+    analysis = await analyzeWithRetry(provider, image, opts);
   } catch (err) {
-    const status = (err as { status?: number }).status;
-    if (status === 503) {
-      await new Promise((r) => setTimeout(r, 1500));
-      try {
-        analysis = await provider.analyzeMeal(image, opts);
-      } catch (retryErr) {
-        const fb = await tryFallback(c, retryErr, image, opts, providerFactory, user.id);
-        analysis = fb.analysis;
-        usedProvider = fb.provider;
-      }
-    } else {
-      const fb = await tryFallback(c, err, image, opts, providerFactory, user.id);
-      analysis = fb.analysis;
-      usedProvider = fb.provider;
-    }
+    const fb = await tryFallback(c, err, image, opts, providerFactory, user.id);
+    analysis = fb.analysis;
+    usedProvider = fb.provider;
   }
   const meal = resolveMeal(analysis);
 

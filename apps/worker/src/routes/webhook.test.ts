@@ -292,4 +292,47 @@ describe('POST /webhook', () => {
     expect(lastText(sent)).not.toContain('Logged');
     expect(lastText(sent).toLowerCase()).toContain('rate limit');
   });
+
+  it('retries a transient 503 on the primary, then succeeds', async () => {
+    const tgId = 8303;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
+    await createApp().request(
+      '/api/settings',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }) },
+      env,
+    );
+
+    // Primary throws 503 on the first call, then succeeds on the retry.
+    let calls = 0;
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({
+      botClientFactory: () => mockBot(sent),
+      providerFactory: () => {
+        const mock = new MockAIProvider();
+        return {
+          id: 'primary',
+          analyzeMeal: async (img: Parameters<MockAIProvider['analyzeMeal']>[0]) => {
+            calls += 1;
+            if (calls === 1) throw Object.assign(new Error('overloaded'), { kind: 'http', status: 503 });
+            return mock.analyzeMeal(img);
+          },
+          reviseMeal: async () => {
+            throw new Error('n/a');
+          },
+        };
+      },
+    });
+
+    const res = await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(calls).toBe(2); // one failure + one successful retry
+    expect(lastText(sent)).toContain('Logged');
+  });
 });
