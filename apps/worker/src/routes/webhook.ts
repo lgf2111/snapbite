@@ -87,11 +87,8 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
           status: e.status,
           cause: typeof e.cause === 'string' ? e.cause : undefined,
         });
-        const detail = providerMessage(e.cause) ?? e.message ?? 'unknown error';
         try {
-          await bot.sendMessage(parsed.chatId, {
-            text: `Sorry — couldn't log that photo: ${detail}`,
-          });
+          await bot.sendMessage(parsed.chatId, { text: friendlyPhotoError(e) });
         } catch {
           /* ignore */
         }
@@ -125,6 +122,35 @@ function providerMessage(cause: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+interface ProviderErrorLike {
+  message?: string;
+  kind?: string;
+  status?: number;
+  cause?: unknown;
+}
+
+/**
+ * Turns a provider error into a short, friendly chat message. The two common
+ * cases with the free Gemini tier get tailored guidance:
+ * - 429 (quota/rate limit): daily free-tier cap or per-minute rate.
+ * - 503 (overloaded): transient demand spike, retry shortly.
+ * Everything else falls back to the provider's own message.
+ */
+function friendlyPhotoError(e: ProviderErrorLike): string {
+  const raw = providerMessage(e.cause) ?? e.message ?? '';
+  if (e.status === 429 || /quota|rate limit|resource_exhausted/i.test(raw)) {
+    return (
+      "Sorry — your AI provider's rate limit was hit. On the free tier this is usually a daily " +
+      'cap or a short per-minute limit. Wait a bit and send the photo again, or switch model/' +
+      'provider in FoodLog → Settings.'
+    );
+  }
+  if (e.status === 503 || /overloaded|high demand|unavailable/i.test(raw)) {
+    return 'Sorry — the AI model is busy right now (a temporary demand spike). Please send the photo again in a moment.';
+  }
+  return `Sorry — couldn't log that photo: ${raw || 'unknown error'}`;
 }
 
 interface PhotoJob {
@@ -191,10 +217,23 @@ async function handlePhoto(
     provider: settings.aiProvider,
     model: settings.aiModel,
   });
-  const analysis = await provider.analyzeMeal(
-    { base64: file.base64, mimeType: file.mimeType as 'image/jpeg' },
-    caption ? { hint: caption } : {},
-  );
+  const image = { base64: file.base64, mimeType: file.mimeType as 'image/jpeg' };
+  const opts = caption ? { hint: caption } : {};
+
+  // A 503 (model overloaded) is usually a transient demand spike — retry once
+  // after a short backoff before giving up. Quota/other errors are not retried.
+  let analysis: Awaited<ReturnType<typeof provider.analyzeMeal>>;
+  try {
+    analysis = await provider.analyzeMeal(image, opts);
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status === 503) {
+      await new Promise((r) => setTimeout(r, 1500));
+      analysis = await provider.analyzeMeal(image, opts);
+    } else {
+      throw err;
+    }
+  }
   const meal = resolveMeal(analysis);
 
   // Persist, keeping the Telegram file_id so the photo can be shown later.
