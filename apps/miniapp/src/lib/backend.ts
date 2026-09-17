@@ -237,6 +237,11 @@ function savedToDetail(s: SavedMeal): MealDetail {
       portion: f.food.portion ?? null,
       quantity: f.food.quantity,
       confidence: f.food.confidence,
+      energyKcal: f.nutrition.energyKcal,
+      proteinG: f.nutrition.proteinG,
+      carbsG: f.nutrition.carbsG,
+      fatG: f.nutrition.fatG,
+      nutritionSource: f.nutrition.source,
     })),
     total: s.meal.total,
   };

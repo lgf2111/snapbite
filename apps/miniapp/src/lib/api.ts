@@ -34,6 +34,11 @@ export interface MealDetail {
     portion: string | null;
     quantity: number;
     confidence: number | null;
+    energyKcal: number | null;
+    proteinG: number | null;
+    carbsG: number | null;
+    fatG: number | null;
+    nutritionSource: string | null;
   }>;
   total: {
     energyKcal: number;

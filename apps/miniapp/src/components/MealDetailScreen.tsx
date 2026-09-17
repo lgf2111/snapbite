@@ -36,6 +36,19 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged }: MealDet
             portion: f.portion ?? undefined,
             quantity: f.quantity,
             confidence: f.confidence ?? 0.5,
+            // Seed the stored per-food nutrition so every food shows its real
+            // macros on load (not just table-matched ones). Kept as a manual
+            // override so it survives re-render without re-resolving from name.
+            ...(f.energyKcal != null
+              ? {
+                  manualNutrition: {
+                    energyKcal: f.energyKcal,
+                    proteinG: f.proteinG ?? 0,
+                    carbsG: f.carbsG ?? 0,
+                    fatG: f.fatG ?? 0,
+                  },
+                }
+              : {}),
           })),
         );
       })

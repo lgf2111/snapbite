@@ -59,6 +59,33 @@ describe('local backend (no VITE_WORKER_URL)', () => {
     expect(detail.total?.energyKcal).toBe(76);
   });
 
+  it('returns per-food macros for every food on detail (multi-food)', async () => {
+    const backend = createBackend();
+    const multi: MealResult = {
+      foods: [
+        {
+          food: { name: 'rice', estimatedWeightG: 200, quantity: 1, confidence: 0.9 },
+          nutrition: { energyKcal: 260, proteinG: 5.4, carbsG: 56, fatG: 0.6, source: 'table' },
+        },
+        {
+          food: { name: 'mystery stew', estimatedWeightG: 300, quantity: 1, confidence: 0.7 },
+          nutrition: { energyKcal: 330, proteinG: 22, carbsG: 12, fatG: 20, source: 'ai_estimate' },
+        },
+      ],
+      total: { energyKcal: 590, proteinG: 27.4, carbsG: 68, fatG: 20.6, source: 'mixed' },
+      confidence: 0.8,
+      needsConfirmation: false,
+    };
+    saveMeal(multi);
+    const id = (await backend.recent())[0]?.id as string;
+    const detail = await backend.detail(id);
+    // Both foods must carry their own P/C/F, including the non-table one.
+    expect(detail.foods[0]?.proteinG).toBe(5.4);
+    expect(detail.foods[1]?.proteinG).toBe(22);
+    expect(detail.foods[1]?.carbsG).toBe(12);
+    expect(detail.foods[1]?.fatG).toBe(20);
+  });
+
   it('updates a saved meal in local mode', async () => {
     const backend = createBackend();
     saveMeal(meal('rice', 100));
