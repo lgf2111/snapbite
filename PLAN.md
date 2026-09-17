@@ -197,3 +197,84 @@ _(nothing actively in progress)_
 ### Design principles (unchanged)
 
 `packages/core` stays transport-agnostic. AI nutrition is always an estimate and always correctable. Deterministic where possible (local table, SQL analytics/search). No feature designed around extreme calorie restriction. Never claim privacy beyond what the architecture guarantees.
+
+---
+
+## 11. Home-centric redesign + AI meal editing + performance (DELIVERED)
+
+> **Status: shipped & deployed.** All five goals below are live (Worker version `0082beef`, Pages redeployed). Tests green across the workspace: core 76, cli 8, miniapp 15, worker 53. See §11.6 for exactly what shipped.
+
+This section is the design for the batch of work. Goals, in the user's words:
+
+1. Remove the **History** and **Search** tabs.
+2. On the home page, make the **top a clickable calendar** to pick a day; the list below shows that day's meals.
+3. Each meal row supports **swipe-left to delete**.
+4. Each meal row gets an **"Update with AI"** action: the user types a plain-language instruction ("add a coke", "the rice was double", "remove the fries") and the AI rewrites that meal log itself.
+5. The app **loads slowly** today — introduce **lazy loading** (code-splitting + lighter initial fetch) so first paint is fast.
+
+### 11.1 Current state (why these changes are safe)
+
+- Navigation is state-driven in `App.tsx` (no router): a `Tab` union + a static `NAV` array + shadcn `Tabs`. Meal detail is an early-return overlay keyed by `detailId`, opened via `onOpenMeal(id)`.
+- Home (`HomeScreen.tsx`) receives `recent: RecentMeal[]` from App (App fetches once via `backend.recent()` → `GET /api/meals`, which returns the **full** meal list; Home slices to 5). History reuses the same full `GET /api/meals` (via `groups`). So the initial load fetches **all** meals for a 5-item list — a core cause of slow load.
+- `SwipeableRow.tsx` (react-swipeable, `trackMouse`) is used **only** by `HistoryScreen`. Removing History leaves it free to reuse on Home.
+- Meal editing (`MealDetailScreen.tsx`) is **manual only** — client-side field edits + `resolveFoodNutrition`/`aggregate`, saved via `backend.update` → `PUT /api/meals/:id`. There is **no AI on update** today. The only AI path is `POST /api/meals/analyze` (image → analysis), via `AIProvider.analyzeMeal`.
+- No code-splitting anywhere (no `React.lazy`/`Suspense`/dynamic import; no `manualChunks` in `vite.config.ts`) — everything (all screens + charts + swipe lib) ships in one chunk.
+
+### 11.2 Target UX
+
+- **Two tabs only:** **Home** and **Settings**. (Analytics/"Stats" — decision below.) The bottom nav shrinks accordingly.
+- **Home = a day view.** Top: a compact, clickable **date selector** (a "‹ Wed, Sep 17 ›" pill that opens a calendar popover; prev/next arrows step days). Below the date: that day's **total kcal + macro summary**, then the **list of meals logged that day**, newest first. The static "log a meal by sending a photo to the bot" hint stays (as an empty-state when a day has no meals).
+- **Swipe-left-to-delete** on each meal row (reuse `SwipeableRow`), with the existing confirm/haptic/toast pattern.
+- **"Update with AI"** control on each meal row (and/or on the detail screen): tapping it opens a small input ("Describe the change…"), the user types free text, and on submit the app calls a new endpoint that returns a revised meal, which replaces the log. Optimistic toast + refresh.
+
+### 11.3 Changes by area
+
+**A. Remove History + Search (front-end only)**
+- `App.tsx`: drop `'history'`/`'search'` from the `Tab` union and `NAV`; remove their `TabsContent` blocks and the `HistoryScreen`/`SearchScreen` imports; remove now-unused icons (`SearchIcon`, and `UtensilsCrossed` if unused after redesign).
+- Delete `components/HistoryScreen.tsx` and `components/SearchScreen.tsx`.
+- Keep `SwipeableRow.tsx` (now used by Home).
+- Backend interface: **keep** `history()` (Home's day view can reuse it) but **remove** `search()` from the interface + worker/local impls **and** the unused `api.search`. Update `backend.test.ts` (drop the search test).
+- Worker: leave `GET /api/search` route in place for now (harmless, tested) OR remove it + its test. **Decision: remove** `GET /api/search`, its `searchMeals` DB helper, and `search.test.ts` cases, to avoid dead code. (If we later want in-app search back, it's a small re-add.)
+
+**B. Home day view + clickable calendar**
+- New `components/DayPicker.tsx`: a date pill + prev/next arrows + a calendar popover. Implementation: add shadcn **`calendar`** (react-day-picker) + **`popover`** (Radix) components (both are standard shadcn additions; `react-day-picker` + `@radix-ui/react-popover` are new deps). Highlight days that have meals (needs a set of logged dates — see data below).
+- Rework `HomeScreen.tsx` to own a `selectedDate` state (default today). Render: DayPicker at top → day summary (kcal + `MacroLine`) → meals for that date, each in a `SwipeableRow` (delete) with an "Update with AI" affordance. Empty day → the send-a-photo hint.
+- Data: reuse `HistoryDay[]` from `backend.history()` and filter to `selectedDate` client-side (simple, no new endpoint) **for now**; the calendar's "has meals" dots come from the set of `day.date` values. (A dedicated `GET /api/meals/day?date=` endpoint is a later optimization; see performance below.)
+- Local (browser-dev) mode keeps working via `groupSavedByDay`.
+
+**C. Swipe-to-delete on Home**
+- Reuse `SwipeableRow` exactly as History used it: wrap each meal card, `onDelete` → `backend.remove(id)` → refresh + toast + haptic. No new code beyond wiring.
+
+**D. "Update with AI" (the meaningful new capability)**
+- **Core (`packages/core`):** extend the AI layer with a **text-only revise** capability. Add `reviseMeal(current: MealResult | AIFoodAnalysis, instruction: string, opts?)` to `AIProvider` (default-implemented on `OpenAICompatibleProvider`): sends a Chat Completions request (JSON mode, **no image**) with a new system prompt that says "here is the current structured meal; apply the user's instruction; return the same schema." Reuse `AIFoodAnalysis`/`MealResult` Zod validation on the response. The free-text instruction is treated as **data**, never as system instructions (same stance as the photo `hint`). New prompt lives beside `prompt.ts`.
+- **Worker:** new route `POST /api/meals/:id/revise` (owner-scoped, under `/api`). Body `{ instruction: string }`. Steps: load the meal detail (owned), decrypt the user's key, build the provider via `createProvider`, call `reviseMeal(currentMeal, instruction)`, run the result through the **same nutrition resolver** used by analyze/save so table-vs-AI sourcing stays consistent, then `updateMeal(...)` (the existing atomic replace) and return the new `MealDetail`. Errors surface like the webhook's (real provider message, 400/402/500 as appropriate). Rate/length guard the instruction (e.g. cap length).
+- **Mini App:** `ApiClient.reviseMeal(id, instruction)` → `POST /api/meals/:id/revise`; `Backend.reviseWithAi(id, instruction)` (worker mode calls the API; **local mode** does a minimal mock or throws "AI edit needs the backend"). UI: an "✨ Update with AI" button on the meal row / detail that opens an input + submit; on success replace the row and toast. Show a spinner while the model runs (it's a network + LLM call).
+- **Tests:** core — `reviseMeal` builds a no-image JSON request and validates output (mock fetch), instruction-as-data. Worker — `revise` route: owned meal revised + persisted, not-owned → 404, missing key → 402/400, bad instruction → 400.
+
+**E. Performance / lazy loading**
+- **Code-split screens** with `React.lazy` + `Suspense`: `AnalyticsScreen` (pulls in the chart code), `SettingsScreen`, and `MealDetailScreen` become lazy chunks so the initial bundle is basically Home + nav. Add a lightweight `Suspense` fallback (existing `Skeleton`).
+- **Lighter first fetch:** today App fetches **all** meals on load for a 5-item Home. Options: (i) add `GET /api/meals?limit=N&before=…` (paginated) and a `GET /api/meals/dates` (distinct logged dates for the calendar dots), fetching only the selected day + recent; or (ii) short-term, keep one fetch but defer it behind first paint and cache. **Decision: do (i)** — add a `limit`/`date` query to `GET /api/meals` (default to recent N) and a small `dates` endpoint; Home fetches the selected day on demand. This removes the "load everything" cost. Keep `history()` for local mode.
+- **Vite:** rely on route-level `React.lazy` for chunking (no manual `manualChunks` needed initially). Verify the built output splits into multiple chunks and the main chunk shrinks. Consider `build.rollupOptions` only if a vendor split is still too big.
+- Telegram init + theme already run before mount; keep that. Ensure the first meaningful paint doesn't block on the meals fetch (render the day scaffold + skeletons immediately).
+
+### 11.4 Decisions (confirmed)
+
+1. **Remove the Stats/Analytics tab too** — the day view shows per-day totals; final tabs are **Home + Settings** only. (Keep `AnalyticsScreen.tsx` file out of the app; may delete it. The worker `GET /api/analytics` can stay or be removed — remove for cleanliness.)
+2. **"Update with AI" on both** the Home meal row and the detail screen.
+3. **AI edit shows a spinner** and is treated like analyze (a real LLM call on the user's key).
+4. **Fully remove** the in-app search endpoint + UI.
+
+### 11.5 Build order (once confirmed)
+
+1. Core: `reviseMeal` + revise prompt + tests. Build core.
+2. Worker: `POST /api/meals/:id/revise` (+ resolver reuse) + `GET /api/meals` `limit`/`date` + `dates` endpoint; remove `GET /api/search`. Tests. Deploy.
+3. Mini App: remove History/Search; new `DayPicker` (shadcn calendar+popover); rework `HomeScreen` (day view + swipe-delete + Update-with-AI); `React.lazy` for Analytics/Settings/MealDetail; api/backend methods. Tests + build.
+4. Verify workspace typecheck + all tests + build; deploy Worker + Pages; update README + this section (mark delivered); commit + push. No DB migration needed (schema unchanged).
+
+### 11.6 What shipped (delivered)
+
+- **Core:** `AIProvider.reviseMeal(current, instruction, opts?)` (text-only, no image) on `OpenAICompatibleProvider` (shared `#complete()` with `analyzeMeal`) + `MockAIProvider.reviseMeal`. New `REVISE_SYSTEM_PROMPT` + `buildRevisePrompt()` (instruction sent as data, not instructions). Output validated as `AIFoodAnalysis`. `ReviseMealInput`/`ReviseMealOptions` types. Tests in `ai/revise.test.ts`.
+- **Worker:** `POST /api/meals/:id/revise` — owner-scoped, decrypts the user's key, `reviseMeal(detailToAnalysis(detail), instruction)`, re-runs `resolveMeal`, `updateMeal` (atomic replace), returns the fresh `MealDetail`. Instruction guarded (non-empty, ≤500 chars). `detailToAnalysis()` reverses stored absolute macros back to per-100g `aiNutrition`. `GET /api/meals?date=YYYY-MM-DD` + `GET /api/meals/dates` for the day view. **Removed** `GET /api/search` (+ `searchMeals`) and the entire `/api/analytics` route + `db/analytics.ts`.
+- **Mini App:** two tabs (**Home**, **Settings**). Home is a day view: `DateSelector` (prev/next + calendar popover, logged-day dots, future days disabled) → day totals → meals list; each row has **swipe-to-delete** (`SwipeableRow`) and an **Update-with-AI** icon. `MealDetailScreen` gained an Update-with-AI button. New `UpdateWithAi` dialog (plain-text input, spinner). New shadcn `popover` + `calendar` (react-day-picker v9). `React.lazy` for Settings + MealDetail; the calendar chunk loads on demand. Deleted `HistoryScreen`, `SearchScreen`, `AnalyticsScreen`, and `lib/summary.*`. `backend.reviseWithAi` / `mealsByDate` / `mealDates`; `search`/`analytics`/`history` removed from the data layer (local mode still works; local AI-edit surfaces "needs the backend").
+- **Perf:** initial bundle no longer fetches every meal (Home loads just the selected day) and no longer ships Settings/MealDetail/calendar up front — main chunk dropped ~529kB→455kB, with lazy chunks for calendar (73kB), MealDetail (9kB), Settings (7kB).
+- **Notes:** no DB migration (schema unchanged). New deps: `@radix-ui/react-popover`, `react-day-picker` (v9).

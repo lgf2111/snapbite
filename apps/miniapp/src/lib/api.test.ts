@@ -56,6 +56,18 @@ describe('ApiClient', () => {
     });
   });
 
+  it('revises a meal via POST /api/meals/:id/revise', async () => {
+    const detail = { id: 'meal-9', foods: [{ name: 'rice' }] };
+    const fetchMock = vi.fn(async () => jsonResponse(detail));
+    const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
+    const res = await client.reviseMeal('meal-9', 'add a coke');
+    expect((res as { id: string }).id).toBe('meal-9');
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://api.example.com/api/meals/meal-9/revise');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toMatchObject({ instruction: 'add a coke' });
+  });
+
   it('exposes ApiError as an Error subclass', () => {
     expect(new ApiError(500, 'x')).toBeInstanceOf(Error);
   });

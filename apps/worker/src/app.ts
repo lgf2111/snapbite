@@ -3,8 +3,7 @@ import { cors } from 'hono/cors';
 import type { AppBindings } from './env.js';
 import { telegramAuth } from './middleware/auth.js';
 import { accountRoutes } from './routes/account.js';
-import { analyticsRoutes } from './routes/analytics.js';
-import { mealPhotoRoutes, mealsRoutes, type ProviderFactory, searchRoutes } from './routes/meals.js';
+import { mealPhotoRoutes, mealsRoutes, type ProviderFactory } from './routes/meals.js';
 import { settingsRoutes } from './routes/settings.js';
 import { type BotClientFactory, webhookRoutes } from './routes/webhook.js';
 
@@ -52,8 +51,6 @@ export function createApp(opts: CreateAppOptions = {}) {
 
   api.route('/settings', settingsRoutes());
   api.route('/meals', mealsRoutes(opts.providerFactory, opts.botClientFactory));
-  api.route('/search', searchRoutes());
-  api.route('/analytics', analyticsRoutes());
   api.route('/account', accountRoutes());
 
   app.route('/api', api);

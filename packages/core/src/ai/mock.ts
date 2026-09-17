@@ -1,5 +1,11 @@
 import type { AIFoodAnalysis } from '../schemas/analysis.js';
-import type { AIProvider, AnalyzeMealOptions, MealImage } from './types.js';
+import type {
+  AIProvider,
+  AnalyzeMealOptions,
+  MealImage,
+  ReviseMealInput,
+  ReviseMealOptions,
+} from './types.js';
 
 /**
  * A deterministic {@link AIProvider} for local development, demos, and tests.
@@ -21,10 +27,30 @@ export class MockAIProvider implements AIProvider {
     return this.#lastImage;
   }
 
+  #lastRevision: { current: ReviseMealInput; instruction: string } | undefined;
+
   async analyzeMeal(image: MealImage, _opts?: AnalyzeMealOptions): Promise<AIFoodAnalysis> {
     this.#lastImage = image;
     // Return a fresh clone so callers can mutate without affecting the template.
     return structuredClone(this.#response);
+  }
+
+  /** The most recent revise call, for assertions. */
+  get lastRevision(): { current: ReviseMealInput; instruction: string } | undefined {
+    return this.#lastRevision;
+  }
+
+  /**
+   * Deterministic revise: echoes the current meal back with the instruction
+   * recorded in `notes`, so local/demo mode "works" without a network call.
+   */
+  async reviseMeal(
+    current: ReviseMealInput,
+    instruction: string,
+    _opts?: ReviseMealOptions,
+  ): Promise<AIFoodAnalysis> {
+    this.#lastRevision = { current, instruction };
+    return { ...structuredClone(current), notes: `Revised: ${instruction}` };
   }
 }
 

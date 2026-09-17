@@ -30,23 +30,16 @@ describe('local backend (no VITE_WORKER_URL)', () => {
     expect(createBackend().mode).toBe('local');
   });
 
-  it('groups saved meals by day for history', async () => {
+  it('lists meals for a given day and reports logged dates', async () => {
     saveMeal(meal('rice', 100));
     saveMeal(meal('apple', 50));
-    const days = await createBackend().history();
-    expect(days.length).toBeGreaterThanOrEqual(1);
-    const total = days.reduce((s, d) => s + d.totalKcal, 0);
-    expect(total).toBe(150);
-  });
-
-  it('searches by food name (case-insensitive substring)', async () => {
-    saveMeal(meal('Chicken Rice', 300));
-    saveMeal(meal('beef noodles', 400));
     const backend = createBackend();
-    const hits = await backend.search('chicken');
-    expect(hits).toHaveLength(1);
-    expect(hits[0]?.label).toContain('Chicken Rice');
-    expect(await backend.search('')).toEqual([]);
+    const today = new Date().toISOString().slice(0, 10);
+    const dates = await backend.mealDates();
+    expect(dates).toContain(today);
+    const meals = await backend.mealsByDate(today);
+    expect(meals).toHaveLength(2);
+    expect(await backend.mealsByDate('1999-01-01')).toEqual([]);
   });
 
   it('returns detail for a saved meal', async () => {
@@ -111,18 +104,5 @@ describe('local backend (no VITE_WORKER_URL)', () => {
     expect(s.connected).toBe(true);
     const saved = await backend.saveApiKey('anything');
     expect(saved.connected).toBe(true);
-  });
-
-  it('computes local analytics (totals, avg, common foods)', async () => {
-    const backend = createBackend();
-    saveMeal(meal('rice', 200));
-    saveMeal(meal('rice', 100));
-    saveMeal(meal('egg', 155));
-    const a = await backend.analytics(30);
-    expect(a.totalMeals).toBe(3);
-    expect(a.totalKcal).toBe(455);
-    expect(a.avgKcalPerMeal).toBeCloseTo(151.7, 1);
-    expect(a.commonFoods[0]?.name).toBe('rice');
-    expect(a.commonFoods[0]?.count).toBe(2);
   });
 });

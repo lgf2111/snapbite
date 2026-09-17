@@ -1,11 +1,24 @@
 import { AIFoodAnalysis } from '../schemas/analysis.js';
-import { buildUserPrompt, SYSTEM_PROMPT } from './prompt.js';
+import {
+  buildRevisePrompt,
+  buildUserPrompt,
+  REVISE_SYSTEM_PROMPT,
+  SYSTEM_PROMPT,
+} from './prompt.js';
 import {
   type AIProvider,
   AIProviderError,
   type AnalyzeMealOptions,
   type MealImage,
+  type ReviseMealInput,
+  type ReviseMealOptions,
 } from './types.js';
+
+/** A single OpenAI-style chat message. */
+type ChatMessage = {
+  role: 'system' | 'user';
+  content: string | Array<Record<string, unknown>>;
+};
 
 /** Minimal `fetch` signature so the adapter can be driven by a mock in tests. */
 export type FetchLike = (
@@ -80,19 +93,40 @@ export class OpenAICompatibleProvider implements AIProvider {
     const imageUrl: { url: string; detail?: string } = { url: dataUrl };
     if (this.#supportsDetail) imageUrl.detail = opts.detail ?? 'high';
 
+    const messages: ChatMessage[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: buildUserPrompt(opts.hint) },
+          { type: 'image_url', image_url: imageUrl },
+        ],
+      },
+    ];
+    return this.#complete(messages, opts.signal);
+  }
+
+  async reviseMeal(
+    current: ReviseMealInput,
+    instruction: string,
+    opts: ReviseMealOptions = {},
+  ): Promise<AIFoodAnalysis> {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: REVISE_SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: buildRevisePrompt(JSON.stringify(current), instruction),
+      },
+    ];
+    return this.#complete(messages, opts.signal);
+  }
+
+  /** Posts a JSON-mode chat completion and validates the result. */
+  async #complete(messages: ChatMessage[], signal?: AbortSignal): Promise<AIFoodAnalysis> {
     const body = JSON.stringify({
       model: this.#model,
       response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: buildUserPrompt(opts.hint) },
-            { type: 'image_url', image_url: imageUrl },
-          ],
-        },
-      ],
+      messages,
     });
 
     let response: Awaited<ReturnType<FetchLike>>;
@@ -104,7 +138,7 @@ export class OpenAICompatibleProvider implements AIProvider {
           Authorization: `Bearer ${this.#apiKey}`,
         },
         body,
-        ...(opts.signal ? { signal: opts.signal } : {}),
+        ...(signal ? { signal } : {}),
       });
     } catch (cause) {
       throw new AIProviderError('network', `${this.id} request failed`, { cause });

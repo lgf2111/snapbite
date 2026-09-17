@@ -17,6 +17,7 @@ import type { Backend } from '@/lib/backend';
 import { hapticImpact } from '@/lib/telegram';
 import { useBackButton, useMainButton } from '@/lib/useTelegramButtons';
 import { MacroLine } from './MacroLine.js';
+import { UpdateWithAi } from './UpdateWithAi.js';
 
 type ToastKind = 'success' | 'error' | 'info';
 
@@ -36,6 +37,8 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged, onToast }
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'saving' | 'deleting' | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Bump to re-fetch the detail (e.g. after an AI revision replaces the meal).
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     backend
@@ -63,7 +66,7 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged, onToast }
         );
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'));
-  }, [backend, mealId]);
+  }, [backend, mealId, reloadKey]);
 
   const resolved = useMemo(() => {
     const mealFoods = foods.map((food) => ({
@@ -251,6 +254,17 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged, onToast }
               </div>
             </CardContent>
           </Card>
+
+          <UpdateWithAi
+            backend={backend}
+            mealId={mealId}
+            variant="button"
+            onDone={() => {
+              onChanged();
+              setReloadKey((k) => k + 1);
+            }}
+            {...(onToast ? { onToast } : {})}
+          />
 
           {!nativeSave && (
             <Button

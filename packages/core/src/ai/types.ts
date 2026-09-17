@@ -41,6 +41,30 @@ export interface AIProvider {
   readonly id: string;
   /** Analyze a meal photo into a validated, pre-nutrition food analysis. */
   analyzeMeal(image: MealImage, opts?: AnalyzeMealOptions): Promise<AIFoodAnalysis>;
+  /**
+   * Revise an already-logged meal from a plain-language instruction (no photo).
+   * Returns a validated, pre-nutrition food analysis in the same shape as
+   * {@link analyzeMeal}, ready to be re-run through the nutrition resolver.
+   */
+  reviseMeal(
+    current: ReviseMealInput,
+    instruction: string,
+    opts?: ReviseMealOptions,
+  ): Promise<AIFoodAnalysis>;
+}
+
+/**
+ * The current meal handed to {@link AIProvider.reviseMeal}, in the same
+ * per-100g `aiNutrition` shape the analysis produces. This is exactly an
+ * {@link AIFoodAnalysis} (foods + confidence + flags), so the Worker can send
+ * back the analysis it stored, or reconstruct one from a MealResult.
+ */
+export type ReviseMealInput = AIFoodAnalysis;
+
+/** Options that tune a single revise call. */
+export interface ReviseMealOptions {
+  /** Abort signal so the transport layer can enforce timeouts. */
+  signal?: AbortSignal;
 }
 
 /**

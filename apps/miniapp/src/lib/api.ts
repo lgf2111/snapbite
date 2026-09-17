@@ -49,16 +49,6 @@ export interface MealDetail {
   } | null;
 }
 
-export interface AnalyticsSummary {
-  days: number;
-  totalMeals: number;
-  totalKcal: number;
-  avgKcalPerMeal: number;
-  daily: Array<{ date: string; kcal: number; meals: number }>;
-  commonFoods: Array<{ name: string; count: number }>;
-  macroAverages: { proteinG: number; carbsG: number; fatG: number };
-}
-
 export interface SettingsView {
   aiProvider: string;
   aiModel: string | null;
@@ -176,22 +166,27 @@ export class ApiClient {
     });
   }
 
-  listMeals(): Promise<{ meals: MealSummary[]; groups: DayGroup[] }> {
-    return this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>('/api/meals');
+  /** List meals; optionally scope to one day (YYYY-MM-DD) for a lighter payload. */
+  listMeals(date?: string): Promise<{ meals: MealSummary[]; groups: DayGroup[] }> {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>(`/api/meals${qs}`);
+  }
+
+  /** Distinct days (YYYY-MM-DD) that have meals — for calendar dots. */
+  mealDates(): Promise<{ dates: string[] }> {
+    return this.#request<{ dates: string[] }>('/api/meals/dates');
   }
 
   getMeal(id: string): Promise<MealDetail> {
     return this.#request<MealDetail>(`/api/meals/${encodeURIComponent(id)}`);
   }
 
-  search(query: string): Promise<{ query: string; meals: MealSummary[] }> {
-    return this.#request<{ query: string; meals: MealSummary[] }>(
-      `/api/search?q=${encodeURIComponent(query)}`,
-    );
-  }
-
-  analytics(days = 30): Promise<AnalyticsSummary> {
-    return this.#request<AnalyticsSummary>(`/api/analytics?days=${days}`);
+  /** AI-revise an owned meal from a plain-language instruction; returns the new detail. */
+  reviseMeal(id: string, instruction: string): Promise<MealDetail> {
+    return this.#request<MealDetail>(`/api/meals/${encodeURIComponent(id)}/revise`, {
+      method: 'POST',
+      body: JSON.stringify({ instruction }),
+    });
   }
 
   /** Builds a photo URL for a meal (initData in the query — used as an <img> src). */

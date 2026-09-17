@@ -1,4 +1,5 @@
 import {
+  type AIFoodAnalysis,
   type AIProvider,
   createProvider,
   decryptSecret,
@@ -14,8 +15,8 @@ import {
   deleteMeal,
   getMealDetail,
   listMeals,
+  type MealDetail,
   saveMeal,
-  searchMeals,
   updateMeal,
 } from '../db/meals.js';
 import { createSettingsDb, getSettings } from '../db/settings.js';
@@ -173,10 +174,32 @@ export function mealsRoutes(
   });
 
   // GET /api/meals — list the user's meals (newest first), grouped by day.
+  // Optional query: ?limit=N (default 50) and ?date=YYYY-MM-DD to fetch just
+  // one day (used by the Home day view for a lighter payload).
   app.get('/', async (c) => {
     const db = createMealsDb(c.env.DB);
-    const summaries = await listMeals(db, c.get('userId'));
+    const limitParam = Number.parseInt(c.req.query('limit') ?? '', 10);
+    const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 200) : 50;
+    const date = c.req.query('date');
+
+    let summaries = await listMeals(db, c.get('userId'), date ? 500 : limit);
+    if (date) {
+      summaries = summaries.filter(
+        (m) => new Date(m.loggedAt).toISOString().slice(0, 10) === date,
+      );
+    }
     return c.json({ meals: summaries, groups: groupByDay(summaries) });
+  });
+
+  // GET /api/meals/dates — distinct days (YYYY-MM-DD) that have meals, so the
+  // calendar can dot logged days without fetching every meal.
+  app.get('/dates', async (c) => {
+    const db = createMealsDb(c.env.DB);
+    const summaries = await listMeals(db, c.get('userId'), 500);
+    const dates = [
+      ...new Set(summaries.map((m) => new Date(m.loggedAt).toISOString().slice(0, 10))),
+    ].sort((a, b) => (a < b ? 1 : -1));
+    return c.json({ dates });
   });
 
   // GET /api/meals/:id — full detail for one owned meal.
@@ -215,7 +238,112 @@ export function mealsRoutes(
     return c.json({ ok: true });
   });
 
+  // POST /api/meals/:id/revise — { instruction } -> AI-revised meal, persisted.
+  // Sends the current meal + the plain-language instruction to the provider
+  // (no image), re-resolves nutrition, saves, and returns the new MealDetail.
+  app.post('/:id/revise', async (c) => {
+    if (!c.env.ENCRYPTION_KEY) {
+      return c.json({ error: 'Server misconfigured', detail: 'No encryption key' }, 500);
+    }
+
+    let body: { instruction?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
+    }
+    const instruction = typeof body.instruction === 'string' ? body.instruction.trim() : '';
+    if (!instruction) {
+      return c.json({ error: 'Bad request', detail: 'instruction required' }, 400);
+    }
+    if (instruction.length > 500) {
+      return c.json({ error: 'Bad request', detail: 'instruction too long (max 500 chars)' }, 400);
+    }
+
+    const mealsDb = createMealsDb(c.env.DB);
+    const id = c.req.param('id');
+    const detail = await getMealDetail(mealsDb, id, c.get('userId'));
+    if (!detail) return c.json({ error: 'Not found' }, 404);
+
+    // Load + decrypt the user's key.
+    const settingsDb = createSettingsDb(c.env.DB);
+    const row = await getSettings(settingsDb, c.get('userId'));
+    if (!row?.apiKeyCiphertext || !row?.apiKeyIv) {
+      return c.json({ error: 'No API key', detail: 'Add your AI key in settings first' }, 400);
+    }
+    let apiKey: string;
+    try {
+      apiKey = await decryptSecret(
+        { ciphertext: row.apiKeyCiphertext, iv: row.apiKeyIv },
+        c.env.ENCRYPTION_KEY,
+      );
+    } catch {
+      return c.json({ error: 'Server error', detail: 'Could not decrypt key' }, 500);
+    }
+
+    try {
+      const provider = providerFactory({ apiKey, provider: row.aiProvider, model: row.aiModel });
+      const analysis = await provider.reviseMeal(detailToAnalysis(detail), instruction);
+      const meal = resolveMeal(analysis);
+      const ok = await updateMeal(mealsDb, id, c.get('userId'), meal);
+      if (!ok) return c.json({ error: 'Not found' }, 404);
+      const updated = await getMealDetail(mealsDb, id, c.get('userId'));
+      return c.json(updated);
+    } catch (err) {
+      const e = err as { kind?: string; status?: number; message?: string; cause?: unknown };
+      const status = e.kind === 'http' && e.status === 401 ? 400 : 502;
+      const providerDetail = extractProviderMessage(e.cause);
+      return c.json(
+        {
+          error: 'Revision failed',
+          detail: providerDetail ?? e.message ?? 'provider error',
+          kind: e.kind ?? null,
+        },
+        status,
+      );
+    }
+  });
+
   return app;
+}
+
+/**
+ * Reconstructs an {@link AIFoodAnalysis} from a stored meal so it can be sent
+ * to `reviseMeal`. Stored food macros are ABSOLUTE (already scaled by weight ×
+ * quantity), so we convert them back to the per-100g `aiNutrition` the model
+ * expects. Foods with no stored nutrition are sent without `aiNutrition`.
+ */
+export function detailToAnalysis(detail: MealDetail): AIFoodAnalysis {
+  return {
+    foods: detail.foods.map((f) => {
+      const weight = f.estimatedWeightG ?? 1;
+      const quantity = f.quantity > 0 ? f.quantity : 1;
+      const grams = weight * quantity;
+      const per100 = (v: number | null): number =>
+        grams > 0 && v != null ? Math.round(((v * 100) / grams) * 10) / 10 : 0;
+      const hasNutrition = f.energyKcal != null;
+      return {
+        name: f.name,
+        estimatedWeightG: weight > 0 ? weight : 1,
+        ...(f.portion ? { portion: f.portion } : {}),
+        quantity,
+        confidence: f.confidence ?? 0.5,
+        ...(hasNutrition
+          ? {
+              aiNutrition: {
+                energyKcal: per100(f.energyKcal),
+                proteinG: per100(f.proteinG),
+                carbsG: per100(f.carbsG),
+                fatG: per100(f.fatG),
+              },
+            }
+          : {}),
+      };
+    }),
+    confidence: detail.confidence ?? 0.5,
+    needsConfirmation: false,
+    ...(detail.notes ? { notes: detail.notes } : {}),
+  };
 }
 
 /**
@@ -285,16 +413,4 @@ interface MealSummaryLike {
   id: string;
   loggedAt: number;
   energyKcal: number | null;
-}
-
-/** Search routes: GET /api/search?q= over the user's food names. */
-export function searchRoutes() {
-  const app = new Hono<AppBindings>();
-  app.get('/', async (c) => {
-    const q = c.req.query('q') ?? '';
-    const db = createMealsDb(c.env.DB);
-    const results = await searchMeals(db, c.get('userId'), q);
-    return c.json({ query: q.trim(), meals: results });
-  });
-  return app;
 }

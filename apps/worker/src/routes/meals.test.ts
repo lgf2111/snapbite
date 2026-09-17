@@ -86,6 +86,9 @@ describe('POST /api/meals/analyze', () => {
         analyzeMeal: async () => {
           throw Object.assign(new Error('provider down'), { kind: 'network' });
         },
+        reviseMeal: async () => {
+          throw Object.assign(new Error('provider down'), { kind: 'network' });
+        },
       }),
     });
     const res = await app.request(
@@ -94,6 +97,165 @@ describe('POST /api/meals/analyze', () => {
       env,
     );
     expect(res.status).toBe(502);
+  });
+});
+
+describe('POST /api/meals/:id/revise', () => {
+  const rice = {
+    foods: [
+      {
+        food: { name: 'white rice', estimatedWeightG: 200, quantity: 1, confidence: 0.9 },
+        nutrition: { energyKcal: 260, proteinG: 5.4, carbsG: 56, fatG: 0.6, source: 'table' },
+      },
+    ],
+    total: { energyKcal: 260, proteinG: 5.4, carbsG: 56, fatG: 0.6, source: 'table' },
+    confidence: 0.9,
+    needsConfirmation: false,
+    notes: 'lunch',
+  };
+
+  /** Provider factory whose reviseMeal returns the given analysis. */
+  function reviseApp(analysis: AIFoodAnalysis) {
+    return createApp({
+      providerFactory: () => ({
+        id: 'stub',
+        analyzeMeal: async () => analysis,
+        reviseMeal: async () => analysis,
+      }),
+    });
+  }
+
+  async function saveRice(tgId: number): Promise<string> {
+    const app = createApp();
+    await saveKey(tgId);
+    const res = await app.request(
+      '/api/meals',
+      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ meal: rice }) },
+      env,
+    );
+    const { id } = (await res.json()) as { id: string };
+    return id;
+  }
+
+  it('revises an owned meal and persists the new foods', async () => {
+    const tgId = 4001;
+    const id = await saveRice(tgId);
+    const app = reviseApp({
+      foods: [
+        { name: 'white rice', estimatedWeightG: 200, quantity: 1, confidence: 0.9 },
+        {
+          name: 'cola',
+          estimatedWeightG: 330,
+          quantity: 1,
+          confidence: 0.8,
+          aiNutrition: { energyKcal: 42, proteinG: 0, carbsG: 10.6, fatG: 0 },
+        },
+      ],
+      confidence: 0.85,
+      needsConfirmation: false,
+    });
+
+    const res = await app.request(
+      `/api/meals/${id}/revise`,
+      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ instruction: 'add a coke' }) },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const detail = (await res.json()) as { foods: Array<{ name: string }> };
+    expect(detail.foods.map((f) => f.name)).toContain('cola');
+    expect(detail.foods).toHaveLength(2);
+  });
+
+  it('requires a non-empty instruction', async () => {
+    const tgId = 4002;
+    const id = await saveRice(tgId);
+    const app = reviseApp({ foods: rice.foods.map((f) => f.food) as never, confidence: 0.9, needsConfirmation: false });
+    const res = await app.request(
+      `/api/meals/${id}/revise`,
+      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ instruction: '  ' }) },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 for a meal the user does not own', async () => {
+    const owner = 4003;
+    const id = await saveRice(owner);
+    const app = reviseApp({
+      foods: [{ name: 'white rice', estimatedWeightG: 200, quantity: 1, confidence: 0.9 }],
+      confidence: 0.9,
+      needsConfirmation: false,
+    });
+    const res = await app.request(
+      `/api/meals/${id}/revise`,
+      { method: 'POST', headers: await headers(4004), body: JSON.stringify({ instruction: 'add a coke' }) },
+      env,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 when the user has no API key', async () => {
+    // A user with a meal but no key: save meal directly (save does not need a key).
+    const tgId = 4005;
+    const app = createApp();
+    const save = await app.request(
+      '/api/meals',
+      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ meal: rice }) },
+      env,
+    );
+    const { id } = (await save.json()) as { id: string };
+    const res = await app.request(
+      `/api/meals/${id}/revise`,
+      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ instruction: 'add a coke' }) },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/meals?date= and /api/meals/dates', () => {
+  const meal = {
+    foods: [
+      {
+        food: { name: 'oats', estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
+        nutrition: { energyKcal: 380, proteinG: 13, carbsG: 67, fatG: 7, source: 'table' },
+      },
+    ],
+    total: { energyKcal: 380, proteinG: 13, carbsG: 67, fatG: 7, source: 'table' },
+    confidence: 0.9,
+    needsConfirmation: false,
+  };
+
+  it('lists dates that have meals', async () => {
+    const tgId = 4101;
+    const app = createApp();
+    await app.request(
+      '/api/meals',
+      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ meal }) },
+      env,
+    );
+    const res = await app.request('/api/meals/dates', { headers: await headers(tgId) }, env);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { dates: string[] };
+    expect(body.dates.length).toBeGreaterThanOrEqual(1);
+    expect(body.dates[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('filters by date (an unrelated day returns nothing)', async () => {
+    const tgId = 4102;
+    const app = createApp();
+    await app.request(
+      '/api/meals',
+      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ meal }) },
+      env,
+    );
+    const res = await app.request(
+      '/api/meals?date=1999-01-01',
+      { headers: await headers(tgId) },
+      env,
+    );
+    const body = (await res.json()) as { meals: unknown[] };
+    expect(body.meals).toEqual([]);
   });
 });
 

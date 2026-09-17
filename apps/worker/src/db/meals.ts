@@ -1,5 +1,5 @@
 import type { MealResult } from '@foodlog/core';
-import { and, desc, eq, inArray, like } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { type FoodItemRow, foodItems, meals, nutrition } from './schema.js';
 
@@ -263,56 +263,4 @@ export async function getMealDetail(
   };
 }
 
-/**
- * Searches a user's meals by food name (case-insensitive LIKE). Deterministic
- * SQL — no AI. Returns matching meal summaries newest-first.
- */
-export async function searchMeals(
-  db: MealsDb,
-  userId: string,
-  query: string,
-  limit = 50,
-): Promise<MealSummary[]> {
-  const q = query.trim();
-  if (!q) return [];
 
-  // Escape LIKE wildcards in user input, then wrap for a contains match.
-  const escaped = q.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-  const pattern = `%${escaped}%`;
-
-  // Find the user's food_items whose name matches, scoped to their meals.
-  const matches = await db
-    .select({ mealId: foodItems.mealId })
-    .from(foodItems)
-    .innerJoin(meals, eq(foodItems.mealId, meals.id))
-    .where(and(eq(meals.userId, userId), like(foodItems.name, pattern)));
-
-  const mealIds = [...new Set(matches.map((m: { mealId: string }) => m.mealId))];
-  if (mealIds.length === 0) return [];
-
-  const mealRows = await db
-    .select()
-    .from(meals)
-    .where(and(eq(meals.userId, userId), inArray(meals.id, mealIds)))
-    .orderBy(desc(meals.loggedAt))
-    .limit(limit);
-
-  const summaries: MealSummary[] = [];
-  for (const meal of mealRows) {
-    const [foods, nut] = await Promise.all([
-      db.select().from(foodItems).where(eq(foodItems.mealId, meal.id)),
-      db.select().from(nutrition).where(eq(nutrition.mealId, meal.id)).limit(1),
-    ]);
-    summaries.push({
-      id: meal.id,
-      loggedAt: meal.loggedAt,
-      notes: meal.notes,
-      confidence: meal.confidence,
-      energyKcal: nut[0]?.energyKcal ?? null,
-      source: nut[0]?.source ?? null,
-      foods: foods.map((f: FoodItemRow) => f.name),
-      hasPhoto: Boolean(meal.telegramFileId),
-    });
-  }
-  return summaries;
-}
