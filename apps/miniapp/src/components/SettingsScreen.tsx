@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
+import { downloadViaTelegram } from '@/lib/telegram';
 
 interface SettingsScreenProps {
   backend: Backend;
@@ -66,18 +67,28 @@ export function SettingsScreen({ backend }: SettingsScreenProps) {
   }
 
   async function handleExport() {
+    const fileName = `foodlog-export-${new Date().toISOString().slice(0, 10)}.json`;
     setExporting(true);
     try {
+      // Inside Telegram, blob URLs don't download — use the native downloader
+      // against the public export URL (auth carried in the query string).
+      const url = backend.exportUrl();
+      if (url && downloadViaTelegram(url, fileName)) {
+        toast.success('Downloading export…');
+        return;
+      }
+
+      // Plain-browser (or local demo) path: build a blob and click a link.
       const data = await backend.exportData();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
+      const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `foodlog-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.href = objectUrl;
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(objectUrl);
       toast.success('Export downloaded');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not export data');

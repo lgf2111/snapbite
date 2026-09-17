@@ -10,9 +10,11 @@
  */
 import {
   backButton,
+  downloadFile,
   hapticFeedback,
   init,
   mainButton,
+  openLink,
   retrieveRawInitData,
   themeParams,
   viewport,
@@ -240,6 +242,35 @@ export function showMainButton(config: MainButtonConfig): (() => void) | null {
       // ignore
     }
   };
+}
+
+// ---------------------------------------------------------------------------
+// File download
+// ---------------------------------------------------------------------------
+
+/**
+ * Downloads a file from a public URL using Telegram's native downloader (which
+ * shows a "download this file?" prompt and saves it to the device). Blob URLs
+ * don't work inside the Telegram webview, so callers must pass a real HTTPS URL
+ * whose auth is carried in the query string. Returns true if the native path
+ * was taken. Falls back to `openLink` (opening the URL in the external browser)
+ * when `downloadFile` isn't available in this client.
+ */
+export function downloadViaTelegram(url: string, fileName: string): boolean {
+  if (!isTelegramEnv()) return false;
+  try {
+    if (available(downloadFile)) {
+      void downloadFile(url, fileName);
+      return true;
+    }
+    if (available(openLink)) {
+      openLink(url);
+      return true;
+    }
+  } catch {
+    // fall through to false so the caller can use the browser blob path
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------

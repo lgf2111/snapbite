@@ -220,6 +220,15 @@ export class ApiClient {
     return this.#request<UserExport>('/api/account/export');
   }
 
+  /**
+   * Public export URL with initData in the query (for Telegram's native
+   * `downloadFile`, which fetches the URL itself and can't send our header).
+   */
+  exportUrl(): string {
+    const initData = encodeURIComponent(this.#getInitData());
+    return `${this.#baseUrl}/api/account/export?initData=${initData}`;
+  }
+
   /** Permanently deletes the user and all their data. */
   deleteAccount(): Promise<{ ok: boolean }> {
     return this.#request<{ ok: boolean }>('/api/account', { method: 'DELETE' });

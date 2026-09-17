@@ -50,6 +50,11 @@ export interface Backend {
   saveApiKey(apiKey: string, aiProvider?: string, aiModel?: string): Promise<SettingsView>;
   /** Full JSON export of the user's data (never includes the API key). */
   exportData(): Promise<UserExport>;
+  /**
+   * Public, auth-carrying URL for the export (worker mode only) so Telegram's
+   * native downloader can fetch it. `null` in local mode.
+   */
+  exportUrl(): string | null;
   /** Permanently deletes the user and all their data. */
   deleteAccount(): Promise<void>;
   /** Photo URL for a meal (worker mode with a telegram file); null otherwise. */
@@ -107,6 +112,9 @@ export function createBackend(): Backend {
       exportData() {
         return api.exportData();
       },
+      exportUrl() {
+        return api.exportUrl();
+      },
       async deleteAccount() {
         await api.deleteAccount();
       },
@@ -154,6 +162,9 @@ export function createBackend(): Backend {
     },
     async exportData() {
       return localExport(loadMeals());
+    },
+    exportUrl() {
+      return null;
     },
     async deleteAccount() {
       clearMeals();

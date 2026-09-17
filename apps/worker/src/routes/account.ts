@@ -10,11 +10,17 @@ export function accountRoutes() {
   const app = new Hono<AppBindings>();
 
   // GET /api/account/export — full JSON export of the user's data.
+  // Sent as an attachment so Telegram's downloadFile / a browser save it with
+  // a sensible filename instead of rendering it inline.
   app.get('/export', async (c) => {
     const db = createAccountDb(c.env.DB);
     const data = await exportUser(db, c.get('userId'));
     if (!data) return c.json({ error: 'Not found' }, 404);
-    return c.json(data);
+    const filename = `foodlog-export-${new Date().toISOString().slice(0, 10)}.json`;
+    return c.body(JSON.stringify(data, null, 2), 200, {
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': `attachment; filename="${filename}"`,
+    });
   });
 
   // DELETE /api/account — permanently delete the user and all their data.
