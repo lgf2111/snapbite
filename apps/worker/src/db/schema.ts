@@ -58,6 +58,12 @@ export const foodItems = sqliteTable(
     portion: text('portion'),
     quantity: real('quantity').notNull().default(1),
     confidence: real('confidence'),
+    // Per-food resolved nutrition (persisted so meals reload with real values).
+    energyKcal: real('energy_kcal'),
+    proteinG: real('protein_g'),
+    carbsG: real('carbs_g'),
+    fatG: real('fat_g'),
+    nutritionSource: text('nutrition_source'),
   },
   (t) => ({
     mealIdx: index('food_items_meal_idx').on(t.mealId),

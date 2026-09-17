@@ -8,7 +8,7 @@ Nutrition is always shown as an **estimate** and is always **editable**. The AI 
 
 ## How it works
 
-Take a photo of a meal. The app sends a downscaled image to a Cloudflare Worker, which calls a vision model (your key) to identify foods, portions, and rough nutrition. A deterministic resolver prefers a bundled per-100g table and falls back to the AI estimate, tagging every value's source (`table` / `ai_estimate` / `manual` / `mixed`). You review and correct on the confirm screen, then save. History, search, and analytics are all computed from stored rows in SQL — no AI calls.
+Take a photo of a meal. The app sends a downscaled image to a Cloudflare Worker, which calls a vision model (your key) to identify foods, portions, and rough nutrition. A deterministic resolver prefers a bundled per-100g table and falls back to the AI estimate, tagging every value's source (`table` / `ai_estimate` / `manual` / `mixed`). You review and correct on the confirm screen, then save. Per-food nutrition is persisted (not just the meal total), so a saved meal reloads with its real values and stays editable. History, search, and analytics are all computed from stored rows in SQL — no AI calls.
 
 Two ways to log:
 - **Mini App** — camera → editable confirm → save. Best for accuracy; review before saving.

@@ -60,6 +60,22 @@ describe('PUT /api/meals/:id', () => {
     expect(detail.foods).toHaveLength(1);
   });
 
+  it('persists per-food nutrition so detail reloads with real values (not zeros)', async () => {
+    const app = createApp();
+    const tgId = 7150;
+    const id = await save(app, tgId, 'chicken curry');
+
+    const detail = (await (
+      await app.request(`/api/meals/${id}`, { headers: await headers(tgId) }, env)
+    ).json()) as {
+      foods: Array<{ energyKcal: number; proteinG: number; nutritionSource: string }>;
+    };
+    // meal() helper sets per-food nutrition energyKcal=100, protein=5, source=table.
+    expect(detail.foods[0]?.energyKcal).toBe(100);
+    expect(detail.foods[0]?.proteinG).toBe(5);
+    expect(detail.foods[0]?.nutritionSource).toBe('table');
+  });
+
   it('returns 404 when updating another user\'s meal', async () => {
     const app = createApp();
     const id = await save(app, 7102, 'private');

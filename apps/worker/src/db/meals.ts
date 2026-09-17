@@ -45,6 +45,11 @@ export async function saveMeal(db: MealsDb, input: SaveMealInput): Promise<strin
         portion: f.food.portion ?? null,
         quantity: f.food.quantity,
         confidence: f.food.confidence,
+        energyKcal: f.nutrition.energyKcal,
+        proteinG: f.nutrition.proteinG,
+        carbsG: f.nutrition.carbsG,
+        fatG: f.nutrition.fatG,
+        nutritionSource: f.nutrition.source,
       }),
     ),
     db.insert(nutrition).values({
@@ -132,6 +137,11 @@ export async function updateMeal(
         portion: f.food.portion ?? null,
         quantity: f.food.quantity,
         confidence: f.food.confidence,
+        energyKcal: f.nutrition.energyKcal,
+        proteinG: f.nutrition.proteinG,
+        carbsG: f.nutrition.carbsG,
+        fatG: f.nutrition.fatG,
+        nutritionSource: f.nutrition.source,
       }),
     ),
     db.insert(nutrition).values({
@@ -186,6 +196,11 @@ export interface MealDetail {
     portion: string | null;
     quantity: number;
     confidence: number | null;
+    energyKcal: number | null;
+    proteinG: number | null;
+    carbsG: number | null;
+    fatG: number | null;
+    nutritionSource: string | null;
   }>;
   total: {
     energyKcal: number;
@@ -230,6 +245,11 @@ export async function getMealDetail(
       portion: f.portion,
       quantity: f.quantity,
       confidence: f.confidence,
+      energyKcal: f.energyKcal,
+      proteinG: f.proteinG,
+      carbsG: f.carbsG,
+      fatG: f.fatG,
+      nutritionSource: f.nutritionSource,
     })),
     total: n
       ? {
