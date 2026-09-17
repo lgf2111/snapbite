@@ -352,22 +352,6 @@ export function MealDetailScreen({
                             <span className="text-muted-foreground">{suffix}</span>
                           </label>
                         ))}
-                        <label className="flex items-center gap-1 text-xs" title="weight">
-                          <span>⚖️</span>
-                          <Input
-                            aria-label={`Food ${i + 1} weight in grams`}
-                            type="number"
-                            min={1}
-                            value={food.estimatedWeightG}
-                            onChange={(e) =>
-                              updateFood(i, {
-                                estimatedWeightG: Math.max(1, Number(e.target.value) || 1),
-                              })
-                            }
-                            className="h-8 w-16 px-2"
-                          />
-                          <span className="text-muted-foreground">g</span>
-                        </label>
                       </div>
                     )}
                   </div>
