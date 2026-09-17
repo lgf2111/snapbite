@@ -42,6 +42,23 @@ const defaultProviderFactory: ProviderFactory = ({ apiKey, provider, model }) =>
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
 /**
+ * Best-effort extraction of a human message from a provider's error body. Both
+ * OpenAI and Gemini return `{ error: { message } }` (Gemini sometimes wraps it
+ * in an array). Returns undefined if nothing useful is found.
+ */
+function extractProviderMessage(cause: unknown): string | undefined {
+  if (typeof cause !== 'string' || !cause.trim()) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(cause);
+    const obj = Array.isArray(parsed) ? parsed[0] : parsed;
+    const msg = (obj as { error?: { message?: unknown } })?.error?.message;
+    return typeof msg === 'string' ? msg : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Meal routes. `analyze` runs the real AI pipeline using the user's decrypted
  * BYOK key and returns an editable MealResult; the uploaded image bytes are
  * used only for the request and then dropped (never persisted).
@@ -100,10 +117,16 @@ export function mealsRoutes(
       const meal = resolveMeal(analysis);
       return c.json(meal);
     } catch (err) {
-      const e = err as { kind?: string; status?: number; message?: string };
+      const e = err as { kind?: string; status?: number; message?: string; cause?: unknown };
       const status = e.kind === 'http' && e.status === 401 ? 400 : 502;
+      // Surface the provider's own message (e.g. a retired-model hint) when present.
+      const providerDetail = extractProviderMessage(e.cause);
       return c.json(
-        { error: 'Analysis failed', detail: e.message ?? 'provider error', kind: e.kind ?? null },
+        {
+          error: 'Analysis failed',
+          detail: providerDetail ?? e.message ?? 'provider error',
+          kind: e.kind ?? null,
+        },
         status,
       );
     }

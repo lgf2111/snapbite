@@ -27,7 +27,8 @@ export const PROVIDER_PRESETS: Record<ProviderId, ProviderPreset> = {
     id: 'gemini',
     label: 'Google Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    defaultModel: 'gemini-2.5-flash',
+    // Gemini rotates model names and retires old ones; keep this current.
+    defaultModel: 'gemini-3.6-flash',
     supportsDetail: false,
     keyHint: 'Get a free key at aistudio.google.com',
   },

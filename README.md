@@ -84,7 +84,7 @@ pnpm --filter @foodlog/miniapp exec wrangler pages deploy dist --project-name=fo
 
 FoodLog is provider-agnostic. Pick a provider and paste your key in **Settings**:
 
-- **Google Gemini** (default, recommended) — best food-vision value; free tier at aistudio.google.com. Default model `gemini-2.5-flash`.
+- **Google Gemini** (default, recommended) — best food-vision value; free tier at aistudio.google.com. Default model `gemini-3.6-flash` (Gemini rotates/retires model names; override in Settings if needed).
 - **OpenAI** — `gpt-4o-mini` by default; strong and reliable.
 - **DeepSeek** — cheapest; weaker at food recognition.
 

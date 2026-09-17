@@ -38,7 +38,7 @@ describe('provider registry', () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
     expect(url).toBe(`${PROVIDER_PRESETS.gemini.baseUrl}/chat/completions`);
     const parsed = JSON.parse(init.body);
-    expect(parsed.model).toBe('gemini-2.5-flash');
+    expect(parsed.model).toBe('gemini-3.6-flash');
     const img = parsed.messages[1].content.find((c: { type: string }) => c.type === 'image_url');
     // Gemini's compat layer doesn't take `detail`; we must not send it.
     expect(img.image_url.detail).toBeUndefined();
