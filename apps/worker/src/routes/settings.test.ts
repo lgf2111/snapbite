@@ -113,6 +113,68 @@ describe('PUT /api/settings', () => {
   });
 });
 
+describe('PUT /api/settings/profile', () => {
+  const profile = {
+    sex: 'male',
+    age: 30,
+    heightCm: 180,
+    weightKg: 80,
+    activity: 'moderate',
+    goal: 'maintain',
+    units: 'metric',
+    mode: 'simple',
+  };
+
+  it('stores a profile and returns computed targets', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(1201)), 'content-type': 'application/json' };
+    const res = await app.request(
+      '/api/settings/profile',
+      { method: 'PUT', headers, body: JSON.stringify({ profile }) },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { targets: { energyKcal: number; proteinG: number } };
+    expect(body.targets.energyKcal).toBe(2760);
+    expect(body.targets.proteinG).toBe(144);
+
+    // GET now surfaces the profile + targets.
+    const get = await app.request('/api/settings', { headers: await authHeaders(1201) }, env);
+    const g = (await get.json()) as {
+      profile: { goal: string } | null;
+      targets: { energyKcal: number } | null;
+    };
+    expect(g.profile?.goal).toBe('maintain');
+    expect(g.targets?.energyKcal).toBe(2760);
+  });
+
+  it('rejects an invalid profile', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(1202)), 'content-type': 'application/json' };
+    const res = await app.request(
+      '/api/settings/profile',
+      { method: 'PUT', headers, body: JSON.stringify({ profile: { sex: 'male', age: 5 } }) },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('lets a user set a profile before adding an API key', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(1203)), 'content-type': 'application/json' };
+    const res = await app.request(
+      '/api/settings/profile',
+      { method: 'PUT', headers, body: JSON.stringify({ profile }) },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const get = await app.request('/api/settings', { headers: await authHeaders(1203) }, env);
+    const body = (await get.json()) as { connected: boolean; profile: unknown };
+    expect(body.connected).toBe(false);
+    expect(body.profile).not.toBeNull();
+  });
+});
+
 describe('POST /api/settings/test', () => {
   it('returns 400 when no key is saved', async () => {
     const app = createApp();

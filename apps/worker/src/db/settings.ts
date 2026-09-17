@@ -48,3 +48,23 @@ export async function saveEncryptedKey(db: SettingsDb, input: SaveKeyInput): Pro
       },
     });
 }
+
+/**
+ * Upserts the user's preferences (profile + goal) as JSON in `preferences_json`.
+ * Creates the settings row if it doesn't exist yet (with default provider), so
+ * a user can set their goal before adding an API key.
+ */
+export async function savePreferences(
+  db: SettingsDb,
+  userId: string,
+  preferencesJson: string,
+): Promise<void> {
+  const now = Date.now();
+  await db
+    .insert(settings)
+    .values({ userId, preferencesJson, updatedAt: now })
+    .onConflictDoUpdate({
+      target: settings.userId,
+      set: { preferencesJson, updatedAt: now },
+    });
+}

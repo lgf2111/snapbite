@@ -1,5 +1,6 @@
+import type { DailyTargets } from '@foodlog/core';
 import { Home, Settings as SettingsIcon } from 'lucide-react';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { HomeScreen } from './components/HomeScreen.js';
 import { Skeleton } from './components/ui/skeleton';
@@ -13,6 +14,9 @@ const SettingsScreen = lazy(() =>
 );
 const MealDetailScreen = lazy(() =>
   import('./components/MealDetailScreen.js').then((m) => ({ default: m.MealDetailScreen })),
+);
+const OnboardingScreen = lazy(() =>
+  import('./components/OnboardingScreen.js').then((m) => ({ default: m.OnboardingScreen })),
 );
 
 type Tab = 'home' | 'settings';
@@ -40,10 +44,68 @@ function ScreenFallback() {
 export function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [detailAiInstruction, setDetailAiInstruction] = useState<string | null>(null);
   // Bump to force Home to refetch after a detail-screen edit/delete.
   const [homeVersion, setHomeVersion] = useState(0);
 
-  const openMeal = (id: string) => setDetailId(id);
+  // Profile/targets drive the Home rings + onboarding gate.
+  const [targets, setTargets] = useState<DailyTargets | null>(null);
+  const [hasProfile, setHasProfile] = useState<boolean | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingSkipped, setOnboardingSkipped] = useState(false);
+
+  const refreshProfile = () => {
+    backend
+      .getSettings()
+      .then((s) => {
+        setTargets(s.targets ?? null);
+        setHasProfile(Boolean(s.profile));
+      })
+      .catch(() => {
+        setTargets(null);
+        setHasProfile(false);
+      });
+  };
+
+  useEffect(refreshProfile, []);
+
+  // First-run onboarding (skippable): show once when we know there's no profile.
+  useEffect(() => {
+    if (hasProfile === false && !onboardingSkipped) setShowOnboarding(true);
+  }, [hasProfile, onboardingSkipped]);
+
+  const openMeal = (id: string) => {
+    setDetailAiInstruction(null);
+    setDetailId(id);
+  };
+  const openMealWithAi = (id: string) => {
+    setDetailAiInstruction('');
+    setDetailId(id);
+  };
+
+  if (showOnboarding) {
+    return (
+      <div className="mx-auto flex min-h-svh max-w-md flex-col p-4">
+        <Suspense fallback={<ScreenFallback />}>
+          <OnboardingScreen
+            backend={backend}
+            onDone={(t) => {
+              setTargets(t);
+              setHasProfile(true);
+              setShowOnboarding(false);
+              setHomeVersion((v) => v + 1);
+            }}
+            onSkip={() => {
+              setOnboardingSkipped(true);
+              setShowOnboarding(false);
+            }}
+            onToast={toastFn}
+          />
+        </Suspense>
+        <Toaster />
+      </div>
+    );
+  }
 
   if (detailId) {
     return (
@@ -55,6 +117,7 @@ export function App() {
             onBack={() => setDetailId(null)}
             onChanged={() => setHomeVersion((v) => v + 1)}
             onToast={toastFn}
+            initialAiInstruction={detailAiInstruction}
           />
         </Suspense>
         <Toaster />
@@ -71,11 +134,19 @@ export function App() {
       >
         <div className="flex-1 overflow-y-auto p-4 pb-24">
           <TabsContent value="home">
-            <HomeScreen key={homeVersion} backend={backend} onOpenMeal={openMeal} onToast={toastFn} />
+            <HomeScreen
+              key={homeVersion}
+              backend={backend}
+              targets={targets}
+              onOpenMeal={openMeal}
+              onOpenMealWithAi={openMealWithAi}
+              onSetGoal={() => setShowOnboarding(true)}
+              onToast={toastFn}
+            />
           </TabsContent>
           <TabsContent value="settings">
             <Suspense fallback={<ScreenFallback />}>
-              <SettingsScreen backend={backend} />
+              <SettingsScreen backend={backend} onProfileSaved={refreshProfile} />
             </Suspense>
           </TabsContent>
         </div>

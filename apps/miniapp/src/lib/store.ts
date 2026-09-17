@@ -1,4 +1,4 @@
-import type { MealResult } from '@foodlog/core';
+import type { MealResult, UserProfile } from '@foodlog/core';
 
 /** A meal saved locally (Task 5 has no backend). */
 export interface SavedMeal {
@@ -73,4 +73,34 @@ export function deleteSavedMeal(id: string): boolean {
   if (next.length === all.length) return false;
   writeAll(next);
   return true;
+}
+
+const PROFILE_KEY = 'foodlog.profile.v1';
+
+/** Reads the locally stored user profile (browser-dev / local mode). */
+export function loadProfile(): UserProfile | null {
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY);
+    return raw ? (JSON.parse(raw) as UserProfile) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persists the user profile locally. */
+export function saveProfileLocal(profile: UserProfile): void {
+  try {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  } catch {
+    // storage unavailable — non-fatal
+  }
+}
+
+/** Clears the locally stored profile (used by local-mode account deletion). */
+export function clearProfile(): void {
+  try {
+    localStorage.removeItem(PROFILE_KEY);
+  } catch {
+    // non-fatal
+  }
 }

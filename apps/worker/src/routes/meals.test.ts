@@ -137,7 +137,7 @@ describe('POST /api/meals/:id/revise', () => {
     return id;
   }
 
-  it('revises an owned meal and persists the new foods', async () => {
+  it('returns the AI-revised meal as a draft WITHOUT persisting', async () => {
     const tgId = 4001;
     const id = await saveRice(tgId);
     const app = reviseApp({
@@ -161,9 +161,15 @@ describe('POST /api/meals/:id/revise', () => {
       env,
     );
     expect(res.status).toBe(200);
-    const detail = (await res.json()) as { foods: Array<{ name: string }> };
-    expect(detail.foods.map((f) => f.name)).toContain('cola');
-    expect(detail.foods).toHaveLength(2);
+    const body = (await res.json()) as { meal: { foods: Array<{ food: { name: string } }> } };
+    expect(body.meal.foods.map((f) => f.food.name)).toContain('cola');
+    expect(body.meal.foods).toHaveLength(2);
+
+    // Draft: the stored meal is unchanged until the client saves.
+    const stored = await app.request(`/api/meals/${id}`, { headers: await headers(tgId) }, env);
+    const detail = (await stored.json()) as { foods: Array<{ name: string }> };
+    expect(detail.foods).toHaveLength(1);
+    expect(detail.foods.map((f) => f.name)).not.toContain('cola');
   });
 
   it('requires a non-empty instruction', async () => {

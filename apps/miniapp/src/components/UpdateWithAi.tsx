@@ -1,4 +1,5 @@
-import { Loader2, Sparkles } from 'lucide-react';
+import type { MealResult } from '@foodlog/core';
+import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,34 +16,45 @@ import { hapticNotify } from '@/lib/telegram';
 
 type ToastKind = 'success' | 'error' | 'info';
 
-interface UpdateWithAiProps {
+interface ReviseWithAiDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   backend: Backend;
   mealId: string;
-  /** Render style: an icon button (compact, for rows) or a full-width button. */
-  variant?: 'icon' | 'button';
-  onDone?: () => void;
+  /** Pre-fill the instruction (e.g. when opened from a Home row). */
+  initialInstruction?: string;
+  /**
+   * Called with the AI's revised meal (a DRAFT). The parent applies it to the
+   * editable meal for review; nothing is saved until the user hits Save.
+   */
+  onDraft: (revised: MealResult) => void;
   onToast?: (kind: ToastKind, message: string) => void;
 }
 
 /**
- * "Update with AI" — the user types a plain-language change ("add a coke",
- * "double the rice") and the meal is rewritten by the AI. Opens a small dialog
- * with an input + submit; shows a spinner while the model runs.
+ * "Update with AI" dialog. The user types a plain-language change ("add a
+ * coke", "double the rice"); the meal is revised by the AI and returned as a
+ * draft for review. The parent screen applies the draft and the user saves.
  */
-export function UpdateWithAi({
+export function ReviseWithAiDialog({
+  open,
+  onOpenChange,
   backend,
   mealId,
-  variant = 'button',
-  onDone,
+  initialInstruction = '',
+  onDraft,
   onToast,
-}: UpdateWithAiProps) {
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState('');
+}: ReviseWithAiDialogProps) {
+  const [text, setText] = useState(initialInstruction);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
 
-  // While the AI runs, cycle a status message so it visibly progresses instead
-  // of looking hung on a static "Updating…".
+  // Reset the input to the initial instruction whenever the dialog opens.
+  useEffect(() => {
+    if (open) setText(initialInstruction);
+  }, [open, initialInstruction]);
+
+  // Cycle a status message while the model runs so it visibly progresses.
   useEffect(() => {
     if (!busy) {
       setStatus('');
@@ -68,12 +80,12 @@ export function UpdateWithAi({
     if (!instruction || busy) return;
     setBusy(true);
     try {
-      await backend.reviseWithAi(mealId, instruction);
+      const revised = await backend.reviseDraft(mealId, instruction);
       hapticNotify('success');
-      onToast?.('success', 'Meal updated');
-      setOpen(false);
+      onToast?.('success', 'Applied — review and save');
+      onDraft(revised);
+      onOpenChange(false);
       setText('');
-      onDone?.();
     } catch (e) {
       hapticNotify('error');
       onToast?.('error', e instanceof Error ? e.message : 'Could not update');
@@ -83,72 +95,48 @@ export function UpdateWithAi({
   }
 
   return (
-    <>
-      {variant === 'icon' ? (
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Update with AI"
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpen(true);
+    <Dialog open={open} onOpenChange={(o) => (busy ? null : onOpenChange(o))}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Update with AI</DialogTitle>
+          <DialogDescription>
+            Describe the change in plain words — e.g. "add a can of coke", "the rice was double",
+            or "remove the fries". You'll review the result before saving.
+          </DialogDescription>
+        </DialogHeader>
+        <Input
+          autoFocus
+          placeholder="Describe the change…"
+          value={text}
+          maxLength={500}
+          disabled={busy}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void submit();
           }}
-        >
-          <Sparkles className="text-primary size-4" />
-        </Button>
-      ) : (
-        <Button variant="secondary" className="gap-2" onClick={() => setOpen(true)}>
-          <Sparkles className="text-primary size-4" />
-          Update with AI
-        </Button>
-      )}
-
-      <Dialog open={open} onOpenChange={(o) => (busy ? null : setOpen(o))}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Update with AI</DialogTitle>
-            <DialogDescription>
-              Describe the change in plain words — e.g. "add a can of coke", "the rice was double",
-              or "remove the fries".
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            autoFocus
-            placeholder="Describe the change…"
-            value={text}
-            maxLength={500}
-            disabled={busy}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void submit();
-            }}
-          />
-          {busy && (
-            <p
-              className="text-muted-foreground flex items-center gap-2 text-sm"
-              aria-live="polite"
-            >
-              <Loader2 className="size-4 animate-spin" />
-              {status}
-            </p>
-          )}
-          <DialogFooter>
-            <Button variant="secondary" disabled={busy} onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button disabled={busy || !text.trim()} onClick={() => void submit()}>
-              {busy ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Updating…
-                </>
-              ) : (
-                'Update'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+        />
+        {busy && (
+          <p className="text-muted-foreground flex items-center gap-2 text-sm" aria-live="polite">
+            <Loader2 className="size-4 animate-spin" />
+            {status}
+          </p>
+        )}
+        <DialogFooter>
+          <Button variant="secondary" disabled={busy} onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button disabled={busy || !text.trim()} onClick={() => void submit()}>
+            {busy ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Updating…
+              </>
+            ) : (
+              'Apply'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

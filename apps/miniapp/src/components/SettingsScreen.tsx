@@ -1,5 +1,5 @@
-import { PROVIDER_PRESETS, type ProviderId } from '@foodlog/core';
-import { CheckCircle2, Download, ShieldCheck, Trash2 } from 'lucide-react';
+import { PROVIDER_PRESETS, type ProviderId, type UserProfile } from '@foodlog/core';
+import { CheckCircle2, Download, Pencil, ShieldCheck, Target, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -17,14 +17,20 @@ import { Label } from '@/components/ui/label';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
 import { downloadViaTelegram, openExportUrl } from '@/lib/telegram';
+import { MacroLine } from './MacroLine.js';
+import { ProfileForm } from './ProfileForm.js';
 
 interface SettingsScreenProps {
   backend: Backend;
+  /** Called after the profile is saved, so the app can refresh Home targets. */
+  onProfileSaved?: () => void;
 }
+
+const GOAL_LABEL: Record<string, string> = { lose: 'Lose weight', maintain: 'Maintain', gain: 'Gain' };
 
 const PROVIDERS = Object.values(PROVIDER_PRESETS);
 
-export function SettingsScreen({ backend }: SettingsScreenProps) {
+export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps) {
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [provider, setProvider] = useState<ProviderId>('gemini');
   const [model, setModel] = useState('');
@@ -33,6 +39,8 @@ export function SettingsScreen({ backend }: SettingsScreenProps) {
   const [exporting, setExporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     backend
@@ -63,6 +71,21 @@ export function SettingsScreen({ backend }: SettingsScreenProps) {
       toast.error(e instanceof Error ? e.message : 'Could not save key');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveProfile(profile: UserProfile) {
+    setSavingProfile(true);
+    try {
+      const targets = await backend.saveProfile(profile);
+      setSettings((s) => (s ? { ...s, profile, targets } : s));
+      setEditingProfile(false);
+      onProfileSaved?.();
+      toast.success('Goal updated');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not save profile');
+    } finally {
+      setSavingProfile(false);
     }
   }
 
@@ -129,6 +152,47 @@ export function SettingsScreen({ backend }: SettingsScreenProps) {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold">Settings</h1>
+
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <Target className="text-primary size-5" />
+            <span className="font-medium">Your goal &amp; targets</span>
+          </div>
+
+          {editingProfile ? (
+            <ProfileForm
+              initial={settings?.profile ?? null}
+              submitLabel="Save goal"
+              saving={savingProfile}
+              onSubmit={handleSaveProfile}
+            />
+          ) : settings?.profile && settings?.targets ? (
+            <>
+              <p className="text-muted-foreground text-sm">
+                {GOAL_LABEL[settings.profile.goal] ?? settings.profile.goal} ·{' '}
+                {settings.profile.sex}, {settings.profile.age}y
+              </p>
+              <MacroLine
+                energyKcal={settings.targets.energyKcal}
+                proteinG={settings.targets.proteinG}
+                carbsG={settings.targets.carbsG}
+                fatG={settings.targets.fatG}
+              />
+              <Button variant="secondary" className="gap-2" onClick={() => setEditingProfile(true)}>
+                <Pencil className="size-4" /> Edit goal
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-muted-foreground text-sm">
+                Set your details and goal to get daily calorie and macro targets.
+              </p>
+              <Button onClick={() => setEditingProfile(true)}>Set your goal</Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {isLocal ? (
         <Card>

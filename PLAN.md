@@ -288,9 +288,11 @@ The AI revise could hang the UI on a static "Updating…" when the provider was 
 
 ---
 
-## 12. Goals, onboarding & daily targets with progress rings (PLANNED)
+## 12. Goals, onboarding & daily targets with progress rings (DELIVERED)
 
-Plan-only — nothing built yet. Goals, in the user's words:
+> **Status: shipped & deployed.** Worker `b820124a` + Pages redeployed. Tests green: core 90, cli 8, miniapp 16, worker 56. No DB migration (profile lives in the existing `preferences_json`). See §12.6 for what shipped.
+
+Goals, in the user's words:
 
 1. Research how to compute a user's daily calorie need from their goal (done — see §12.1).
 2. **Onboarding**: if the user hasn't entered their profile, show an onboarding flow on first open.
@@ -361,16 +363,44 @@ Store as `preferences_json = { profile, updatedAt }`. Targets are recomputed fro
 - Onboarding + Settings profile form can be part of the existing lazy Settings chunk; Onboarding is only loaded when needed.
 - Rings render instantly from the day fetch; no extra round-trip beyond the existing day list (+ the targets that come with settings, fetched once).
 
-### 12.4 Decisions (please confirm)
+### 12.4 Decisions (confirmed)
 
-1. **Onboarding gating:** hard-block the app until the profile is filled, or allow "skip for now" (rings hidden until set)? *Default: allow skip — show a soft prompt on Home ("Set your goal to see targets") so the app is usable immediately; onboarding is one tap away.*
-2. **Units:** metric only (kg/cm), or also imperial (lb/ft-in)? *Default: metric only for v1 (simplest, matches the formula); can add a toggle later.*
-3. **Goal presets vs custom deficit:** fixed lose/maintain/gain (−20%/0/+10%), or also a custom kcal target? *Default: presets + a manual calorie/macro override field for power users.*
-4. **Protein basis:** 1.8 g/kg of current bodyweight (default) — fine, or prefer goal-weight/LBM? *Default: 1.8 g/kg current weight.*
+1. **Onboarding: allow "skip for now."** The app is usable immediately; Home shows a soft "Set your goal to see targets" prompt (instead of rings) until a profile exists. Onboarding is one tap away and non-blocking.
+2. **Units: default kg/cm, user-selectable in Settings.** Add a `units: 'metric' | 'imperial'` preference. Inputs display/collect in the chosen units; the core math always converts to kg/cm internally. Stored profile keeps canonical kg/cm plus the display `units`.
+3. **Simple vs Advanced mode (toggle).** A `mode: 'simple' | 'advanced'` toggle in the profile form:
+   - **Simple:** just the goal presets (lose −20% / maintain / gain +10%) computed from the profile.
+   - **Advanced:** power-user fields — manual calorie target override and manual macro (P/C/F gram) overrides, plus the activity multiplier. When set, overrides win over computed values.
+4. **Protein basis: 1.8 g/kg current bodyweight.**
 
-### 12.5 Build order (once confirmed)
+### 12.4b Update-with-AI reworked to a review-before-save draft
 
-1. Core `profile/` (schema + BMR/TDEE/targets) + tests. Build core.
-2. Worker: `preferences_json` read/write, `GET /api/settings` (+profile+targets), `PUT /api/settings/profile`, P/C/F in day summaries. Tests. Deploy.
-3. Mini App: api/backend profile methods; OnboardingScreen; Settings profile card; ProgressRing + Home rings; wire consumed-vs-target. Tests + build.
-4. Verify workspace typecheck + tests + build; deploy Worker + Pages; update README + PLAN §12 (delivered); commit + push. No DB migration.
+Per the user: **Update with AI must edit the draft, not persist immediately.** The user reviews the AI's changes and only `Save changes` commits them. Specifics:
+- On the **detail screen**, `Update with AI` calls a new **draft** path (not the persisting endpoint): it returns a revised `MealResult`/foods that replace the in-memory editable `foods` state, marking the meal **dirty** so `Save changes` lights up. Nothing is written until the user saves.
+- **AI-removed foods aren't dropped silently.** They stay listed but marked **"will be removed"** (struck-through / dimmed with an Undo), and are excluded from the saved payload only when the user actually saves. This makes deletions reviewable, matching the manual per-food remove behavior.
+- The **X (close) button = discard changes** (revert the draft to the last-saved state and leave the unsaved edits behind), consistent with the native BackButton. If there are unsaved edits, confirm before discarding.
+- **Home row `Update with AI`** (the compact icon): since there's no draft/review surface on a row, tapping it **opens the meal detail** with the AI instruction pre-applied as a draft (so review+save happens on the detail screen). Alternatively it can just open detail and let the user run it there. **Decision:** the row icon opens the detail screen and immediately starts the AI edit as a draft there — one consistent review-before-save surface.
+- **Worker:** add a **stateless** `POST /api/meals/:id/revise-draft` (or reuse revise with a `?dry=1`/`draft:true` flag) that runs the AI + resolver and **returns the revised meal WITHOUT calling `updateMeal`**. The existing persisting `POST /api/meals/:id/revise` can be removed/retired in favor of draft + the normal `PUT /api/meals/:id` save. **Decision:** replace the persisting revise with a draft-only endpoint; saving continues to use `PUT /api/meals/:id` (already dirty-gated).
+
+### 12.5 Build order (confirmed)
+
+1. **Core `profile/`** — `UserProfile` Zod schema (sex, age, heightCm, weightKg, activity, goal, units, mode, overrides), unit conversion helpers, `computeBmr/computeTdee/computeTargets` (honoring simple presets vs advanced overrides). Tests. Build core.
+2. **Revise → draft (core + worker):** change `reviseMeal` usage to a draft flow — worker `POST /api/meals/:id/revise` now returns the revised `MealResult` **without persisting** (dry run); saving stays on `PUT /api/meals/:id`. Update worker tests.
+3. **Worker profile:** `preferences_json` read/write, `GET /api/settings` returns `profile`+`targets`+`units`+`mode`, `PUT /api/settings/profile` (validates), P/C/F added to `MealSummary`/day summaries. Tests. Deploy.
+4. **Mini App:**
+   - api/backend: `reviseDraft(id, instruction) → MealResult`, `getProfile`/`saveProfile`; settings returns profile+targets; local mode stores profile in localStorage.
+   - **MealDetailScreen:** Update-with-AI applies to the draft (marks dirty, no save); AI-removed foods show "will be removed" + Undo; X = discard (confirm if dirty); Save persists via existing PUT.
+   - **Home row Update-with-AI:** opens detail and starts the draft edit there.
+   - **Onboarding** (skippable) + **Settings profile card** (units picker, simple/advanced toggle, overrides).
+   - **ProgressRing** + Home rings (remaining kcal/P/C/F for the selected day) with over-target handling; soft prompt when no profile.
+5. **Verify** workspace typecheck + tests + build; deploy Worker + Pages; update README + PLAN §12 (delivered); commit + push. No DB migration.
+
+### 12.6 What shipped (delivered)
+
+- **Core `profile/`:** `UserProfile` Zod schema (sex, age, heightCm, weightKg, activity, goal, units, mode, optional calorie/macro overrides) + `DailyTargets`; `computeBmr` (Mifflin-St Jeor), `computeTdee` (activity 1.2–1.9), `computeTargets` (goal lose 0.8 / maintain 1.0 / gain 1.1; protein 1.8 g/kg, fat 25%, carbs remainder; ≥1200 kcal; advanced overrides win); unit helpers (kg↔lb, cm↔in, ft-in↔cm). 14 tests.
+- **Worker:** `PUT /api/settings/profile` (validate + store in `preferences_json`); `GET /api/settings` now returns `profile` + computed `targets`; profile can be set before an API key exists. `MealSummary` gained `proteinG/carbsG/fatG` so the day view can total macros. **Revise is now a DRAFT** — `POST /api/meals/:id/revise` returns the revised `MealResult` **without persisting**; saving stays on `PUT /api/meals/:id`.
+- **Mini App:**
+  - **Onboarding** (skippable, lazy) collects the profile and previews targets; "Skip for now" leaves the app usable with a soft "Set your goal" prompt on Home.
+  - **Home rings:** four `ProgressRing`s (kcal + protein/carbs/fat) show remaining vs. target for the selected day; over-target turns the ring red and shows "over". No profile → the soft prompt card.
+  - **Settings profile card:** view goal + targets, edit via the shared `ProfileForm` (units picker metric/imperial, simple/advanced toggle with manual overrides, live target preview).
+  - **Update-with-AI = review before save:** the AI edit applies to the editable draft (marks it dirty) instead of persisting. AI-removed foods aren't dropped — they show struck-through as "will be removed" with an Undo, and are only dropped on Save. The **X** button discards changes (confirms if dirty). The Home row's ✨ icon opens the meal detail and starts the AI edit there, so review+save always happen on one surface.
+- **No DB migration** — the profile is stored in the pre-existing `settings.preferences_json` column. New Mini App deps: none beyond the earlier calendar work (uses the existing shadcn primitives).

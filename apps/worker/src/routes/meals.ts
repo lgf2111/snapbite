@@ -238,9 +238,10 @@ export function mealsRoutes(
     return c.json({ ok: true });
   });
 
-  // POST /api/meals/:id/revise — { instruction } -> AI-revised meal, persisted.
+  // POST /api/meals/:id/revise — { instruction } -> AI-revised meal (DRAFT).
   // Sends the current meal + the plain-language instruction to the provider
-  // (no image), re-resolves nutrition, saves, and returns the new MealDetail.
+  // (no image), re-resolves nutrition, and RETURNS the revised MealResult
+  // WITHOUT persisting. The client reviews it and saves via PUT /api/meals/:id.
   app.post('/:id/revise', async (c) => {
     if (!c.env.ENCRYPTION_KEY) {
       return c.json({ error: 'Server misconfigured', detail: 'No encryption key' }, 500);
@@ -290,11 +291,9 @@ export function mealsRoutes(
       const analysis = await provider.reviseMeal(detailToAnalysis(detail), instruction, {
         signal: ac.signal,
       });
+      // Draft only: return the revised meal for the client to review + save.
       const meal = resolveMeal(analysis);
-      const ok = await updateMeal(mealsDb, id, c.get('userId'), meal);
-      if (!ok) return c.json({ error: 'Not found' }, 404);
-      const updated = await getMealDetail(mealsDb, id, c.get('userId'));
-      return c.json(updated);
+      return c.json({ meal });
     } catch (err) {
       if (ac.signal.aborted) {
         return c.json(

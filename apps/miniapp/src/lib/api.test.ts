@@ -56,16 +56,38 @@ describe('ApiClient', () => {
     });
   });
 
-  it('revises a meal via POST /api/meals/:id/revise', async () => {
-    const detail = { id: 'meal-9', foods: [{ name: 'rice' }] };
-    const fetchMock = vi.fn(async () => jsonResponse(detail));
+  it('revises a meal (draft) via POST /api/meals/:id/revise and returns the meal', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ meal }));
     const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
     const res = await client.reviseMeal('meal-9', 'add a coke');
-    expect((res as { id: string }).id).toBe('meal-9');
+    // Returns the draft MealResult unwrapped from { meal }.
+    expect(res.total.energyKcal).toBe(260);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://api.example.com/api/meals/meal-9/revise');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toMatchObject({ instruction: 'add a coke' });
+  });
+
+  it('saves a profile via PUT /api/settings/profile', async () => {
+    const profile = {
+      sex: 'male' as const,
+      age: 30,
+      heightCm: 180,
+      weightKg: 80,
+      activity: 'moderate' as const,
+      goal: 'maintain' as const,
+      units: 'metric' as const,
+      mode: 'simple' as const,
+    };
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ ok: true, profile, targets: { energyKcal: 2760, proteinG: 144, carbsG: 373, fatG: 77 } }),
+    );
+    const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
+    const res = await client.saveProfile(profile);
+    expect(res.targets.energyKcal).toBe(2760);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://api.example.com/api/settings/profile');
+    expect(init.method).toBe('PUT');
   });
 
   it('exposes ApiError as an Error subclass', () => {

@@ -1,4 +1,4 @@
-import type { MealResult } from '@foodlog/core';
+import { computeTargets, type DailyTargets, type MealResult, type UserProfile } from '@foodlog/core';
 import {
   ApiClient,
   type MealDetail,
@@ -9,9 +9,12 @@ import {
 import { readConfig } from './config.js';
 import {
   clearMeals,
+  clearProfile,
   deleteSavedMeal,
   loadMeals,
+  loadProfile,
   type SavedMeal,
+  saveProfileLocal,
   updateSavedMeal,
 } from './store.js';
 import { getRawInitData } from './telegram.js';
@@ -21,6 +24,9 @@ export interface RecentMeal {
   id: string;
   label: string;
   energyKcal: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
   when: number;
   previewUrl?: string;
 }
@@ -33,8 +39,11 @@ export interface RecentMeal {
 export interface Backend {
   readonly mode: 'worker' | 'local';
   update(id: string, meal: MealResult): Promise<void>;
-  /** AI-revise a meal from a plain-language instruction. Returns the new detail. */
-  reviseWithAi(id: string, instruction: string): Promise<MealDetail>;
+  /**
+   * AI-revise a meal from a plain-language instruction. Returns a DRAFT
+   * MealResult (not persisted) for the caller to review and save via update().
+   */
+  reviseDraft(id: string, instruction: string): Promise<MealResult>;
   remove(id: string): Promise<void>;
   recent(): Promise<RecentMeal[]>;
   /** Meals for one day (YYYY-MM-DD), newest first. */
@@ -44,6 +53,8 @@ export interface Backend {
   detail(id: string): Promise<MealDetail>;
   getSettings(): Promise<SettingsView>;
   saveApiKey(apiKey: string, aiProvider?: string, aiModel?: string): Promise<SettingsView>;
+  /** Stores the user's profile + goal; returns the computed daily targets. */
+  saveProfile(profile: UserProfile): Promise<DailyTargets>;
   /** Full JSON export of the user's data (never includes the API key). */
   exportData(): Promise<UserExport>;
   /**
@@ -67,7 +78,7 @@ export function createBackend(): Backend {
       async update(id, meal) {
         await api.updateMeal(id, meal);
       },
-      reviseWithAi(id, instruction) {
+      reviseDraft(id, instruction) {
         return api.reviseMeal(id, instruction);
       },
       async remove(id) {
@@ -100,6 +111,10 @@ export function createBackend(): Backend {
           keyLast4: res.keyLast4,
         };
       },
+      async saveProfile(profile) {
+        const res = await api.saveProfile(profile);
+        return res.targets;
+      },
       exportData() {
         return api.exportData();
       },
@@ -120,7 +135,7 @@ export function createBackend(): Backend {
     async update(id, meal) {
       updateSavedMeal(id, meal);
     },
-    async reviseWithAi(id) {
+    async reviseDraft(id) {
       // AI edits need the backend (the user's key + model live server-side).
       const saved = loadMeals().find((m) => m.id === id);
       if (!saved) throw new Error('Meal not found');
@@ -149,10 +164,30 @@ export function createBackend(): Backend {
     },
     // Local (no-backend) mode uses the mock processor, which needs no key.
     async getSettings() {
-      return { aiProvider: 'mock', aiModel: null, connected: true, keyLast4: null };
+      const profile = loadProfile();
+      return {
+        aiProvider: 'mock',
+        aiModel: null,
+        connected: true,
+        keyLast4: null,
+        profile,
+        targets: profile ? computeTargets(profile) : null,
+      };
     },
     async saveApiKey() {
-      return { aiProvider: 'mock', aiModel: null, connected: true, keyLast4: null };
+      const profile = loadProfile();
+      return {
+        aiProvider: 'mock',
+        aiModel: null,
+        connected: true,
+        keyLast4: null,
+        profile,
+        targets: profile ? computeTargets(profile) : null,
+      };
+    },
+    async saveProfile(profile) {
+      saveProfileLocal(profile);
+      return computeTargets(profile);
     },
     async exportData() {
       return localExport(loadMeals());
@@ -162,6 +197,7 @@ export function createBackend(): Backend {
     },
     async deleteAccount() {
       clearMeals();
+      clearProfile();
     },
     photoUrl(id) {
       // Local mode stores a data-URL preview on the saved meal, if any.
@@ -230,6 +266,9 @@ function toRecent(m: MealSummary, photoUrl?: (id: string) => string): RecentMeal
     id: m.id,
     label: m.foods.join(', ') || 'Meal',
     energyKcal: m.energyKcal,
+    proteinG: m.proteinG,
+    carbsG: m.carbsG,
+    fatG: m.fatG,
     when: m.loggedAt,
     ...(m.hasPhoto && photoUrl ? { previewUrl: photoUrl(m.id) } : {}),
   };
@@ -240,6 +279,9 @@ function fromSaved(m: SavedMeal): RecentMeal {
     id: m.id,
     label: m.meal.foods.map((f) => f.food.name).join(', ') || 'Meal',
     energyKcal: m.meal.total.energyKcal,
+    proteinG: m.meal.total.proteinG,
+    carbsG: m.meal.total.carbsG,
+    fatG: m.meal.total.fatG,
     when: new Date(m.savedAt).getTime(),
     ...(m.previewUrl ? { previewUrl: m.previewUrl } : {}),
   };

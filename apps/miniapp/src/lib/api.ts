@@ -1,4 +1,4 @@
-import type { MealImage, MealResult } from '@foodlog/core';
+import type { DailyTargets, MealImage, MealResult, UserProfile } from '@foodlog/core';
 
 /** Header the Worker expects the signed initData in (matches the Worker). */
 const INIT_DATA_HEADER = 'x-telegram-init-data';
@@ -14,6 +14,9 @@ export interface MealSummary {
   notes: string | null;
   confidence: number | null;
   energyKcal: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
   source: string | null;
   foods: string[];
   hasPhoto: boolean;
@@ -59,6 +62,8 @@ export interface SettingsView {
   aiModel: string | null;
   connected: boolean;
   keyLast4: string | null;
+  profile?: UserProfile | null;
+  targets?: DailyTargets | null;
 }
 
 /**
@@ -203,13 +208,20 @@ export class ApiClient {
     return this.#request<MealDetail>(`/api/meals/${encodeURIComponent(id)}`);
   }
 
-  /** AI-revise an owned meal from a plain-language instruction; returns the new detail. */
-  reviseMeal(id: string, instruction: string): Promise<MealDetail> {
-    return this.#request<MealDetail>(`/api/meals/${encodeURIComponent(id)}/revise`, {
-      method: 'POST',
-      body: JSON.stringify({ instruction }),
-      timeoutMs: AI_TIMEOUT_MS,
-    });
+  /**
+   * AI-revise an owned meal from a plain-language instruction. Returns a DRAFT
+   * MealResult (not persisted) for the client to review and save via update().
+   */
+  async reviseMeal(id: string, instruction: string): Promise<MealResult> {
+    const res = await this.#request<{ meal: MealResult }>(
+      `/api/meals/${encodeURIComponent(id)}/revise`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ instruction }),
+        timeoutMs: AI_TIMEOUT_MS,
+      },
+    );
+    return res.meal;
   }
 
   /** Builds a photo URL for a meal (initData in the query — used as an <img> src). */
@@ -230,6 +242,14 @@ export class ApiClient {
     return this.#request('/api/settings', {
       method: 'PUT',
       body: JSON.stringify({ apiKey, aiProvider, aiModel }),
+    });
+  }
+
+  /** Stores the user's profile + goal; returns the computed targets. */
+  saveProfile(profile: UserProfile): Promise<{ ok: boolean; profile: UserProfile; targets: DailyTargets }> {
+    return this.#request('/api/settings/profile', {
+      method: 'PUT',
+      body: JSON.stringify({ profile }),
     });
   }
 

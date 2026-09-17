@@ -73,6 +73,9 @@ export interface MealSummary {
   notes: string | null;
   confidence: number | null;
   energyKcal: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
   source: string | null;
   foods: string[];
   hasPhoto: boolean;
@@ -99,6 +102,9 @@ export async function listMeals(db: MealsDb, userId: string, limit = 50): Promis
       notes: meal.notes,
       confidence: meal.confidence,
       energyKcal: nut[0]?.energyKcal ?? null,
+      proteinG: nut[0]?.proteinG ?? null,
+      carbsG: nut[0]?.carbsG ?? null,
+      fatG: nut[0]?.fatG ?? null,
       source: nut[0]?.source ?? null,
       foods: foods.map((f) => f.name),
       hasPhoto: Boolean(meal.telegramFileId),

@@ -1,19 +1,24 @@
-import { Camera } from 'lucide-react';
+import type { DailyTargets } from '@foodlog/core';
+import { Camera, Sparkles, Target } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Backend, RecentMeal } from '@/lib/backend';
 import { hapticNotify } from '@/lib/telegram';
 import { DateSelector } from './DateSelector.js';
 import { MacroLine } from './MacroLine.js';
+import { ProgressRing } from './ProgressRing.js';
 import { SwipeableRow } from './SwipeableRow.js';
-import { UpdateWithAi } from './UpdateWithAi.js';
 
 type ToastKind = 'success' | 'error' | 'info';
 
 interface HomeScreenProps {
   backend: Backend;
+  targets: DailyTargets | null;
   onOpenMeal: (id: string) => void;
+  onOpenMealWithAi: (id: string) => void;
+  onSetGoal: () => void;
   onToast?: (kind: ToastKind, message: string) => void;
 }
 
@@ -25,11 +30,21 @@ function todayKey(): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
 /**
- * Home is a day view: pick a date at the top, see that day's total + the meals
- * logged that day. Each meal supports swipe-to-delete and "Update with AI".
+ * Home is a day view: pick a date at the top, see that day's targets (as
+ * progress rings when a goal is set) and the meals logged that day. Each meal
+ * supports swipe-to-delete and "Update with AI".
  */
-export function HomeScreen({ backend, onOpenMeal, onToast }: HomeScreenProps) {
+export function HomeScreen({
+  backend,
+  targets,
+  onOpenMeal,
+  onOpenMealWithAi,
+  onSetGoal,
+  onToast,
+}: HomeScreenProps) {
   const [date, setDate] = useState(todayKey());
   const [meals, setMeals] = useState<RecentMeal[] | null>(null);
   const [loggedDates, setLoggedDates] = useState<string[]>([]);
@@ -73,9 +88,12 @@ export function HomeScreen({ backend, onOpenMeal, onToast }: HomeScreenProps) {
     }
   }
 
-  const totalKcal =
-    meals?.reduce((s, m) => s + (m.energyKcal ?? 0), 0) ?? 0;
-  const roundedKcal = Math.round(totalKcal * 10) / 10;
+  const consumed = {
+    energyKcal: round1(meals?.reduce((s, m) => s + (m.energyKcal ?? 0), 0) ?? 0),
+    proteinG: round1(meals?.reduce((s, m) => s + (m.proteinG ?? 0), 0) ?? 0),
+    carbsG: round1(meals?.reduce((s, m) => s + (m.carbsG ?? 0), 0) ?? 0),
+    fatG: round1(meals?.reduce((s, m) => s + (m.fatG ?? 0), 0) ?? 0),
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -85,20 +103,57 @@ export function HomeScreen({ backend, onOpenMeal, onToast }: HomeScreenProps) {
 
       <DateSelector value={date} onChange={setDate} loggedDates={loggedDates} />
 
-      <Card>
-        <CardContent className="flex justify-around text-center">
-          <div>
-            <div className="text-2xl font-bold">{roundedKcal}</div>
-            <div className="text-muted-foreground text-xs">kcal</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold">{meals?.length ?? 0}</div>
-            <div className="text-muted-foreground text-xs">
-              {meals?.length === 1 ? 'meal' : 'meals'}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {targets ? (
+        <Card>
+          <CardContent className="grid grid-cols-4 place-items-center gap-2">
+            <ProgressRing
+              consumed={consumed.energyKcal}
+              target={targets.energyKcal}
+              label="kcal"
+              icon="🔥"
+              size={84}
+              colorClass="text-primary"
+            />
+            <ProgressRing
+              consumed={consumed.proteinG}
+              target={targets.proteinG}
+              label="protein"
+              icon="🥩"
+              size={72}
+              colorClass="text-rose-500"
+            />
+            <ProgressRing
+              consumed={consumed.carbsG}
+              target={targets.carbsG}
+              label="carbs"
+              icon="🍚"
+              size={72}
+              colorClass="text-amber-500"
+            />
+            <ProgressRing
+              consumed={consumed.fatG}
+              target={targets.fatG}
+              label="fat"
+              icon="🧈"
+              size={72}
+              colorClass="text-sky-500"
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 text-center">
+            <Target className="text-primary size-8" />
+            <p className="font-medium">Set your goal to see daily targets</p>
+            <p className="text-muted-foreground text-sm">
+              Add your details and goal to track calories, protein, carbs, and fat left for the day.
+            </p>
+            <Button className="mt-1" onClick={onSetGoal}>
+              Set your goal
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {error && <p className="text-destructive text-sm">{error}</p>}
 
@@ -139,13 +194,17 @@ export function HomeScreen({ backend, onOpenMeal, onToast }: HomeScreenProps) {
                     <div className="truncate font-medium">{m.label}</div>
                     <MacroLine energyKcal={m.energyKcal} compact />
                   </button>
-                  <UpdateWithAi
-                    backend={backend}
-                    mealId={m.id}
-                    variant="icon"
-                    onDone={refresh}
-                    {...(onToast ? { onToast } : {})}
-                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Update with AI"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenMealWithAi(m.id);
+                    }}
+                  >
+                    <Sparkles className="text-primary size-4" />
+                  </Button>
                 </CardContent>
               </Card>
             </SwipeableRow>

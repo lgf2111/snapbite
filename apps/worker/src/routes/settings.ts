@@ -1,14 +1,30 @@
 import {
+  computeTargets,
   createProvider,
+  type DailyTargets,
   decryptSecret,
   DEFAULT_PROVIDER_ID,
   encryptSecret,
   isProviderId,
   lastFour,
+  UserProfile,
 } from '@foodlog/core';
 import { Hono } from 'hono';
-import { createSettingsDb, getSettings, saveEncryptedKey } from '../db/settings.js';
+import { createSettingsDb, getSettings, saveEncryptedKey, savePreferences } from '../db/settings.js';
 import type { AppBindings } from '../env.js';
+
+/** Parses the stored preferences JSON into a validated profile (or null). */
+function parseProfile(preferencesJson: string | null): UserProfile | null {
+  if (!preferencesJson) return null;
+  try {
+    const parsed: unknown = JSON.parse(preferencesJson);
+    const profileField = (parsed as { profile?: unknown })?.profile ?? parsed;
+    const result = UserProfile.safeParse(profileField);
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Settings routes. The user's BYOK API key is AES-GCM encrypted with the
@@ -38,12 +54,43 @@ export function settingsRoutes() {
       }
     }
 
+    const profile = parseProfile(row?.preferencesJson ?? null);
+    const targets: DailyTargets | null = profile ? computeTargets(profile) : null;
+
     return c.json({
       aiProvider: row?.aiProvider ?? DEFAULT_PROVIDER_ID,
       aiModel: row?.aiModel ?? null,
       connected,
       keyLast4,
+      profile,
+      targets,
     });
+  });
+
+  // PUT /api/settings/profile — store the user's profile + goal (no key needed).
+  app.put('/profile', async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
+    }
+    const profileField = (body as { profile?: unknown })?.profile ?? body;
+    const parsed = UserProfile.safeParse(profileField);
+    if (!parsed.success) {
+      return c.json(
+        { error: 'Bad request', detail: 'Invalid profile', issues: parsed.error.issues },
+        400,
+      );
+    }
+
+    const db = createSettingsDb(c.env.DB);
+    await savePreferences(
+      db,
+      c.get('userId'),
+      JSON.stringify({ profile: parsed.data, updatedAt: Date.now() }),
+    );
+    return c.json({ ok: true, profile: parsed.data, targets: computeTargets(parsed.data) });
   });
 
   // PUT /api/settings — store an encrypted API key + provider/model.
