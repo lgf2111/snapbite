@@ -285,3 +285,92 @@ The AI revise could hang the UI on a static "Updating…" when the provider was 
 - **Worker:** the revise call now runs under a 45s `AbortController`; on timeout it returns a clean **504** ("Revision timed out") instead of letting the edge 524. The `signal` is threaded into the provider's `fetch`.
 - **Mini App:** `ApiClient` bounds every request (default 20s; AI calls analyze/revise 60s) via an `AbortController`, throwing a clear `ApiError` on timeout/network so the dialog never hangs.
 - **UpdateWithAi UI:** the dialog now shows a spinner + a cycling status message ("Reading your meal…" → "Asking the AI…" → "Recalculating nutrition…" → "Almost there…") so it visibly progresses. Works the same whether launched via the Main Mini App, an inline button, or the chat **menu button** (all pass `initData`).
+
+---
+
+## 12. Goals, onboarding & daily targets with progress rings (PLANNED)
+
+Plan-only — nothing built yet. Goals, in the user's words:
+
+1. Research how to compute a user's daily calorie need from their goal (done — see §12.1).
+2. **Onboarding**: if the user hasn't entered their profile, show an onboarding flow on first open.
+3. If a profile exists, let the user **edit it in Settings**.
+4. Home page shows **remaining calories for the day** as a **ring**, and the same for **protein, carbs, and fat**.
+
+### 12.1 The math (researched)
+
+Uses the **Mifflin-St Jeor** BMR equation ([AJCN 1990](https://tdeecalculator.org/bmr-calculator/)) and standard TDEE activity multipliers ([guide](https://tdeecalculator.org/activity-level-guide/)). *Content rephrased for licensing compliance.*
+
+- **BMR** = `10·weightKg + 6.25·heightCm − 5·age + s`, where `s = +5` for male, `−161` for female.
+- **TDEE** = `BMR × activityFactor`:
+  - sedentary `1.2`, light `1.375`, moderate `1.55`, active `1.725`, very active `1.9`.
+- **Goal → calorie target** (applied to TDEE):
+  - **lose** → `TDEE × 0.80` (a ~20% deficit),
+  - **maintain** → `TDEE`,
+  - **gain** → `TDEE × 1.10` (a ~10% surplus).
+  - Rounded to the nearest 10 kcal. Floor at a safe minimum (e.g. ≥1200 kcal) to avoid unhealthy targets.
+- **Macros** (from the calorie target + bodyweight):
+  - **protein** = `1.8 g × weightKg` (mid of the common 1.6–2.2 g/kg range),
+  - **fat** = `25%` of calories `÷ 9`,
+  - **carbs** = remaining calories `÷ 4` (after protein & fat kcal), floored at 0.
+  - All rounded to whole grams.
+- These are **estimates**, shown as guidance and fully overridable — same stance as nutrition. Never framed around extreme restriction.
+
+All of this is **pure, deterministic, and transport-agnostic**, so it lives in `packages/core` (new `profile/` module) with unit tests.
+
+### 12.2 Data model (no migration)
+
+The `settings` table already has an unused `preferences_json` TEXT column — store the profile + targets there as JSON. No schema/migration change.
+
+Profile shape (validated with Zod in core):
+```
+UserProfile {
+  sex: 'male' | 'female'
+  age: number (years, 13–100)
+  heightCm: number
+  weightKg: number
+  activity: 'sedentary'|'light'|'moderate'|'active'|'very_active'
+  goal: 'lose' | 'maintain' | 'gain'
+  // optional manual overrides; when set, used instead of computed values
+  calorieTargetOverride?: number
+  macroOverride?: { proteinG:number; carbsG:number; fatG:number }
+}
+DailyTargets { energyKcal, proteinG, carbsG, fatG }  // computed
+```
+Store as `preferences_json = { profile, updatedAt }`. Targets are recomputed from the profile on read (cheap, deterministic) so they never go stale.
+
+### 12.3 Changes by area
+
+**A. Core (`packages/core/profile/`)**
+- `UserProfile` Zod schema + `DailyTargets` type.
+- `computeBmr(profile)`, `computeTdee(profile)`, `computeTargets(profile): DailyTargets` (applies goal + macro split, honoring overrides). Pure functions + tests (known-value checks against the formulas above).
+
+**B. Worker**
+- Settings DB: read/write `preferences_json`. Extend `getSettings` to surface the parsed profile; add a way to persist it.
+- Routes: extend `GET /api/settings` to include `profile` (or null) + computed `targets`. Add `PUT /api/settings/profile` (owner-scoped) that validates a `UserProfile` and stores it in `preferences_json`. (Keep the existing key-only `PUT /api/settings`.)
+- Tests: profile round-trips; targets computed; invalid profile → 400.
+
+**C. Mini App**
+- `api.getSettings()` now returns `profile` + `targets`; `api.saveProfile(profile)`; backend passthrough (`getProfile`/`saveProfile`); **local mode** stores the profile in localStorage.
+- **Onboarding**: on load, `App` checks settings; if no `profile`, render a full-screen **OnboardingScreen** (a short multi-step form: sex, age, height, weight, activity, goal → preview computed targets → Save). Blocks the tabs until completed (can't meaningfully show rings without it). After save, drop into Home.
+- **Settings**: a "Your profile & goal" card to view/edit the same fields (reuses the onboarding form). Shows the computed daily targets + lets the user override them.
+- **Home rings**: a new `ProgressRing` (SVG, themed) + a `MacroRings` block at the top of the day view. For the selected day, compute consumed totals (kcal + P/C/F from that day's meals) and show **remaining = target − consumed** as four rings (kcal big, P/C/F smaller), with over-target handled gracefully (ring caps at 100%, shows "over by N"). Rings use the shadcn/Telegram theme tokens.
+  - Consumed macros per day: the day's meals already carry kcal via `MealSummary`; **but P/C/F totals aren't in the list payload today** — so either (i) extend `GET /api/meals?date=` summaries to include `proteinG/carbsG/fatG` (from the stored `nutrition` row), or (ii) sum from details. **Decision: (i)** — add P/C/F to `MealSummary` (cheap, already joined) so the day view can total macros without N extra fetches.
+
+**D. Perf/UX**
+- Onboarding + Settings profile form can be part of the existing lazy Settings chunk; Onboarding is only loaded when needed.
+- Rings render instantly from the day fetch; no extra round-trip beyond the existing day list (+ the targets that come with settings, fetched once).
+
+### 12.4 Decisions (please confirm)
+
+1. **Onboarding gating:** hard-block the app until the profile is filled, or allow "skip for now" (rings hidden until set)? *Default: allow skip — show a soft prompt on Home ("Set your goal to see targets") so the app is usable immediately; onboarding is one tap away.*
+2. **Units:** metric only (kg/cm), or also imperial (lb/ft-in)? *Default: metric only for v1 (simplest, matches the formula); can add a toggle later.*
+3. **Goal presets vs custom deficit:** fixed lose/maintain/gain (−20%/0/+10%), or also a custom kcal target? *Default: presets + a manual calorie/macro override field for power users.*
+4. **Protein basis:** 1.8 g/kg of current bodyweight (default) — fine, or prefer goal-weight/LBM? *Default: 1.8 g/kg current weight.*
+
+### 12.5 Build order (once confirmed)
+
+1. Core `profile/` (schema + BMR/TDEE/targets) + tests. Build core.
+2. Worker: `preferences_json` read/write, `GET /api/settings` (+profile+targets), `PUT /api/settings/profile`, P/C/F in day summaries. Tests. Deploy.
+3. Mini App: api/backend profile methods; OnboardingScreen; Settings profile card; ProgressRing + Home rings; wire consumed-vs-target. Tests + build.
+4. Verify workspace typecheck + tests + build; deploy Worker + Pages; update README + PLAN §12 (delivered); commit + push. No DB migration.
