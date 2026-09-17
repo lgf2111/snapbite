@@ -8,12 +8,22 @@ interface SwipeableRowProps {
   onDelete: () => void;
 }
 
-const REVEAL = 88;
+/** How far the row slides open to reveal the delete action. */
+const REVEAL = 76;
+/**
+ * The delete button extends this far under the card's right edge so the card's
+ * rounded corner never leaves a visible gap over the button when open.
+ */
+const OVERLAP = 20;
 
 /**
  * A row that reveals a Delete action when swiped left. Uses react-swipeable,
  * which tracks both touch (mobile) and mouse (desktop) via `trackMouse`, so it
  * works on phone and Mac. Tapping Delete fires `onDelete`.
+ *
+ * The delete button is a rounded, outlined pill that sits behind the card and
+ * extends slightly under it (OVERLAP), so when the card slides left the two
+ * shapes tuck together cleanly instead of showing a rounded-corner notch.
  */
 export function SwipeableRow({ children, onDelete }: SwipeableRowProps) {
   const [open, setOpen] = useState(false);
@@ -27,7 +37,9 @@ export function SwipeableRow({ children, onDelete }: SwipeableRowProps) {
   });
 
   return (
-    <div className="relative overflow-hidden rounded-xl">
+    <div className="relative">
+      {/* Delete action behind the card. Overlaps under the card's right edge so
+          no rounded gap shows; rounded + outlined to match the card. */}
       <button
         type="button"
         aria-label="Delete"
@@ -35,14 +47,17 @@ export function SwipeableRow({ children, onDelete }: SwipeableRowProps) {
           onDelete();
           setOpen(false);
         }}
-        className="bg-destructive text-destructive-foreground absolute inset-y-0 right-0 flex w-22 items-center justify-center gap-1 text-sm font-medium"
-        style={{ width: REVEAL }}
+        className={cn(
+          'bg-destructive text-destructive-foreground border-destructive/60 absolute inset-y-0 right-0 flex items-center justify-center rounded-xl border shadow-sm transition-opacity',
+          open ? 'opacity-100' : 'pointer-events-none opacity-0',
+        )}
+        style={{ width: REVEAL + OVERLAP, paddingRight: OVERLAP }}
       >
-        <Trash2 className="size-4" />
+        <Trash2 className="size-5" />
       </button>
       <div
         {...handlers}
-        className={cn('bg-background relative transition-transform')}
+        className="bg-background relative rounded-xl transition-transform"
         style={{ transform: `translateX(${open ? -REVEAL : 0}px)` }}
       >
         {children}

@@ -34,6 +34,8 @@ type MacroKey = 'energyKcal' | 'proteinG' | 'carbsG' | 'fatG';
 export function MealDetailScreen({ backend, mealId, onBack, onChanged, onToast }: MealDetailScreenProps) {
   const [detail, setDetail] = useState<MealDetail | null>(null);
   const [foods, setFoods] = useState<FoodItem[]>([]);
+  // Serialized snapshot of the foods as loaded, to detect unsaved edits.
+  const [baseline, setBaseline] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'saving' | 'deleting' | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -45,28 +47,32 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged, onToast }
       .detail(mealId)
       .then((d) => {
         setDetail(d);
-        setFoods(
-          d.foods.map((f) => ({
-            name: f.name,
-            estimatedWeightG: f.estimatedWeightG ?? 1,
-            portion: f.portion ?? undefined,
-            quantity: f.quantity,
-            confidence: f.confidence ?? 0.5,
-            ...(f.energyKcal != null
-              ? {
-                  manualNutrition: {
-                    energyKcal: f.energyKcal,
-                    proteinG: f.proteinG ?? 0,
-                    carbsG: f.carbsG ?? 0,
-                    fatG: f.fatG ?? 0,
-                  },
-                }
-              : {}),
-          })),
-        );
+        const loaded = d.foods.map((f) => ({
+          name: f.name,
+          estimatedWeightG: f.estimatedWeightG ?? 1,
+          portion: f.portion ?? undefined,
+          quantity: f.quantity,
+          confidence: f.confidence ?? 0.5,
+          ...(f.energyKcal != null
+            ? {
+                manualNutrition: {
+                  energyKcal: f.energyKcal,
+                  proteinG: f.proteinG ?? 0,
+                  carbsG: f.carbsG ?? 0,
+                  fatG: f.fatG ?? 0,
+                },
+              }
+            : {}),
+        }));
+        setFoods(loaded);
+        setBaseline(JSON.stringify(loaded));
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'));
   }, [backend, mealId, reloadKey]);
+
+  // True once the user has actually changed something (name, macro, weight, or
+  // removed a food) vs. the meal as loaded.
+  const dirty = useMemo(() => JSON.stringify(foods) !== baseline, [foods, baseline]);
 
   const resolved = useMemo(() => {
     const mealFoods = foods.map((food) => ({
@@ -108,7 +114,7 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged, onToast }
   }
 
   async function handleSave() {
-    if (!detail || foods.length === 0) return;
+    if (!detail || foods.length === 0 || !dirty) return;
     setBusy('saving');
     const meal: MealResult = {
       foods: resolved.foods,
@@ -146,10 +152,10 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged, onToast }
     else onBack();
   });
 
-  const nativeSave = useMainButton(detail !== null && !confirmDelete, {
+  const nativeSave = useMainButton(detail !== null && !confirmDelete && dirty, {
     text: busy === 'saving' ? 'Saving…' : 'Save changes',
     onClick: () => void handleSave(),
-    enabled: busy === null && foods.length > 0,
+    enabled: busy === null && foods.length > 0 && dirty,
     loading: busy === 'saving',
   });
 
@@ -269,10 +275,10 @@ export function MealDetailScreen({ backend, mealId, onBack, onChanged, onToast }
           {!nativeSave && (
             <Button
               className="w-full"
-              disabled={busy !== null || foods.length === 0}
+              disabled={busy !== null || foods.length === 0 || !dirty}
               onClick={handleSave}
             >
-              {busy === 'saving' ? 'Saving…' : 'Save changes'}
+              {busy === 'saving' ? 'Saving…' : dirty ? 'Save changes' : 'No changes'}
             </Button>
           )}
 
