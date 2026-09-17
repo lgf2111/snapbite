@@ -14,8 +14,11 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Collapsible } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 import { MacroLine } from './MacroLine.js';
+import { NumberField } from './NumberField.js';
 
 interface ProfileFormProps {
   /** Existing profile to edit, or null for a fresh onboarding form. */
@@ -162,26 +165,23 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="age">Age</Label>
-          <Input
+          <NumberField
             id="age"
-            type="number"
             min={13}
             max={100}
+            fallback={30}
             value={age}
-            onChange={(e) => setAge(Math.round(num(e.target.value, 30)))}
+            onCommit={(v) => setAge(Math.round(v))}
           />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="weight">Weight ({imperial ? 'lb' : 'kg'})</Label>
-          <Input
+          <NumberField
             id="weight"
-            type="number"
             min={1}
+            fallback={imperial ? 165 : 75}
             value={imperial ? Math.round(kgToLb(weightKg)) : Math.round(weightKg)}
-            onChange={(e) => {
-              const v = num(e.target.value, 1);
-              setWeightKg(imperial ? lbToKg(v) : v);
-            }}
+            onCommit={(v) => setWeightKg(imperial ? lbToKg(v) : v)}
           />
         </div>
       </div>
@@ -191,24 +191,25 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
         {imperial ? (
           <div className="flex gap-2">
             <div className="flex items-center gap-1">
-              <Input
+              <NumberField
                 aria-label="Height feet"
-                type="number"
                 min={1}
+                max={8}
+                fallback={5}
                 value={feet}
-                onChange={(e) => setHeightCm(feetInchesToCm(Math.round(num(e.target.value, 5)), inches))}
+                onCommit={(v) => setHeightCm(feetInchesToCm(Math.round(v), inches))}
                 className="w-20"
               />
               <span className="text-muted-foreground text-sm">ft</span>
             </div>
             <div className="flex items-center gap-1">
-              <Input
+              <NumberField
                 aria-label="Height inches"
-                type="number"
                 min={0}
                 max={11}
+                fallback={0}
                 value={inches}
-                onChange={(e) => setHeightCm(feetInchesToCm(feet, Math.round(num(e.target.value, 0))))}
+                onCommit={(v) => setHeightCm(feetInchesToCm(feet, Math.round(v)))}
                 className="w-20"
               />
               <span className="text-muted-foreground text-sm">in</span>
@@ -216,12 +217,13 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
           </div>
         ) : (
           <div className="flex items-center gap-1">
-            <Input
+            <NumberField
               aria-label="Height cm"
-              type="number"
               min={1}
+              max={272}
+              fallback={175}
               value={Math.round(heightCm)}
-              onChange={(e) => setHeightCm(num(e.target.value, 175))}
+              onCommit={(v) => setHeightCm(v)}
               className="w-28"
             />
             <span className="text-muted-foreground text-sm">cm</span>
@@ -255,27 +257,10 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
 
       <div className="flex items-center justify-between">
         <Label htmlFor="advanced">Advanced (manual targets)</Label>
-        <button
-          id="advanced"
-          type="button"
-          role="switch"
-          aria-checked={advanced}
-          onClick={() => setAdvanced((v) => !v)}
-          className={cn(
-            'relative h-6 w-11 rounded-full transition-colors',
-            advanced ? 'bg-primary' : 'bg-muted',
-          )}
-        >
-          <span
-            className={cn(
-              'bg-background absolute top-0.5 size-5 rounded-full shadow transition-transform',
-              advanced ? 'translate-x-5' : 'translate-x-0.5',
-            )}
-          />
-        </button>
+        <Switch id="advanced" checked={advanced} onCheckedChange={setAdvanced} />
       </div>
 
-      {advanced && (
+      <Collapsible open={advanced}>
         <div className="flex flex-col gap-3 rounded-md border p-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="cal">Calorie target (kcal)</Label>
@@ -306,7 +291,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
             </div>
           </div>
         </div>
-      )}
+      </Collapsible>
 
       <div className="bg-muted/50 flex flex-col gap-1 rounded-md p-3">
         <span className="text-muted-foreground text-xs">Your daily targets</span>

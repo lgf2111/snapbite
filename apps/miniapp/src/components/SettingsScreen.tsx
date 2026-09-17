@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Collapsible } from '@/components/ui/collapsible';
+import { Switch } from '@/components/ui/switch';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
 import { downloadViaTelegram, openExportUrl } from '@/lib/telegram';
@@ -41,10 +43,11 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [deleting, setDeleting] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
-  const [fbProvider, setFbProvider] = useState<ProviderId>('deepseek');
+  const [fbProvider, setFbProvider] = useState<ProviderId>('openai');
   const [fbModel, setFbModel] = useState('');
   const [fbKey, setFbKey] = useState('');
   const [savingFb, setSavingFb] = useState(false);
+  const [fbEnabled, setFbEnabled] = useState(false);
 
   useEffect(() => {
     backend
@@ -63,12 +66,21 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           setFbProvider(s.fallbackProvider);
         }
         if (s.fallbackModel) setFbModel(s.fallbackModel);
+        if (s.fallbackConnected) setFbEnabled(true);
       })
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to load settings'));
   }, [backend]);
 
   const preset = PROVIDER_PRESETS[provider];
   const isLocal = backend.mode === 'local';
+  const primaryConnected = Boolean(settings?.connected);
+
+  function handleToggleFallback(on: boolean) {
+    setFbEnabled(on);
+    // Turning off with a saved fallback clears it; turning off an unsaved draft
+    // just collapses the section.
+    if (!on && settings?.fallbackConnected) void handleClearFallback();
+  }
 
   async function handleSave() {
     const key = apiKey.trim();
@@ -321,78 +333,88 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
           <Card>
             <CardContent className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="font-medium">Fallback provider</span>
-                {settings?.fallbackConnected ? (
-                  <span className="text-primary text-sm">
-                    {settings.fallbackProvider}
-                    {settings.fallbackKeyLast4 ? ` · …${settings.fallbackKeyLast4}` : ''}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col">
+                  <span className="font-medium">Fallback provider</span>
+                  <span className="text-muted-foreground text-xs">
+                    {settings?.fallbackConnected
+                      ? `${settings.fallbackProvider}${settings.fallbackKeyLast4 ? ` · …${settings.fallbackKeyLast4}` : ''}`
+                      : primaryConnected
+                        ? 'Off'
+                        : 'Connect your main provider first'}
                   </span>
-                ) : (
-                  <span className="text-muted-foreground text-sm">Off</span>
-                )}
-              </div>
-              <p className="text-muted-foreground text-xs">
-                Optional. If your main provider hits a rate limit or is overloaded, FoodLog retries
-                the photo with this provider automatically. Great for pairing Gemini with DeepSeek.
-              </p>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="fb-provider">Provider</Label>
-                <select
-                  id="fb-provider"
-                  value={fbProvider}
-                  onChange={(e) => {
-                    setFbProvider(e.target.value as ProviderId);
-                    setFbModel('');
-                  }}
-                  className="border-input h-9 rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                >
-                  {PROVIDERS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="fb-model">Model (optional)</Label>
-                <Input
-                  id="fb-model"
-                  placeholder={PROVIDER_PRESETS[fbProvider].defaultModel}
-                  value={fbModel}
-                  onChange={(e) => setFbModel(e.target.value)}
+                </div>
+                <Switch
+                  aria-label="Enable fallback provider"
+                  checked={fbEnabled}
+                  disabled={!primaryConnected || savingFb}
+                  onCheckedChange={handleToggleFallback}
                 />
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="fb-key">Fallback API key</Label>
-                <Input
-                  id="fb-key"
-                  type="password"
-                  autoComplete="off"
-                  placeholder="paste your fallback key"
-                  value={fbKey}
-                  onChange={(e) => setFbKey(e.target.value)}
-                />
-                <p className="text-muted-foreground text-xs">{PROVIDER_PRESETS[fbProvider].keyHint}</p>
-              </div>
+              <Collapsible open={fbEnabled && primaryConnected}>
+                <div className="flex flex-col gap-3 pt-1">
+                  <p className="text-muted-foreground text-xs">
+                    If your main provider hits a rate limit or is overloaded, FoodLog retries the
+                    photo with this provider automatically. OpenAI (gpt-4o-mini) is recommended —
+                    it's the most accurate at food recognition.
+                  </p>
 
-              <div className="flex gap-2">
-                <Button className="flex-1" disabled={!fbKey.trim() || savingFb} onClick={handleSaveFallback}>
-                  {savingFb ? 'Saving…' : 'Save fallback'}
-                </Button>
-                {settings?.fallbackConnected && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="fb-provider">Provider</Label>
+                    <select
+                      id="fb-provider"
+                      value={fbProvider}
+                      onChange={(e) => {
+                        setFbProvider(e.target.value as ProviderId);
+                        setFbModel('');
+                      }}
+                      className="border-input h-9 rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    >
+                      {PROVIDERS.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="fb-model">Model (optional)</Label>
+                    <Input
+                      id="fb-model"
+                      placeholder={PROVIDER_PRESETS[fbProvider].defaultModel}
+                      value={fbModel}
+                      onChange={(e) => setFbModel(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="fb-key">Fallback API key</Label>
+                    <Input
+                      id="fb-key"
+                      type="password"
+                      autoComplete="off"
+                      placeholder={
+                        settings?.fallbackConnected ? 'saved — paste to replace' : 'paste your fallback key'
+                      }
+                      value={fbKey}
+                      onChange={(e) => setFbKey(e.target.value)}
+                    />
+                    <p className="text-muted-foreground text-xs">
+                      {PROVIDER_PRESETS[fbProvider].keyHint}
+                    </p>
+                  </div>
+
                   <Button
-                    variant="secondary"
-                    disabled={savingFb}
-                    onClick={handleClearFallback}
+                    className="w-full"
+                    disabled={!fbKey.trim() || savingFb}
+                    onClick={handleSaveFallback}
                   >
-                    Remove
+                    {savingFb ? 'Saving…' : 'Save fallback'}
                   </Button>
-                )}
-              </div>
+                </div>
+              </Collapsible>
             </CardContent>
           </Card>
         </>
