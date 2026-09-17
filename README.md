@@ -54,7 +54,7 @@ node --env-file=.env apps/cli/dist/index.js meal.jpg --real   # real provider (n
 Secrets are never committed. Local files are gitignored.
 
 - **Root `.env`** — `DEEPSEEK_API_KEY` (or other provider key) for CLI/real tests.
-- **`apps/worker/.dev.vars`** — local Worker secrets: `TELEGRAM_BOT_TOKEN`, `ENCRYPTION_KEY` (base64 of 32 bytes), `MINI_APP_URL`, `TELEGRAM_WEBHOOK_SECRET`.
+- **`apps/worker/.dev.vars`** — local Worker secrets: `TELEGRAM_BOT_TOKEN`, `ENCRYPTION_KEY` (base64 of 32 bytes), `MINI_APP_URL`, `TELEGRAM_WEBHOOK_SECRET`, and `ADMIN_TELEGRAM_ID` (your numeric Telegram id; gates admin bot commands + error/feedback alerts — optional, storage works without it).
 - **`apps/miniapp` build** — `VITE_WORKER_URL` points the app at the deployed Worker (empty = mock mode).
 
 Production secrets are set with `wrangler secret put` and are not stored in the repo.
@@ -67,6 +67,7 @@ wrangler login
 wrangler d1 create foodlog-db        # put the id in apps/worker/wrangler.toml
 wrangler d1 migrations apply foodlog-db --remote
 # Set secrets: TELEGRAM_BOT_TOKEN, ENCRYPTION_KEY, MINI_APP_URL, TELEGRAM_WEBHOOK_SECRET
+# Optional: ADMIN_TELEGRAM_ID (your numeric Telegram id) to enable /errors, /feedback review, and alerts
 
 # Worker
 pnpm --filter @foodlog/worker exec wrangler deploy
@@ -91,6 +92,8 @@ FoodLog is provider-agnostic. Pick a provider and paste your key in **Settings**
 All three are called through the same OpenAI-compatible Chat Completions shape; only the base URL, model, and whether `image_url.detail` is honored differ. Image detail defaults to `high` for better recognition. The model is overridable per user (versions rotate).
 
 **Free-tier limits & fallback.** Provider free tiers are rate-limited — e.g. Gemini's free tier allows roughly 20 requests/day on `gemini-3.6-flash` plus a per-minute cap, and returns a "quota exceeded" (429) error once hit; models can also be temporarily "overloaded" (503), or a key can hit a **billing/credit** problem (402, e.g. "prepayment credits are needed"). Settings surfaces this, and you can configure a **fallback provider** (OpenAI/`gpt-4o-mini` recommended — most accurate for food): if the primary hits a rate-limit, overload, or billing error while logging a photo, the Worker automatically fails over to the fallback (after retrying a transient 503 "overloaded" on the primary a few times with backoff). The fallback lives behind a toggle in Settings — turning it **off keeps the stored key** (only "Remove" deletes it). Each logged meal records which provider actually analyzed it (shown on the meal card and detail), and the bot's photo reply summarizes the interpreted foods plus estimated calories/protein/carbs/fat. The fallback key is encrypted at rest like the primary and stored in `preferences_json`.
+
+**Observability & feedback.** Errors that hit real users are written to a durable D1 `error_logs` table (source, kind, HTTP-ish status, message, and a redacted detail snippet — never keys). Logging is best-effort and never blocks a user's reply, and it mirrors to `console.error` so `wrangler tail` still shows things live. Users can report problems two ways: `/feedback <message>` in the bot, or a **Send feedback** dialog in the Mini App Settings — both store to a D1 `feedback` table. If `ADMIN_TELEGRAM_ID` is set, the owner gets a Telegram DM on user-facing photo/webhook failures and on new feedback, and can run admin-only `/errors` and `/feedback` (no args) commands to review the latest entries. External trackers (e.g. Sentry) are intentionally skipped for now; `logError` is the single choke-point where one could be added later.
 
 ### Getting an API key
 

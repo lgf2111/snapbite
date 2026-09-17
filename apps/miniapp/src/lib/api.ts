@@ -329,4 +329,12 @@ export class ApiClient {
   deleteAccount(): Promise<{ ok: boolean }> {
     return this.#request<{ ok: boolean }>('/api/account', { method: 'DELETE' });
   }
+
+  /** Sends user feedback to the maintainer (stored + DM'd). */
+  sendFeedback(message: string): Promise<{ ok: boolean }> {
+    return this.#request<{ ok: boolean }>('/api/feedback', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
 }

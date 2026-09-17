@@ -29,6 +29,13 @@
       "when": 1789630502892,
       "tag": "0003_omniscient_shinko_yamashiro",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789667840877,
+      "tag": "0004_tranquil_ulik",
+      "breakpoints": true
     }
   ]
 }

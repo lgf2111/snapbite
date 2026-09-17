@@ -400,3 +400,83 @@ so a custom endpoint is a thin addition:
 2. Worker: settings read/write for custom base URL (+ fallback); `providerFactory`/revise pass-through; keep accepting any model string. Tests. Deploy + (no migration expected).
 3. Mini App: model `<select>` + Custom… (primary + fallback); 5-stop goal slider in `ProfileForm`; custom-provider fields in Settings; update `api`/`backend` types. Tests + build. Deploy.
 4. Update README (§ AI providers + targets) + this section (mark delivered); commit + push.
+
+
+---
+
+## 14. Observability + user feedback (DELIVERED)
+
+> **DELIVERED.** D1 `error_logs` + `feedback` tables (migration 0004, applied local + remote).
+> `db/errors.ts` (`logError` best-effort/never-throws + `console.error` mirror + Sentry-hook comment,
+> `recentErrors`, `describeError`) and `db/feedback.ts` (`storeFeedback`, `recentFeedback`).
+> `ADMIN_TELEGRAM_ID` env + `parseAdminId`. `logError` wired into the webhook photo path (with a
+> best-effort admin DM) and the `/api/meals/analyze` error path (logged only, no DM). Bot `/feedback`
+> (submit + admin no-arg review) and admin-gated `/errors`; `POST /api/feedback` (authed, ≤2000 chars).
+> Mini App **Send feedback** dialog in Settings (+ `api.sendFeedback` / `backend.sendFeedback`). Tests:
+> core 96, worker 83 (new errors/feedback/webhook cases), miniapp 16, cli 8. Deployed: Worker
+> `e32974c0`, Pages `435a1877`. Owner sets the secret via
+> `pnpm exec wrangler secret put ADMIN_TELEGRAM_ID` (value `844007785`). Decisions §14.6 confirmed:
+> D1 (skip Sentry), DM only on webhook/photo errors, feedback in Settings.
+
+Two needs: (1) **see errors happening to real users**, (2) give users a **way to report problems**.
+Chosen approach keeps everything in the existing stack (D1 + Telegram bot) — no new services/secrets
+beyond one admin id. Sentry etc. considered but rejected for now (extra dep/account).
+
+### 14.1 New env var
+- `ADMIN_TELEGRAM_ID` (number, optional) — the owner's Telegram user id. Gates admin commands and
+  is the DM target for error/feedback alerts. Set via `wrangler secret put ADMIN_TELEGRAM_ID`.
+  Add to `apps/worker/src/env.ts`.
+
+### 14.2 Error logging (durable, queryable)
+- **Migration 0004**: `error_logs` table — `id` (uuid), `created_at` (ms), `telegram_user_id` (int, null),
+  `source` (text: 'webhook' | 'api' | 'analyze' | 'revise' | …), `kind` (text, e.g. AIProviderError.kind
+  or 'unhandled'), `status` (int, null), `message` (text), `detail` (text, null; provider message / stack snippet).
+  Index on `created_at`. Apply local + remote.
+- **`apps/worker/src/db/errors.ts`**: `logError(db, evt)` (insert, best-effort — never throws into the
+  caller), `recentErrors(db, limit)`.
+- **Wire-in**: replace the existing `console.error('photo log failed', …)` in `webhook.ts` with `logError`
+  (keep console for `wrangler tail`), and add `logError` to the API error paths (analyze/revise 5xx,
+  settings 500). Capture `telegramUserId` where known. Redact secrets — only store provider *messages*,
+  never keys (already the case).
+- **Admin alert (best-effort, throttled)**: on a logged error, DM `ADMIN_TELEGRAM_ID` a short summary
+  ("⚠️ webhook error for user 123: <message>"). Throttle so a burst doesn't spam (e.g. skip if we DM'd
+  in the last N seconds — simplest: only alert on webhook/photo errors, which are user-facing, not every
+  API 4xx). Never block the user's response.
+
+### 14.3 User feedback channel
+- **Migration 0004** (same): `feedback` table — `id`, `created_at`, `telegram_user_id` (int, null),
+  `source` ('bot' | 'miniapp'), `message` (text), `handled` (int 0/1 default 0).
+- **Bot**: `/feedback <text>` command in `packages/core` `parseUpdate`/`replyForCommand` → the webhook
+  stores it + DMs the admin + replies "Thanks, sent!". `/feedback` with no text → prompt for what to type.
+  Update `/help` to mention it.
+- **Mini App**: a "Send feedback" card/button in Settings → a small dialog (textarea) → `POST /api/feedback`
+  `{ message }` (authed) → stores + DMs admin → toast. `api.sendFeedback` + `backend.sendFeedback`
+  (local mode: no-op/toast).
+- **Worker route**: `POST /api/feedback` (under authed `/api`), length-capped (e.g. ≤2000 chars).
+
+### 14.4 Admin review (gated to ADMIN_TELEGRAM_ID)
+- Bot commands (only when `from.id === ADMIN_TELEGRAM_ID`, else treated as normal/unknown):
+  - `/errors` → last ~10 error_logs (time, user, source, message).
+  - `/feedback` (no args, admin) → last ~10 unhandled feedback entries. (Non-admin `/feedback <text>` = submit.)
+  - Keep it read-only + simple; full triage can be a later Mini App admin view if wanted.
+
+### 14.5 Tests
+- core: `parseUpdate` handles `/feedback` + args; `replyForCommand` feedback prompt.
+- worker: `logError`/`recentErrors` round-trip; `POST /api/feedback` stores + length-cap 400; `/feedback`
+  webhook stores + admin DM; `/errors` gated (non-admin gets normal reply, admin gets the list); a webhook
+  error writes an error_logs row.
+
+### 14.6 Decisions (please confirm)
+1. **Admin id**: I'll add `ADMIN_TELEGRAM_ID` as a secret — you'll run `wrangler secret put ADMIN_TELEGRAM_ID`
+   with your Telegram numeric id. OK? (Without it, error DMs + admin commands are simply disabled; storage still works.)
+2. **Error DM noise**: alert the admin only on **user-facing webhook/photo errors** (not every API 4xx), to
+   avoid spam. Full history always in `/errors`. OK? *(Default: yes.)*
+3. **Sentry**: skip external error tracking for now, use D1. OK? *(Default: yes — can add later.)*
+4. **Feedback placement in Mini App**: a "Send feedback" button in **Settings** (near privacy). OK? *(Default: yes.)*
+
+### 14.7 Build order (once confirmed)
+1. Migration 0004 (`error_logs` + `feedback`) + `db/errors.ts` + `db/feedback.ts`; apply local+remote.
+2. `env.ts` `ADMIN_TELEGRAM_ID`; `logError` wired into webhook + API error paths + best-effort admin DM.
+3. core: `/feedback` parsing + help text; worker `POST /api/feedback`; `/feedback` + `/errors` bot handlers (admin-gated).
+4. Mini App: Settings "Send feedback" dialog + `api`/`backend` methods.
+5. Tests; deploy Worker + Pages; `wrangler secret put ADMIN_TELEGRAM_ID`; update README + this section; commit + push.

@@ -336,3 +336,139 @@ describe('POST /webhook', () => {
     expect(lastText(sent)).toContain('Logged');
   });
 });
+
+const ADMIN_ID = 999000; // matches vitest.config.ts ADMIN_TELEGRAM_ID
+
+describe('/feedback command', () => {
+  it('stores a user message, thanks them, and DMs the owner', async () => {
+    const { app, sent } = appWithCapture();
+    const res = await app.request(
+      '/webhook',
+      post({ message: { text: '/feedback the salad estimate was way off', chat: { id: 4100 }, from: { id: 4100 } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    // User got a thank-you in their own chat.
+    const toUser = sent.find((s) => s.chatId === 4100);
+    expect(toUser?.reply.text.toLowerCase()).toContain('thanks');
+    // Owner got a DM with the message.
+    const toAdmin = sent.find((s) => s.chatId === ADMIN_ID);
+    expect(toAdmin?.reply.text).toContain('the salad estimate was way off');
+
+    // And it's readable back via the admin `/feedback` review.
+    const review = appWithCapture();
+    await review.app.request(
+      '/webhook',
+      post({ message: { text: '/feedback', chat: { id: ADMIN_ID }, from: { id: ADMIN_ID } } }),
+      env,
+    );
+    expect(lastText(review.sent)).toContain('the salad estimate was way off');
+  });
+
+  it('prompts a normal user who sends /feedback with no text', async () => {
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/feedback', chat: { id: 4200 }, from: { id: 4200 } } }),
+      env,
+    );
+    expect(lastText(sent).toLowerCase()).toContain('tell me');
+  });
+});
+
+describe('/errors command (admin-gated)', () => {
+  it('shows the error list to the admin', async () => {
+    // Seed an error via a photo failure path: user with a key whose provider throws.
+    const tgId = 4300;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'k', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+    const failing = createApp({
+      botClientFactory: () => mockBot([]),
+      providerFactory: () => ({
+        id: 'primary',
+        analyzeMeal: async () => {
+          throw Object.assign(new Error('bad request'), { kind: 'http', status: 400 });
+        },
+        reviseMeal: async () => {
+          throw new Error('n/a');
+        },
+      }),
+    });
+    await failing.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/errors', chat: { id: ADMIN_ID }, from: { id: ADMIN_ID } } }),
+      env,
+    );
+    expect(lastText(sent).toLowerCase()).toContain('errors');
+  });
+
+  it('hides /errors from non-admins (generic nudge instead)', async () => {
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/errors', chat: { id: 4400 }, from: { id: 4400 } } }),
+      env,
+    );
+    // Non-admin gets the normal fallback nudge, not an error list.
+    expect(lastText(sent).toLowerCase()).toContain('open foodlog');
+    expect(lastText(sent).toLowerCase()).not.toContain('latest errors');
+  });
+});
+
+describe('webhook photo failure logging', () => {
+  it('writes an error_logs row and DMs the admin on a photo failure', async () => {
+    const tgId = 4500;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'k', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({
+      botClientFactory: () => mockBot(sent),
+      providerFactory: () => ({
+        id: 'primary',
+        analyzeMeal: async () => {
+          throw Object.assign(new Error('kaboom'), { kind: 'http', status: 400 });
+        },
+        reviseMeal: async () => {
+          throw new Error('n/a');
+        },
+      }),
+    });
+    const res = await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    // Admin was alerted about the user-facing failure.
+    const dm = sent.find((s) => s.chatId === ADMIN_ID);
+    expect(dm?.reply.text).toContain(String(tgId));
+  });
+});

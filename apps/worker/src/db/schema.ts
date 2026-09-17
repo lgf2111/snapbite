@@ -85,8 +85,51 @@ export const nutrition = sqliteTable('nutrition', {
   source: text('source').notNull(),
 });
 
+/** Durable, queryable error log (see §14). Written best-effort; never blocks users. */
+export const errorLogs = sqliteTable(
+  'error_logs',
+  {
+    id: text('id').primaryKey(),
+    createdAt: integer('created_at').notNull(),
+    /** Telegram user id when known (null for unauthenticated/system errors). */
+    telegramUserId: integer('telegram_user_id'),
+    /** Where it happened: 'webhook' | 'api' | 'analyze' | 'revise' | 'settings' | … */
+    source: text('source').notNull(),
+    /** Error kind — AIProviderError.kind, HTTP-ish label, or 'unhandled'. */
+    kind: text('kind').notNull(),
+    /** HTTP-ish status when applicable. */
+    status: integer('status'),
+    message: text('message').notNull(),
+    /** Provider message / trimmed stack snippet. Never contains secrets. */
+    detail: text('detail'),
+  },
+  (t) => ({
+    createdIdx: index('error_logs_created_at_idx').on(t.createdAt),
+  }),
+);
+
+/** User-submitted feedback (see §14), from the bot or the Mini App. */
+export const feedback = sqliteTable(
+  'feedback',
+  {
+    id: text('id').primaryKey(),
+    createdAt: integer('created_at').notNull(),
+    telegramUserId: integer('telegram_user_id'),
+    /** 'bot' | 'miniapp' */
+    source: text('source').notNull(),
+    message: text('message').notNull(),
+    /** 0 = unhandled, 1 = handled/acknowledged by the owner. */
+    handled: integer('handled').notNull().default(0),
+  },
+  (t) => ({
+    createdIdx: index('feedback_created_at_idx').on(t.createdAt),
+  }),
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type SettingsRow = typeof settings.$inferSelect;
 export type MealRow = typeof meals.$inferSelect;
 export type FoodItemRow = typeof foodItems.$inferSelect;
 export type NutritionRow = typeof nutrition.$inferSelect;
+export type ErrorLogRow = typeof errorLogs.$inferSelect;
+export type FeedbackRow = typeof feedback.$inferSelect;

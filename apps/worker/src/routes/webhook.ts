@@ -2,6 +2,10 @@ import {
   type BotReply,
   createProvider,
   decryptSecret,
+  FEEDBACK_MAX_LEN,
+  FEEDBACK_PROMPT,
+  FEEDBACK_THANKS,
+  type ParsedCommand,
   parseUpdate,
   photoLoggedReply,
   replyForCommand,
@@ -9,10 +13,12 @@ import {
   type TelegramUpdate,
 } from '@foodlog/core';
 import { type Context, Hono } from 'hono';
+import { describeError, logError, recentErrors } from '../db/errors.js';
+import { recentFeedback, storeFeedback } from '../db/feedback.js';
 import { createMealsDb, saveMeal } from '../db/meals.js';
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import { createDb, upsertUser } from '../db/users.js';
-import type { AppBindings } from '../env.js';
+import { type AppBindings, parseAdminId } from '../env.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
 import { primaryProviderChoice, type ProviderFactory } from './meals.js';
 
@@ -82,19 +88,41 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
         });
       } catch (err) {
         const e = err as { message?: string; kind?: string; status?: number; cause?: unknown };
-        // Log rich detail for `wrangler tail`.
-        console.error('photo log failed', {
-          message: e.message,
-          kind: e.kind,
-          status: e.status,
-          cause: typeof e.cause === 'string' ? e.cause : undefined,
+        // Persist to D1 (best-effort; also mirrors to console for `wrangler tail`).
+        const desc = describeError(err);
+        const detail =
+          (typeof e.cause === 'string' ? e.cause : undefined) ?? desc.detail ?? null;
+        await logError(c.env.DB, {
+          telegramUserId: parsed.fromId,
+          source: 'webhook',
+          kind: desc.kind ?? 'photo',
+          status: desc.status ?? null,
+          message: desc.message,
+          detail,
         });
+        // Alert the owner — webhook/photo failures are user-facing. Best-effort.
+        await alertAdmin(
+          c,
+          bot,
+          `⚠️ Photo log failed for user ${parsed.fromId}: ${desc.message}`,
+        );
         try {
           await bot.sendMessage(parsed.chatId, { text: friendlyPhotoError(e) });
         } catch {
           /* ignore */
         }
       }
+      return c.json({ ok: true });
+    }
+
+    // Stateful commands that need D1 / admin gating are handled here; everything
+    // else falls through to the pure `replyForCommand`.
+    if (parsed.command === 'feedback') {
+      await handleFeedbackCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
+    if (parsed.command === 'errors') {
+      await handleErrorsCommand(c, bot, parsed);
       return c.json({ ok: true });
     }
 
@@ -111,6 +139,125 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
   });
 
   return app;
+}
+
+/**
+ * Best-effort DM to the owner (ADMIN_TELEGRAM_ID). No-ops when the id is unset
+ * or when the admin id is the same chat that just errored is irrelevant — we
+ * always send to the admin's own chat id. Never throws.
+ */
+async function alertAdmin(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  text: string,
+): Promise<void> {
+  const adminId = parseAdminId(c.env.ADMIN_TELEGRAM_ID);
+  if (!adminId) return;
+  try {
+    await bot.sendMessage(adminId, { text });
+  } catch {
+    /* ignore — alerting must never break the request */
+  }
+}
+
+/** Short human time (UTC) for admin listings. */
+function shortTime(ms: number): string {
+  return new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + 'Z';
+}
+
+/**
+ * `/feedback <text>` — any user submits feedback: store it, DM the owner, and
+ * confirm. `/feedback` with no text from the ADMIN shows the latest unhandled
+ * feedback (owner review); from a normal user it just prompts for text.
+ */
+async function handleFeedbackCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const adminId = parseAdminId(c.env.ADMIN_TELEGRAM_ID);
+  const isAdmin = adminId != null && parsed.fromId === adminId;
+  const text = parsed.args.trim();
+
+  // Admin, no text -> review the latest feedback.
+  if (isAdmin && !text) {
+    const rows = await recentFeedback(c.env.DB, 10);
+    if (rows.length === 0) {
+      await bot.sendMessage(parsed.chatId, { text: 'No feedback yet. 🎉' });
+      return;
+    }
+    const lines = rows.map(
+      (r) => `• ${shortTime(r.createdAt)} — user ${r.telegramUserId ?? '?'} (${r.source}):\n  ${r.message}`,
+    );
+    await bot.sendMessage(parsed.chatId, {
+      text: `🗒️ Latest feedback (${rows.length}):\n\n${lines.join('\n\n')}`,
+    });
+    return;
+  }
+
+  // No text -> prompt.
+  if (!text) {
+    await bot.sendMessage(parsed.chatId, { text: FEEDBACK_PROMPT });
+    return;
+  }
+
+  // Store + forward.
+  try {
+    const row = await storeFeedback(c.env.DB, {
+      telegramUserId: parsed.fromId,
+      source: 'bot',
+      message: text.slice(0, FEEDBACK_MAX_LEN),
+    });
+    await alertAdmin(
+      c,
+      bot,
+      `📝 New feedback from user ${parsed.fromId}:\n${row.message}`,
+    );
+    await bot.sendMessage(parsed.chatId, { text: FEEDBACK_THANKS });
+  } catch (err) {
+    await logError(c.env.DB, {
+      telegramUserId: parsed.fromId,
+      source: 'webhook',
+      kind: 'feedback',
+      message: describeError(err).message,
+    });
+    await bot.sendMessage(parsed.chatId, {
+      text: 'Sorry — could not save that just now. Please try again in a moment.',
+    });
+  }
+}
+
+/**
+ * `/errors` — ADMIN-only: show the latest error_logs. Non-admins get the normal
+ * fallback reply (the command is effectively invisible to them).
+ */
+async function handleErrorsCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const adminId = parseAdminId(c.env.ADMIN_TELEGRAM_ID);
+  const isAdmin = adminId != null && parsed.fromId === adminId;
+  if (!isAdmin) {
+    // Treat like an unknown message for non-admins — don't reveal the command.
+    const reply = replyForCommand({ command: null }, { miniAppUrl: c.env.MINI_APP_URL ?? '' });
+    if (reply) await bot.sendMessage(parsed.chatId, reply);
+    return;
+  }
+
+  const rows = await recentErrors(c.env.DB, 10);
+  if (rows.length === 0) {
+    await bot.sendMessage(parsed.chatId, { text: 'No errors logged. ✅' });
+    return;
+  }
+  const lines = rows.map((r) => {
+    const who = r.telegramUserId ?? '—';
+    const status = r.status != null ? ` ${r.status}` : '';
+    return `• ${shortTime(r.createdAt)} [${r.source}/${r.kind}${status}] user ${who}\n  ${r.message}`;
+  });
+  await bot.sendMessage(parsed.chatId, {
+    text: `⚠️ Latest errors (${rows.length}):\n\n${lines.join('\n\n')}`,
+  });
 }
 
 /** Extract a human message from a provider error body ({error:{message}}). */

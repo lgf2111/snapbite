@@ -22,6 +22,8 @@ export default defineWorkersConfig(async () => {
               ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
               MINI_APP_URL: 'https://app.example.com',
               TELEGRAM_WEBHOOK_SECRET: 'test-webhook-secret',
+              // Owner id for admin-gated commands + DM alerts (see §14 tests).
+              ADMIN_TELEGRAM_ID: '999000',
               TEST_MIGRATIONS: migrations,
             },
           },

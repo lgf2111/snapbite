@@ -84,6 +84,11 @@ export interface Backend {
   deleteAccount(): Promise<void>;
   /** Photo URL for a meal (worker mode with a telegram file); null otherwise. */
   photoUrl(id: string): string | null;
+  /**
+   * Sends user feedback to the maintainer. Worker mode stores + DMs the owner;
+   * local mode is a no-op (resolves) so the UI can still show a "thanks" toast.
+   */
+  sendFeedback(message: string): Promise<void>;
 }
 
 export function createBackend(): Backend {
@@ -152,6 +157,9 @@ export function createBackend(): Backend {
       },
       photoUrl(id) {
         return api.photoUrl(id);
+      },
+      async sendFeedback(message) {
+        await api.sendFeedback(message);
       },
     };
   }
@@ -238,6 +246,11 @@ export function createBackend(): Backend {
     photoUrl(id) {
       // Local mode stores a data-URL preview on the saved meal, if any.
       return loadMeals().find((m) => m.id === id)?.previewUrl ?? null;
+    },
+    // No backend to receive it in local/demo mode — accept + drop so the UI
+    // can still show a friendly confirmation.
+    async sendFeedback() {
+      /* no-op */
     },
   };
 }

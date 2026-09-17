@@ -111,7 +111,7 @@ export function replyForCommand(
       );
     case 'help':
       return withButton(
-        'FoodLog logs meals from photos.\n\n• Send a photo straight to this chat — I analyze it and log it\n• Open the app to review or correct any entry\n• Browse history, search, and see your trends there\n\nUse /settings to add or update your AI key.',
+        'FoodLog logs meals from photos.\n\n• Send a photo straight to this chat — I analyze it and log it\n• Open the app to review or correct any entry\n• Browse history, search, and see your trends there\n\nUse /settings to add or update your AI key.\nHit a problem? Send /feedback <your message> and it goes straight to the maintainer.',
       );
     case 'settings':
       return withButton('Open FoodLog and go to Settings to add or update your AI key.');
@@ -120,6 +120,16 @@ export function replyForCommand(
       return withButton('Send me a meal photo to log it, or open FoodLog to view your history.');
   }
 }
+
+/** Prompt shown for `/feedback` with no text — tells the user how to send it. */
+export const FEEDBACK_PROMPT =
+  'Tell me what went wrong or what you\'d like improved.\n\nSend it like: /feedback the photo analysis was way off for my salad';
+
+/** Confirmation shown after a user's feedback is stored + forwarded. */
+export const FEEDBACK_THANKS = '🙏 Thanks — your feedback was sent to the maintainer.';
+
+/** Max feedback length accepted from the bot (mirrors the API cap). */
+export const FEEDBACK_MAX_LEN = 2000;
 
 /** Builds the "meal logged" feed message posted after a successful save. */
 export function mealLoggedMessage(foods: string[], energyKcal: number | null): string {

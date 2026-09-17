@@ -17,6 +17,15 @@ describe('parseUpdate', () => {
     expect(parsed?.args).toBe('deepseek');
   });
 
+  it('parses /feedback with its message as args', () => {
+    const parsed = parseUpdate({
+      message: { text: '/feedback the salad was way off', chat: { id: 3 }, from: { id: 42 } },
+    });
+    expect(parsed?.command).toBe('feedback');
+    expect(parsed?.args).toBe('the salad was way off');
+    expect(parsed?.fromId).toBe(42);
+  });
+
   it('returns command null for a plain message', () => {
     const parsed = parseUpdate({ message: { text: 'hello there', chat: { id: 1 } } });
     expect(parsed?.command).toBeNull();
@@ -39,6 +48,11 @@ describe('replyForCommand', () => {
   it('replies to /help', () => {
     const reply = replyForCommand({ chatId: 1, command: 'help', args: '', text: '/help' }, CONFIG);
     expect(reply?.text).toContain('logs meals');
+  });
+
+  it('mentions /feedback in /help', () => {
+    const reply = replyForCommand({ chatId: 1, command: 'help', args: '', text: '/help' }, CONFIG);
+    expect(reply?.text).toContain('/feedback');
   });
 
   it('nudges for unknown/plain messages', () => {

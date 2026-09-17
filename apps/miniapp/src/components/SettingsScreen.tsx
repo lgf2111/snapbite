@@ -1,6 +1,19 @@
-import { PROVIDER_PRESETS, type ProviderId, type UserProfile } from '@foodlog/core';
+import {
+  FEEDBACK_MAX_LEN,
+  PROVIDER_PRESETS,
+  type ProviderId,
+  type UserProfile,
+} from '@foodlog/core';
 import { type ProviderConfig, ProviderPicker } from './ProviderPicker.js';
-import { CheckCircle2, Download, Pencil, ShieldCheck, Target, Trash2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  Download,
+  MessageSquare,
+  Pencil,
+  ShieldCheck,
+  Target,
+  Trash2,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -15,6 +28,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Collapsible } from '@/components/ui/collapsible';
 import { Switch } from '@/components/ui/switch';
 import type { SettingsView } from '@/lib/api';
@@ -122,6 +136,9 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [exporting, setExporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [sendingFeedback, setSendingFeedback] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [fbCfg, setFbCfg] = useState<ProviderConfig>({
@@ -320,6 +337,22 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       toast.error(e instanceof Error ? e.message : 'Could not delete account');
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleSendFeedback() {
+    const message = feedbackText.trim();
+    if (!message) return;
+    setSendingFeedback(true);
+    try {
+      await backend.sendFeedback(message);
+      setFeedbackText('');
+      setFeedbackOpen(false);
+      toast.success('Thanks — your feedback was sent.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not send feedback');
+    } finally {
+      setSendingFeedback(false);
     }
   }
 
@@ -541,6 +574,21 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
         </CardContent>
       </Card>
 
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="text-primary size-5" />
+            <span className="font-medium">Feedback &amp; support</span>
+          </div>
+          <p className="text-muted-foreground text-sm">
+            Hit a problem or have an idea? Send it straight to the maintainer.
+          </p>
+          <Button variant="secondary" className="gap-2" onClick={() => setFeedbackOpen(true)}>
+            <MessageSquare className="size-4" /> Send feedback
+          </Button>
+        </CardContent>
+      </Card>
+
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>
           <DialogHeader>
@@ -555,6 +603,43 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             </Button>
             <Button variant="destructive" disabled={deleting} onClick={handleDeleteAccount}>
               {deleting ? 'Deleting…' : 'Delete everything'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={feedbackOpen} onOpenChange={setFeedbackOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send feedback</DialogTitle>
+            <DialogDescription>
+              Tell us what went wrong or what you'd like improved. This goes straight to the
+              maintainer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Textarea
+              aria-label="Your feedback"
+              placeholder="e.g. the analysis was off for my salad, or I'd love a weekly summary…"
+              maxLength={FEEDBACK_MAX_LEN}
+              rows={5}
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+            />
+            <p className="text-muted-foreground text-right text-xs">
+              {feedbackText.length}/{FEEDBACK_MAX_LEN}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              disabled={sendingFeedback}
+              onClick={() => setFeedbackOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button disabled={!feedbackText.trim() || sendingFeedback} onClick={handleSendFeedback}>
+              {sendingFeedback ? 'Sending…' : 'Send'}
             </Button>
           </DialogFooter>
         </DialogContent>

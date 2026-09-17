@@ -19,6 +19,7 @@ import {
   saveMeal,
   updateMeal,
 } from '../db/meals.js';
+import { describeError, logError } from '../db/errors.js';
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import type { SettingsRow } from '../db/schema.js';
 import { createDb, upsertUser } from '../db/users.js';
@@ -156,6 +157,17 @@ export function mealsRoutes(
       const status = e.kind === 'http' && e.status === 401 ? 400 : 502;
       // Surface the provider's own message (e.g. a retired-model hint) when present.
       const providerDetail = extractProviderMessage(e.cause);
+      // Persist server-side analysis failures for the owner to review via /errors.
+      // (No admin DM here — API 4xx/5xx aren't user-facing chat errors; §14 decision.)
+      const desc = describeError(err);
+      await logError(c.env.DB, {
+        telegramUserId: c.get('telegramUser')?.id ?? null,
+        source: 'analyze',
+        kind: desc.kind ?? 'provider',
+        status,
+        message: desc.message,
+        detail: providerDetail ?? desc.detail ?? null,
+      });
       return c.json(
         {
           error: 'Analysis failed',
