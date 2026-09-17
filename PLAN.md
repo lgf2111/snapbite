@@ -178,6 +178,10 @@ This section tracks what was actually built, including work beyond the original 
 - **Multi-provider AI (accuracy upgrade).** DeepSeek's food-vision accuracy is weak. Adding a **Gemini** adapter and a **generic OpenAI-compatible** adapter (e.g. GPT-4o-mini) behind the same `AIProvider` interface, with provider + model selection in Settings, and raising image detail to `high`. Primary target: **Gemini**.
 - **Mini App UI/UX pass.** Telegram theme params, native BackButton/MainButton, haptics; swipeable tabs, swipe-to-delete, pull-to-refresh; confirm-screen polish (quantity steppers, confidence cues, skeleton loaders); home daily-summary card; toasts and empty states.
 
+### Changed
+
+- **Mini App photo capture removed.** Because Mini-App uploads can't retain an image for free (bytes are discarded; no Telegram `file_id`), the camera/upload + confirm flow was removed from the Mini App. Logging is now bot-only (photo → auto-log, photo kept). The Mini App is review/edit/history/search/analytics/settings. Removed `ConfirmScreen`, the client `image.ts` downscale, and the `MealProcessor` from the app layer.
+
 ### Future / backlog
 
 - **R2 photo storage for Mini-App captures** so in-app photos persist like bot photos (currently only bot-sent photos keep an image). Deferred in the original plan until a gallery is actually needed.

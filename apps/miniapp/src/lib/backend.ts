@@ -7,14 +7,7 @@ import {
   type SettingsView,
 } from './api.js';
 import { readConfig } from './config.js';
-import { LocalMealProcessor, type MealProcessor, WorkerMealProcessor } from './processor.js';
-import {
-  deleteSavedMeal,
-  loadMeals,
-  type SavedMeal,
-  saveMeal as saveLocal,
-  updateSavedMeal,
-} from './store.js';
+import { deleteSavedMeal, loadMeals, type SavedMeal, updateSavedMeal } from './store.js';
 import { getRawInitData } from './telegram.js';
 
 /** A unified recent-meal shape the home screen renders, from either source. */
@@ -33,14 +26,12 @@ export interface HistoryDay {
 }
 
 /**
- * The app's data layer. When a Worker backend is configured it uses the real
- * API (server-side DeepSeek + D1); otherwise it falls back to the mock
- * processor + localStorage so the app is fully usable in browser dev.
+ * The app's data layer. Logging happens via the Telegram bot; the Mini App
+ * reads and edits meals. Worker mode uses the real API (D1); local mode uses
+ * localStorage so the app is usable in browser dev.
  */
 export interface Backend {
   readonly mode: 'worker' | 'local';
-  readonly processor: MealProcessor;
-  save(meal: MealResult, previewUrl?: string): Promise<void>;
   update(id: string, meal: MealResult): Promise<void>;
   remove(id: string): Promise<void>;
   recent(): Promise<RecentMeal[]>;
@@ -61,12 +52,6 @@ export function createBackend(): Backend {
     const api = new ApiClient(config.workerUrl, getRawInitData);
     return {
       mode: 'worker',
-      processor: new WorkerMealProcessor((image: MealImage, hint?: string) =>
-        api.analyze(image, hint),
-      ),
-      async save(meal) {
-        await api.saveMeal(meal);
-      },
       async update(id, meal) {
         await api.updateMeal(id, meal);
       },
@@ -116,10 +101,6 @@ export function createBackend(): Backend {
 
   return {
     mode: 'local',
-    processor: new LocalMealProcessor(),
-    async save(meal, previewUrl) {
-      saveLocal(meal, previewUrl);
-    },
     async update(id, meal) {
       updateSavedMeal(id, meal);
     },

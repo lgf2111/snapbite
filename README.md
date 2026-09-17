@@ -8,11 +8,9 @@ Nutrition is always shown as an **estimate** and is always **editable**. The AI 
 
 ## How it works
 
-Take a photo of a meal. The app sends a downscaled image to a Cloudflare Worker, which calls a vision model (your key) to identify foods, portions, and rough nutrition. A deterministic resolver prefers a bundled per-100g table and falls back to the AI estimate, tagging every value's source (`table` / `ai_estimate` / `manual` / `mixed`). You review and correct on the confirm screen, then save. Per-food nutrition (kcal + protein/carbs/fat for every food) is persisted and read back verbatim — the detail screen shows stored values rather than re-deriving them, so multi-food meals keep each food's macros. History, search, and analytics are all computed from stored rows in SQL — no AI calls.
+Send a photo of a meal to the Telegram bot. The Cloudflare Worker downloads it, calls a vision model (your key) to identify foods, portions, and rough nutrition, saves the meal (keeping the photo via its Telegram `file_id`), and replies. A deterministic resolver prefers a bundled per-100g table and falls back to the AI estimate, tagging every value's source (`table` / `ai_estimate` / `manual` / `mixed`). Per-food nutrition (kcal + protein/carbs/fat for every food) is persisted and read back verbatim, so multi-food meals keep each food's macros. In the Mini App you review, edit, search, and analyze — all computed from stored rows in SQL, no AI calls.
 
-Two ways to log:
-- **Mini App** — camera → editable confirm → save. Best for accuracy; review before saving.
-- **Bot chat** — send a photo straight to the bot; it auto-logs the AI's estimate, keeps the photo, and replies with an "Open" button to correct it. Best for speed.
+**Logging is done through the Telegram bot:** send a photo to the bot chat and it auto-logs the AI's estimate, keeps the photo (free, via the Telegram `file_id`), and replies with an "Open" button. The **Mini App** is for reviewing, editing, searching, and analyzing your logged meals — it no longer captures photos itself, since Mini-App uploads can't retain an image for free.
 
 ## Architecture
 
@@ -20,7 +18,7 @@ Monorepo (pnpm workspaces):
 
 - **`packages/core`** — transport-agnostic domain logic: Zod schemas, the `AIProvider` interface + a generic OpenAI-compatible adapter with provider presets (Gemini, OpenAI, DeepSeek), prompt builder, nutrition resolver + bundled table, Telegram `initData` verification, bot update parsing, AES-GCM crypto. Zero platform imports; the reason a future Telegram-native port is cheap.
 - **`apps/worker`** — Cloudflare Worker (Hono) + D1 (Drizzle ORM). Auth via Telegram `initData` HMAC, encrypted BYOK, meal analyze/save/CRUD, history/search/analytics, and the bot webhook.
-- **`apps/miniapp`** — React + Vite Mini App (`@telegram-apps/sdk-react`), hosted on Cloudflare Pages. Client-side canvas downscale before upload. Falls back to a mock processor + localStorage when no backend is configured (browser dev).
+- **`apps/miniapp`** — React + Vite Mini App (`@telegram-apps/sdk-react`), hosted on Cloudflare Pages. Reviews/edits/searches/analyzes logged meals (logging itself is done via the bot). Falls back to localStorage when no backend is configured (browser dev).
 - **`apps/cli`** — local harness to run a photo through the pipeline end-to-end (mock by default, real provider via `--real`).
 
 **Security:** the AI key is stored AES-256-GCM encrypted in D1 (ciphertext + IV), decrypted in-memory per request, never returned or logged. Image bytes transit but are not persisted; only the Telegram `file_id` is kept (for bot photos). All meal data is owner-scoped.
