@@ -48,13 +48,13 @@ export function SwipeableRow({ children, onDelete }: SwipeableRowProps) {
           setOpen(false);
         }}
         className={cn(
-          'bg-destructive text-destructive-foreground border-destructive/60 absolute inset-y-0 right-0 flex items-center rounded-xl border shadow-sm transition-opacity',
+          'bg-destructive text-destructive-foreground border-destructive/60 absolute inset-y-0 right-0 flex items-center justify-end rounded-xl border shadow-sm transition-opacity',
           open ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
         style={{ width: REVEAL + OVERLAP }}
       >
-        {/* Center the icon within the visible (REVEAL) strip, not the full
-            width — the extra OVERLAP is hidden under the card. */}
+        {/* The button is anchored right and its left OVERLAP px hide under the
+            card. Center the icon within the visible (rightmost REVEAL) strip. */}
         <span className="flex items-center justify-center" style={{ width: REVEAL }}>
           <Trash2 className="size-5" />
         </span>

@@ -3,6 +3,8 @@ import {
   computeTargets,
   feetInchesToCm,
   type Goal,
+  GOAL_LABELS,
+  GOAL_STAGES,
   inchesToFeetInches,
   kgToLb,
   lbToKg,
@@ -42,11 +44,7 @@ const ACTIVITIES: Array<{ value: ActivityLevel; label: string }> = [
   { value: 'very_active', label: 'Very active' },
 ];
 
-const GOALS: Array<{ value: Goal; label: string }> = [
-  { value: 'lose', label: 'Lose' },
-  { value: 'maintain', label: 'Maintain' },
-  { value: 'gain', label: 'Gain' },
-];
+
 
 /** A segmented single-choice control. */
 function Segmented<T extends string>({
@@ -251,9 +249,27 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label>Goal</Label>
-        <Segmented value={goal} onChange={setGoal} options={GOALS} />
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="goal">Goal</Label>
+          <span className="text-primary text-sm font-medium">{GOAL_LABELS[goal]}</span>
+        </div>
+        <input
+          id="goal"
+          type="range"
+          min={0}
+          max={GOAL_STAGES.length - 1}
+          step={1}
+          value={GOAL_STAGES.indexOf(goal)}
+          onChange={(e) => setGoal(GOAL_STAGES[Number(e.target.value)] ?? 'maintain')}
+          className="accent-primary w-full"
+          aria-label="Goal"
+        />
+        <div className="text-muted-foreground flex justify-between text-[10px]">
+          <span>Lose</span>
+          <span>Maintain</span>
+          <span>Gain</span>
+        </div>
       </div>
 
       <div className="flex items-center justify-between">
@@ -310,7 +326,8 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
         </p>
         <p>
           <strong>Calories:</strong> BMR (Mifflin–St Jeor) × activity, then adjusted for your goal
-          (lose −20% · maintain · gain +10%), floored at 1200 kcal.
+          (Lose fast −25% · Lose steady −12% · Maintain · Lean gain +10% · Gain fast +20%), floored
+          at 1200 kcal.
         </p>
         <p>
           <strong>BMR</strong> = 10·kg + 6.25·cm − 5·age {sex === 'male' ? '+ 5' : '− 161'}.

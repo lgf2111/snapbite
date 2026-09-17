@@ -237,6 +237,55 @@ describe('PUT /api/settings/fallback', () => {
   });
 });
 
+describe('custom primary provider', () => {
+  it('stores a custom base URL + provider and returns it', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(1401)), 'content-type': 'application/json' };
+    await app.request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          apiKey: 'k-custom',
+          aiProvider: 'custom',
+          aiModel: 'my-model',
+          baseUrl: 'https://my-llm.example.com/v1',
+          supportsDetail: true,
+        }),
+      },
+      env,
+    );
+    const res = await app.request('/api/settings', { headers: await authHeaders(1401) }, env);
+    const body = (await res.json()) as {
+      aiProvider: string;
+      customBaseUrl: string | null;
+      customSupportsDetail: boolean;
+    };
+    expect(body.aiProvider).toBe('custom');
+    expect(body.customBaseUrl).toBe('https://my-llm.example.com/v1');
+    expect(body.customSupportsDetail).toBe(true);
+  });
+
+  it('rejects custom without a valid https base URL (falls back to a preset)', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(1402)), 'content-type': 'application/json' };
+    await app.request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'k', aiProvider: 'custom', baseUrl: 'ftp://nope' }),
+      },
+      env,
+    );
+    const res = await app.request('/api/settings', { headers: await authHeaders(1402) }, env);
+    const body = (await res.json()) as { aiProvider: string; customBaseUrl: string | null };
+    expect(body.aiProvider).toBe('gemini'); // fell back to default
+    expect(body.customBaseUrl).toBeNull();
+  });
+});
+
 describe('POST /api/settings/test', () => {
   it('returns 400 when no key is saved', async () => {
     const app = createApp();

@@ -68,8 +68,31 @@ describe('provider registry', () => {
     expect(JSON.parse(init.body).model).toBe('gemini-3.8-flash');
   });
 
-  it('falls back to the default provider for an unknown id', () => {
+  it('falls back to the default provider for an unknown id (no baseUrl)', () => {
     const provider = createProvider({ providerId: 'bogus', apiKey: 'k' });
     expect(provider.id).toBe(DEFAULT_PROVIDER_ID);
+  });
+
+  it('builds a custom provider from a base URL for a non-preset id', async () => {
+    const fetchMock = okFetch(JSON.stringify(validAnalysis));
+    const provider = createProvider({
+      providerId: 'custom',
+      apiKey: 'k',
+      baseUrl: 'https://my-llm.example.com/v1',
+      model: 'my-vision-model',
+      supportsDetail: true,
+      fetch: fetchMock,
+    });
+    expect(provider.id).toBe('custom');
+    await provider.analyzeMeal(IMAGE);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
+    expect(url).toBe('https://my-llm.example.com/v1/chat/completions');
+    expect(JSON.parse(init.body).model).toBe('my-vision-model');
+  });
+
+  it('every preset lists its defaultModel first in models[]', () => {
+    for (const p of Object.values(PROVIDER_PRESETS)) {
+      expect(p.models[0]).toBe(p.defaultModel);
+    }
   });
 });

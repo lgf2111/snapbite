@@ -32,6 +32,16 @@ export interface FallbackConfig {
    * Treated as enabled when absent (back-compat with earlier saves).
    */
   enabled?: boolean;
+  /** Custom OpenAI-compatible base URL (when `provider` is `custom`). */
+  baseUrl?: string;
+  /** Whether the custom endpoint honors `image_url.detail`. */
+  supportsDetail?: boolean;
+}
+
+/** Custom primary provider config (when `settings.aiProvider` === 'custom'). */
+export interface CustomProviderConfig {
+  baseUrl: string;
+  supportsDetail?: boolean;
 }
 
 /** The parsed shape of the `preferences_json` column. */
@@ -39,6 +49,8 @@ export interface Preferences {
   /** Raw profile JSON (validated by the route via the core schema). */
   profile?: unknown;
   fallback?: FallbackConfig;
+  /** Custom primary provider (base URL + detail support). */
+  customProvider?: CustomProviderConfig;
   updatedAt?: number;
 }
 

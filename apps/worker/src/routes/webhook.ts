@@ -14,13 +14,15 @@ import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.
 import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
-import type { ProviderFactory } from './meals.js';
+import { primaryProviderChoice, type ProviderFactory } from './meals.js';
 
 /** The bot-client surface the webhook uses (so tests can mock just these). */
 export interface BotClient {
   sendMessage(chatId: number, reply: BotReply): Promise<void>;
   getFilePath(fileId: string): Promise<string | null>;
   downloadFile(filePath: string): Promise<{ base64: string; mimeType: string } | null>;
+  /** Optional transient chat status (typing/upload_photo). Best-effort. */
+  sendChatAction?(chatId: number, action: string): Promise<void>;
 }
 
 /** Injectable bot-client factory so tests can supply a mock (no network). */
@@ -213,7 +215,13 @@ async function tryFallback(
     { ciphertext: fb.keyCiphertext, iv: fb.keyIv },
     c.env.ENCRYPTION_KEY,
   );
-  const fbProvider = providerFactory({ apiKey: fbKey, provider: fb.provider, model: fb.model });
+  const fbProvider = providerFactory({
+    apiKey: fbKey,
+    provider: fb.provider,
+    model: fb.model,
+    ...(fb.baseUrl ? { baseUrl: fb.baseUrl } : {}),
+    ...(fb.supportsDetail != null ? { supportsDetail: fb.supportsDetail } : {}),
+  });
   const analysis = await fbProvider.analyzeMeal(image, opts);
   return { analysis, provider: fb.provider };
 }
@@ -265,6 +273,11 @@ async function handlePhoto(
     c.env.ENCRYPTION_KEY,
   );
 
+  // Let the user know we're on it — a transient "uploading photo…" status plus
+  // a quick acknowledgement message (the result follows). Best-effort.
+  await bot.sendChatAction?.(chatId, 'upload_photo');
+  await bot.sendMessage(chatId, { text: '📸 Analyzing your meal…' });
+
   // Download the image bytes from Telegram, analyze, and discard.
   const filePath = await bot.getFilePath(fileId);
   if (!filePath) {
@@ -277,11 +290,7 @@ async function handlePhoto(
     return;
   }
 
-  const provider = providerFactory({
-    apiKey,
-    provider: settings.aiProvider,
-    model: settings.aiModel,
-  });
+  const provider = providerFactory(primaryProviderChoice(settings, apiKey));
   const image = { base64: file.base64, mimeType: file.mimeType as 'image/jpeg' };
   const opts = caption ? { hint: caption } : {};
 

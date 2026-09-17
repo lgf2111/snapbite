@@ -313,3 +313,90 @@ cd apps/worker && pnpm exec wrangler tail     # live logs; photo-log errors are 
 - Branch `main`, remote `origin` (GitHub `lgf2111/food-log`). `HEAD == origin/main` at handoff.
 - Standing rules from the user: **update README whenever committing**; **commit + push regularly**;
   stage specific files (avoid `git add -A`); never commit secrets.
+
+
+---
+
+## 13. Future-proofing: model select, 5-stage goal, custom provider (DELIVERED)
+
+> **Status: shipped & deployed.** Worker `b5b2844d`, Pages `73b634e7`. No DB migration.
+> Tests green: core 94, cli 8, miniapp 16, worker 68. Delivered in this batch:
+> - **Model select + Custom…** — per-provider curated `models[]` dropdown with a free-text
+>   escape hatch (primary + fallback), so typos/retired names can't silently break analysis.
+> - **5-stage goal slider** — `GOAL_STAGES` (Lose fast/Lose steady/Maintain/Lean gain/Gain fast),
+>   factors 0.75/0.88/1.0/1.10/1.20; legacy `lose`/`gain` values map forward via a Zod preprocess.
+> - **Custom provider** — any OpenAI-compatible base URL + model + `detail` toggle, for primary
+>   and fallback; stored in `preferences_json` (primary) / `FallbackConfig` (fallback).
+> - **Bot progress feedback** — `upload_photo` chat action + "Analyzing your meal…" message before analysis.
+> - **Local-time day grouping** — `?tz=` offset threaded to the worker; `localDayKey`/`groupByDay`
+>   bucket by the user's local day (fixes the 12:30am-filed-yesterday bug).
+> - **Swipe-delete icon centered**; **"Gemini"** label (was "Google Gemini").
+>
+> Original plan retained below for reference.
+
+Three requests, all feasible. Goals:
+1. **Model as a select, not free text** — avoid typos / retired-model failures.
+2. **Goal = a 5-stage scale** (lose most → gain most) with better-than-"lose/gain" labels.
+3. **Custom provider** for power users (arbitrary OpenAI-compatible base URL + model). Confirmed possible — `OpenAICompatibleProvider` already takes any `baseUrl`.
+
+### 13.1 Model select + curated model lists (with custom escape hatch)
+
+Problem: `aiModel` is a free-text `<input>`; a typo or a retired name breaks analysis at runtime.
+
+Design:
+- Add `models: string[]` to each `ProviderPreset` in `packages/core/src/ai/registry.ts` — a **curated, current** list per provider (e.g. gemini: `gemini-3.6-flash`, `gemini-2.5-flash`, `gemini-2.5-pro`; openai: `gpt-4o-mini`, `gpt-4o`, `gpt-4.1-mini`; deepseek: `deepseek-flash`, `deepseek-chat`). `defaultModel` stays the first/recommended.
+- Settings model field becomes a `<select>` populated from `PROVIDER_PRESETS[provider].models`, defaulting to `defaultModel`.
+- **Escape hatch (avoids going stale):** include a `Custom…` option that reveals the existing text input, so a user can always type a brand-new model name the day it launches. Store whatever is chosen in `aiModel` (unchanged storage).
+- Same treatment for the **fallback** model field.
+- Because models rotate, the select is a *convenience + typo guard*, not a hard whitelist — the worker still accepts any string (it already does). No worker validation change needed.
+
+### 13.2 Five-stage goal scale
+
+Current: `Goal = 'lose' | 'maintain' | 'gain'` with `GOAL_FACTORS` 0.8 / 1.0 / 1.1.
+
+New 5 stages (calorie factor vs TDEE), grounded in common cut/bulk ranges (deficit ~15–25%,
+surplus ~10–20% — see healthline/bodyspec refs):
+
+| Stage id | Label | Factor | Meaning |
+|---|---|---|---|
+| `cut` | Lose fast | 0.75 | aggressive deficit (~−25%) |
+| `lean` | Lose steady | 0.88 | mild deficit (~−12%) |
+| `maintain` | Maintain | 1.00 | recfrom |
+| `gain_lean` | Lean gain | 1.10 | small surplus (~+10%) |
+| `bulk` | Gain fast | 1.20 | larger surplus (~+20%) |
+
+- Rename the type to a 5-value enum. **Back-compat:** map legacy stored values (`lose`→`lean`, `gain`→`gain_lean`, `maintain`→`maintain`) when parsing an existing profile so no one's saved goal breaks. Keep the 1200 kcal floor.
+- Labels: proposed set above ("Lose fast / Lose steady / Maintain / Lean gain / Gain fast"). A cleaner alt: "Aggressive cut / Mild cut / Maintain / Lean bulk / Aggressive bulk". **Decision needed** (see 13.4).
+- UI: replace the 3-button `Segmented` with a **5-stop slider/scroller** (a range input or a horizontal segmented scale) from most-loss (left) to most-gain (right), showing the selected label + the resulting calorie delta live. Reuse the target preview.
+- Core `GOAL_FACTORS` updates to the 5 keys; `computeTargets` unchanged otherwise. Update `profile.test.ts` known values.
+
+### 13.3 Custom provider (power users)
+
+`OpenAICompatibleProvider` already accepts `{ providerId, apiKey, baseUrl, model, supportsDetail }`,
+so a custom endpoint is a thin addition:
+- Add a `'custom'` option to the provider picker. When selected, reveal **Base URL** + **Model** text inputs (and a `supportsDetail` toggle, default off for safety).
+- Storage: the primary already has `aiProvider`/`aiModel` columns; add the custom **base URL** to `settings.preferencesJson` (e.g. `customProvider: { baseUrl, supportsDetail }`) — **no migration** (or a dedicated column if cleaner; prefer preferences_json to avoid a migration). Fallback custom stored in its `FallbackConfig` (already in preferences_json) — add optional `baseUrl`/`supportsDetail` there.
+- Worker: `createProvider` (registry) must accept a custom provider. Extend `CreateProviderOptions`/`createProvider` to take an optional `baseUrl` + `supportsDetail`; when `providerId === 'custom'` (or a baseUrl is supplied), construct `OpenAICompatibleProvider` directly with those. Settings routes read/write the custom fields; webhook `providerFactory` + revise path pass them through.
+- Validation: require an https base URL; the "test key" path (`POST /api/settings/test`) already just constructs the provider — good smoke test.
+- Keep it clearly labeled "Advanced / for developers".
+
+### 13.4 Decisions (confirmed)
+
+1. **Goal labels:** "Lose fast / Lose steady / Maintain / Lean gain / Gain fast"; factors 0.75 / 0.88 / 1.00 / 1.10 / 1.20.
+2. **Goal control:** a draggable **slider** (5 stops).
+3. **Custom provider:** primary **+** fallback.
+4. **Model lists:** curated best-effort + `Custom…` escape hatch (accepted).
+
+### 13.6 Extra fixes bundled with this batch (confirmed)
+
+5. **Bot "typing"/progress feedback** when a photo is sent — the bot should show it's working (e.g. Telegram `sendChatAction: 'typing'` / `upload_photo`, and/or an immediate "Analyzing your meal…" message that's followed by the result) so the user isn't left wondering. Implement in `apps/worker/src/routes/webhook.ts` `handlePhoto` (send the action before analysis; `TelegramBotClient` needs a `sendChatAction` method). Keep it best-effort (never block/fail the log).
+6. **Day grouping must use the user's local time, not UTC.** Bug: a photo at 12:30am local was filed under "yesterday". Root cause: day keys are computed with `toISOString().slice(0,10)` (UTC) in several places — worker `groupByDay`/`GET /api/meals?date=`/`GET /api/meals/dates` and the Mini App. Fix: the client owns "today"/day boundaries in **local** time and passes an explicit date (already does for `mealsByDate`) — but the worker filters by UTC day. **Approach:** have the client send its UTC offset (or compute day membership client-side). Simplest robust fix: worker returns meals with `loggedAt` (epoch ms, already UTC-correct) and the **client** buckets by local day (it already fetches per-date). Ensure `DateSelector` "today", `mealsByDate` filtering, and `mealDates` all use local-time keys consistently. Verify the whole path: `HomeScreen.todayKey()` (local ✓), worker `?date=` filter (currently UTC ✗ → switch to offset-aware or move filtering client-side), `GET /api/meals/dates` (UTC ✗). Add a test around a near-midnight timestamp.
+7. **Swipe-delete icon still too far left** — nudge the trash icon further right so it reads centered in the revealed strip. Tune `SwipeableRow` (increase the icon's left offset / center within the visible area more accurately).
+8. **Say "Gemini", not "Google Gemini"** — update `PROVIDER_PRESETS.gemini.label` to `Gemini` (flows to all provider dropdowns, meal-card provider labels, key guide title).
+
+### 13.5 Build order (once confirmed)
+
+1. Core: `ProviderPreset.models`; 5-stage `Goal` + `GOAL_FACTORS` + legacy mapping; `createProvider` custom support. Tests. Build core.
+2. Worker: settings read/write for custom base URL (+ fallback); `providerFactory`/revise pass-through; keep accepting any model string. Tests. Deploy + (no migration expected).
+3. Mini App: model `<select>` + Custom… (primary + fallback); 5-stop goal slider in `ProfileForm`; custom-provider fields in Settings; update `api`/`backend` types. Tests + build. Deploy.
+4. Update README (§ AI providers + targets) + this section (mark delivered); commit + push.

@@ -15,6 +15,22 @@ describe('TelegramBotClient', () => {
     expect(body.reply_markup).toBeDefined();
   });
 
+  it('sends a chat action', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, text: async () => '{}' }));
+    const client = new TelegramBotClient('token123', fetchMock);
+    await client.sendChatAction(42, 'upload_photo');
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
+    expect(url).toBe('https://api.telegram.org/bottoken123/sendChatAction');
+    expect(JSON.parse(init.body)).toEqual({ chat_id: 42, action: 'upload_photo' });
+  });
+
+  it('swallows chat-action failures (best-effort)', async () => {
+    const client = new TelegramBotClient('tok', async () => {
+      throw new Error('network down');
+    });
+    await expect(client.sendChatAction(1, 'typing')).resolves.toBeUndefined();
+  });
+
   it('binds the default global fetch (no "Illegal invocation")', async () => {
     // Replace global fetch with a spy; the client must call it without a bad
     // `this`. If the binding were wrong this would throw in workerd; here we at

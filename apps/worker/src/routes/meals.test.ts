@@ -3,6 +3,7 @@ import { env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
+import { groupByDay, localDayKey } from './meals.js';
 
 const BOT_TOKEN = '123456:LOCAL-DEV-BOT-TOKEN';
 
@@ -349,5 +350,29 @@ describe('POST /api/meals + GET /api/meals', () => {
     expect(sent[0]?.chatId).toBe(3005);
     expect(sent[0]?.text).toContain('Logged');
     expect(sent[0]?.text).toContain('white rice');
+  });
+});
+
+describe('localDayKey / groupByDay (local-time bucketing)', () => {
+  // 2024-05-10T00:30:00 in a UTC-5 zone (offset +300 min) is still May 10 local,
+  // but 05:30 UTC — the old UTC bucketing was fine here. The bug case: 00:30
+  // local in a zone AHEAD of UTC (offset -480, e.g. UTC+8) is 2024-05-09 16:30
+  // UTC → UTC bucketing wrongly files it under the 9th.
+  const may10_0030_utcPlus8 = Date.UTC(2024, 4, 9, 16, 30); // = 2024-05-10 00:30 at UTC+8
+
+  it('buckets a just-after-midnight local time to the correct local day', () => {
+    // UTC+8 => getTimezoneOffset() returns -480.
+    expect(localDayKey(may10_0030_utcPlus8, -480)).toBe('2024-05-10');
+    // Without the offset (UTC) it would wrongly be the 9th — the original bug.
+    expect(localDayKey(may10_0030_utcPlus8, 0)).toBe('2024-05-09');
+  });
+
+  it('groupByDay uses the local day for the bucket key', () => {
+    const groups = groupByDay(
+      [{ id: 'm1', loggedAt: may10_0030_utcPlus8, energyKcal: 500 }],
+      -480,
+    );
+    expect(groups[0]?.date).toBe('2024-05-10');
+    expect(groups[0]?.mealIds).toEqual(['m1']);
   });
 });

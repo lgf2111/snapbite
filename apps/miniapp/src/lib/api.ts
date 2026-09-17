@@ -3,6 +3,15 @@ import type { DailyTargets, MealImage, MealResult, UserProfile } from '@foodlog/
 /** Header the Worker expects the signed initData in (matches the Worker). */
 const INIT_DATA_HEADER = 'x-telegram-init-data';
 
+/**
+ * The device's current UTC offset in minutes (as `Date.getTimezoneOffset()`:
+ * positive when behind UTC). Sent to the Worker so meals group by the user's
+ * local calendar day rather than UTC.
+ */
+function tzOffsetMinutes(): number {
+  return new Date().getTimezoneOffset();
+}
+
 /** Default per-request timeout (ms). */
 const DEFAULT_TIMEOUT_MS = 20_000;
 /** AI calls (analyze/revise) run a model server-side; give them more headroom. */
@@ -66,11 +75,22 @@ export interface SettingsView {
   keyLast4: string | null;
   profile?: UserProfile | null;
   targets?: DailyTargets | null;
+  /** Custom primary provider (when aiProvider === 'custom'). */
+  customBaseUrl?: string | null;
+  customSupportsDetail?: boolean;
   fallbackConnected?: boolean;
   fallbackEnabled?: boolean;
   fallbackProvider?: string | null;
   fallbackModel?: string | null;
   fallbackKeyLast4?: string | null;
+  fallbackBaseUrl?: string | null;
+  fallbackSupportsDetail?: boolean;
+}
+
+/** Extra fields for configuring a custom OpenAI-compatible provider. */
+export interface CustomProviderInput {
+  baseUrl?: string;
+  supportsDetail?: boolean;
 }
 
 /**
@@ -202,13 +222,14 @@ export class ApiClient {
 
   /** List meals; optionally scope to one day (YYYY-MM-DD) for a lighter payload. */
   listMeals(date?: string): Promise<{ meals: MealSummary[]; groups: DayGroup[] }> {
-    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
-    return this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>(`/api/meals${qs}`);
+    const params = new URLSearchParams({ tz: String(tzOffsetMinutes()) });
+    if (date) params.set('date', date);
+    return this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>(`/api/meals?${params}`);
   }
 
   /** Distinct days (YYYY-MM-DD) that have meals — for calendar dots. */
   mealDates(): Promise<{ dates: string[] }> {
-    return this.#request<{ dates: string[] }>('/api/meals/dates');
+    return this.#request<{ dates: string[] }>(`/api/meals/dates?tz=${tzOffsetMinutes()}`);
   }
 
   getMeal(id: string): Promise<MealDetail> {
@@ -245,10 +266,11 @@ export class ApiClient {
     apiKey: string,
     aiProvider?: string,
     aiModel?: string,
+    custom?: CustomProviderInput,
   ): Promise<SettingsView & { ok: boolean }> {
     return this.#request('/api/settings', {
       method: 'PUT',
-      body: JSON.stringify({ apiKey, aiProvider, aiModel }),
+      body: JSON.stringify({ apiKey, aiProvider, aiModel, ...custom }),
     });
   }
 
@@ -265,10 +287,11 @@ export class ApiClient {
     apiKey: string,
     aiProvider?: string,
     aiModel?: string,
+    custom?: CustomProviderInput,
   ): Promise<{ ok: boolean; fallbackConnected: boolean; fallbackKeyLast4?: string }> {
     return this.#request('/api/settings/fallback', {
       method: 'PUT',
-      body: JSON.stringify({ apiKey, aiProvider, aiModel }),
+      body: JSON.stringify({ apiKey, aiProvider, aiModel, ...custom }),
     });
   }
 

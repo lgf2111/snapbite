@@ -38,6 +38,11 @@ function post(body: unknown, secret: string | null = SECRET) {
   return { method: 'POST', headers, body: JSON.stringify(body) };
 }
 
+/** The final message the bot sent (photo flow sends an "Analyzing…" first). */
+function lastText(sent: Array<{ chatId: number; reply: BotReply }>): string {
+  return sent[sent.length - 1]?.reply.text ?? '';
+}
+
 describe('POST /webhook', () => {
   it('replies to /start with a launch button', async () => {
     const { app, sent } = appWithCapture();
@@ -125,7 +130,7 @@ describe('POST /webhook', () => {
       env,
     );
     expect(res.status).toBe(200);
-    expect(sent[0]?.reply.text).toContain('Logged');
+    expect(lastText(sent)).toContain('Logged');
 
     // The meal should now be listed for that user, tagged with the provider used.
     const list = (await (
@@ -179,7 +184,7 @@ describe('POST /webhook', () => {
     );
     expect(res.status).toBe(200);
     // The fallback produced a successful log rather than an error message.
-    expect(sent[0]?.reply.text).toContain('Logged');
+    expect(lastText(sent)).toContain('Logged');
     // And the meal is tagged with the fallback provider that actually ran it.
     const list = (await (
       await createApp().request('/api/meals', { headers: { [INIT_DATA_HEADER]: initData } }, env)
@@ -233,7 +238,7 @@ describe('POST /webhook', () => {
       env,
     );
     expect(res.status).toBe(200);
-    expect(sent[0]?.reply.text).toContain('Logged');
+    expect(lastText(sent)).toContain('Logged');
   });
 
   it('does NOT fail over when the fallback is disabled', async () => {
@@ -284,7 +289,7 @@ describe('POST /webhook', () => {
     );
     expect(res.status).toBe(200);
     // Fallback was off → the primary error is surfaced, not a successful log.
-    expect(sent[0]?.reply.text).not.toContain('Logged');
-    expect(sent[0]?.reply.text?.toLowerCase()).toContain('rate limit');
+    expect(lastText(sent)).not.toContain('Logged');
+    expect(lastText(sent).toLowerCase()).toContain('rate limit');
   });
 });

@@ -21,8 +21,38 @@ export const ActivityLevel = z.enum([
 ]);
 export type ActivityLevel = z.infer<typeof ActivityLevel>;
 
-export const Goal = z.enum(['lose', 'maintain', 'gain']);
-export type Goal = z.infer<typeof Goal>;
+/**
+ * Five-stage goal scale, most-loss → most-gain. Legacy 3-stage values
+ * (`lose`/`gain`) are accepted and mapped forward so existing saved profiles
+ * keep working: `lose`→`lose_steady`, `gain`→`gain_lean`, `maintain` unchanged.
+ */
+export const GOAL_STAGES = [
+  'lose_fast',
+  'lose_steady',
+  'maintain',
+  'gain_lean',
+  'gain_fast',
+] as const;
+
+const LEGACY_GOAL: Record<string, (typeof GOAL_STAGES)[number]> = {
+  lose: 'lose_steady',
+  gain: 'gain_lean',
+};
+
+export const Goal = z.preprocess(
+  (v) => (typeof v === 'string' && v in LEGACY_GOAL ? LEGACY_GOAL[v] : v),
+  z.enum(GOAL_STAGES),
+);
+export type Goal = (typeof GOAL_STAGES)[number];
+
+/** Human labels for each goal stage (UI). */
+export const GOAL_LABELS: Record<Goal, string> = {
+  lose_fast: 'Lose fast',
+  lose_steady: 'Lose steady',
+  maintain: 'Maintain',
+  gain_lean: 'Lean gain',
+  gain_fast: 'Gain fast',
+};
 
 export const Units = z.enum(['metric', 'imperial']);
 export type Units = z.infer<typeof Units>;
@@ -39,11 +69,13 @@ export const ACTIVITY_FACTORS: Record<ActivityLevel, number> = {
   very_active: 1.9,
 };
 
-/** Goal → calorie adjustment applied to TDEE. */
+/** Goal → calorie adjustment applied to TDEE (deficit < 1 < surplus). */
 export const GOAL_FACTORS: Record<Goal, number> = {
-  lose: 0.8,
+  lose_fast: 0.75,
+  lose_steady: 0.88,
   maintain: 1.0,
-  gain: 1.1,
+  gain_lean: 1.1,
+  gain_fast: 1.2,
 };
 
 /** Grams of protein per kg of bodyweight (mid of the common 1.6–2.2 range). */

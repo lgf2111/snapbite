@@ -1,6 +1,7 @@
 import { computeTargets, type DailyTargets, type MealResult, type UserProfile } from '@foodlog/core';
 import {
   ApiClient,
+  type CustomProviderInput,
   type MealDetail,
   type MealSummary,
   type SettingsView,
@@ -53,11 +54,21 @@ export interface Backend {
   mealDates(): Promise<string[]>;
   detail(id: string): Promise<MealDetail>;
   getSettings(): Promise<SettingsView>;
-  saveApiKey(apiKey: string, aiProvider?: string, aiModel?: string): Promise<SettingsView>;
+  saveApiKey(
+    apiKey: string,
+    aiProvider?: string,
+    aiModel?: string,
+    custom?: CustomProviderInput,
+  ): Promise<SettingsView>;
   /** Stores the user's profile + goal; returns the computed daily targets. */
   saveProfile(profile: UserProfile): Promise<DailyTargets>;
   /** Stores/replaces the fallback provider + key (enabled). Returns fresh settings. */
-  saveFallback(apiKey: string, aiProvider?: string, aiModel?: string): Promise<SettingsView>;
+  saveFallback(
+    apiKey: string,
+    aiProvider?: string,
+    aiModel?: string,
+    custom?: CustomProviderInput,
+  ): Promise<SettingsView>;
   /** Enables/disables the fallback without wiping the stored key. */
   setFallbackEnabled(enabled: boolean): Promise<SettingsView>;
   /** Permanently removes the fallback. */
@@ -109,21 +120,17 @@ export function createBackend(): Backend {
       getSettings() {
         return api.getSettings();
       },
-      async saveApiKey(apiKey, aiProvider, aiModel) {
-        const res = await api.saveApiKey(apiKey, aiProvider, aiModel);
-        return {
-          aiProvider: res.aiProvider,
-          aiModel: res.aiModel,
-          connected: res.connected,
-          keyLast4: res.keyLast4,
-        };
+      async saveApiKey(apiKey, aiProvider, aiModel, custom) {
+        await api.saveApiKey(apiKey, aiProvider, aiModel, custom);
+        // Re-fetch so profile/targets/custom fields all round-trip correctly.
+        return api.getSettings();
       },
       async saveProfile(profile) {
         const res = await api.saveProfile(profile);
         return res.targets;
       },
-      async saveFallback(apiKey, aiProvider, aiModel) {
-        await api.saveFallback(apiKey, aiProvider, aiModel);
+      async saveFallback(apiKey, aiProvider, aiModel, custom) {
+        await api.saveFallback(apiKey, aiProvider, aiModel, custom);
         return api.getSettings();
       },
       async setFallbackEnabled(enabled) {
@@ -168,12 +175,12 @@ export function createBackend(): Backend {
     },
     async mealsByDate(date) {
       return loadMeals()
-        .filter((m) => new Date(m.savedAt).toISOString().slice(0, 10) === date)
+        .filter((m) => localDayKey(new Date(m.savedAt).getTime()) === date)
         .map(fromSaved);
     },
     async mealDates() {
       return [
-        ...new Set(loadMeals().map((m) => new Date(m.savedAt).toISOString().slice(0, 10))),
+        ...new Set(loadMeals().map((m) => localDayKey(new Date(m.savedAt).getTime()))),
       ].sort((a, b) => (a < b ? 1 : -1));
     },
     async detail(id) {
@@ -233,6 +240,14 @@ export function createBackend(): Backend {
       return loadMeals().find((m) => m.id === id)?.previewUrl ?? null;
     },
   };
+}
+
+/** YYYY-MM-DD for a timestamp in the device's LOCAL time (matches Home/DateSelector). */
+function localDayKey(ms: number): string {
+  const d = new Date(ms);
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 /** The mock SettingsView returned by local/demo mode. */

@@ -19,7 +19,8 @@ import {
   saveMeal,
   updateMeal,
 } from '../db/meals.js';
-import { createSettingsDb, getSettings } from '../db/settings.js';
+import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
+import type { SettingsRow } from '../db/schema.js';
 import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
@@ -32,13 +33,46 @@ export interface ProviderChoice {
   apiKey: string;
   provider: string;
   model: string | null;
+  /** Custom OpenAI-compatible base URL (when `provider` is `custom`). */
+  baseUrl?: string | null;
+  /** Whether the custom endpoint honors `image_url.detail`. */
+  supportsDetail?: boolean;
 }
 
 /** Injectable provider factory so tests can supply a mock. */
 export type ProviderFactory = (choice: ProviderChoice) => AIProvider;
 
-const defaultProviderFactory: ProviderFactory = ({ apiKey, provider, model }) =>
-  createProvider({ providerId: provider, apiKey, ...(model ? { model } : {}) });
+const defaultProviderFactory: ProviderFactory = ({
+  apiKey,
+  provider,
+  model,
+  baseUrl,
+  supportsDetail,
+}) =>
+  createProvider({
+    providerId: provider,
+    apiKey,
+    ...(model ? { model } : {}),
+    ...(baseUrl ? { baseUrl } : {}),
+    ...(supportsDetail != null ? { supportsDetail } : {}),
+  });
+
+/**
+ * Builds the primary {@link ProviderChoice} from a settings row + decrypted key,
+ * pulling the custom base URL / detail flag out of preferences_json when the
+ * user's provider is `custom`.
+ */
+export function primaryProviderChoice(row: SettingsRow, apiKey: string): ProviderChoice {
+  const choice: ProviderChoice = { apiKey, provider: row.aiProvider, model: row.aiModel };
+  if (row.aiProvider === 'custom') {
+    const custom = parsePreferences(row.preferencesJson).customProvider;
+    if (custom?.baseUrl) {
+      choice.baseUrl = custom.baseUrl;
+      choice.supportsDetail = custom.supportsDetail ?? false;
+    }
+  }
+  return choice;
+}
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
@@ -113,7 +147,7 @@ export function mealsRoutes(
     // when the handler returns — nothing is written to storage.
     const image: MealImage = { base64, mimeType: mimeType as MealImage['mimeType'] };
     try {
-      const provider = providerFactory({ apiKey, provider: row.aiProvider, model: row.aiModel });
+      const provider = providerFactory(primaryProviderChoice(row, apiKey));
       const analysis = await provider.analyzeMeal(image, hint ? { hint } : {});
       const meal = resolveMeal(analysis);
       return c.json(meal);
@@ -181,24 +215,25 @@ export function mealsRoutes(
     const limitParam = Number.parseInt(c.req.query('limit') ?? '', 10);
     const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 200) : 50;
     const date = c.req.query('date');
+    const tz = parseTzOffset(c.req.query('tz'));
 
     let summaries = await listMeals(db, c.get('userId'), date ? 500 : limit);
     if (date) {
-      summaries = summaries.filter(
-        (m) => new Date(m.loggedAt).toISOString().slice(0, 10) === date,
-      );
+      summaries = summaries.filter((m) => localDayKey(m.loggedAt, tz) === date);
     }
-    return c.json({ meals: summaries, groups: groupByDay(summaries) });
+    return c.json({ meals: summaries, groups: groupByDay(summaries, tz) });
   });
 
   // GET /api/meals/dates — distinct days (YYYY-MM-DD) that have meals, so the
-  // calendar can dot logged days without fetching every meal.
+  // calendar can dot logged days without fetching every meal. `?tz=` is the
+  // client's UTC offset in minutes so days align to the user's local time.
   app.get('/dates', async (c) => {
     const db = createMealsDb(c.env.DB);
+    const tz = parseTzOffset(c.req.query('tz'));
     const summaries = await listMeals(db, c.get('userId'), 500);
-    const dates = [
-      ...new Set(summaries.map((m) => new Date(m.loggedAt).toISOString().slice(0, 10))),
-    ].sort((a, b) => (a < b ? 1 : -1));
+    const dates = [...new Set(summaries.map((m) => localDayKey(m.loggedAt, tz)))].sort((a, b) =>
+      a < b ? 1 : -1,
+    );
     return c.json({ dates });
   });
 
@@ -287,7 +322,7 @@ export function mealsRoutes(
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), REVISE_TIMEOUT_MS);
     try {
-      const provider = providerFactory({ apiKey, provider: row.aiProvider, model: row.aiModel });
+      const provider = providerFactory(primaryProviderChoice(row, apiKey));
       const analysis = await provider.reviseMeal(detailToAnalysis(detail), instruction, {
         signal: ac.signal,
       });
@@ -415,11 +450,32 @@ export interface DayGroup {
   mealIds: string[];
 }
 
-/** Groups meal summaries into day buckets (UTC), newest day first. */
-export function groupByDay(summaries: MealSummaryLike[]): DayGroup[] {
+/**
+ * Parses the client's UTC offset (minutes, as from `Date.getTimezoneOffset()`:
+ * positive when the zone is behind UTC). Clamped to ±16h; 0 (UTC) on anything
+ * invalid or absent — back-compat for older clients that don't send it.
+ */
+function parseTzOffset(raw: string | undefined): number {
+  const n = Number.parseInt(raw ?? '', 10);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(-960, Math.min(960, n));
+}
+
+/**
+ * The YYYY-MM-DD calendar day for a timestamp in the user's local time.
+ * `tzOffsetMinutes` follows `Date.getTimezoneOffset()` (UTC = local + offset),
+ * so local wall-clock = UTC − offset; shifting the epoch by that lets us read
+ * local date fields off the UTC accessors.
+ */
+export function localDayKey(ms: number, tzOffsetMinutes = 0): string {
+  return new Date(ms - tzOffsetMinutes * 60_000).toISOString().slice(0, 10);
+}
+
+/** Groups meal summaries into day buckets in the user's local time, newest first. */
+export function groupByDay(summaries: MealSummaryLike[], tzOffsetMinutes = 0): DayGroup[] {
   const byDate = new Map<string, DayGroup>();
   for (const m of summaries) {
-    const date = new Date(m.loggedAt).toISOString().slice(0, 10);
+    const date = localDayKey(m.loggedAt, tzOffsetMinutes);
     const group = byDate.get(date) ?? { date, totalKcal: 0, mealIds: [] };
     group.totalKcal += m.energyKcal ?? 0;
     group.mealIds.push(m.id);

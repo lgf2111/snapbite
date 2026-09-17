@@ -41,6 +41,23 @@ export class TelegramBotClient {
     });
   }
 
+  /**
+   * Shows a transient status in the chat (e.g. "typing…" / "uploading photo…")
+   * so the user sees the bot is working. Telegram clears it after ~5s or when
+   * the next message arrives. Best-effort — failures are swallowed.
+   */
+  async sendChatAction(chatId: number, action: string): Promise<void> {
+    try {
+      await this.#fetch(`https://api.telegram.org/bot${this.#token}/sendChatAction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, action }),
+      });
+    } catch {
+      // never block the pipeline on a status ping
+    }
+  }
+
   /** Resolves a file_id to a downloadable file_path via getFile. */
   async getFilePath(fileId: string): Promise<string | null> {
     const res = await this.#fetch(`https://api.telegram.org/bot${this.#token}/getFile`, {

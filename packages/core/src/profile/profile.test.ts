@@ -46,14 +46,20 @@ describe('computeTargets', () => {
     expect(t.carbsG).toBe(373); // (2760 - 576 - 693)/4
   });
 
-  it('lose applies a 20% deficit', () => {
-    const t = computeTargets({ ...base, goal: 'lose' });
-    expect(t.energyKcal).toBe(2210); // 2759*0.8 = 2207.2 -> 2210
+  it('5-stage goal factors apply the right deficit/surplus', () => {
+    // TDEE ≈ 2759.
+    expect(computeTargets({ ...base, goal: 'lose_fast' }).energyKcal).toBe(2070); // ×0.75 = 2069.25 -> 2070
+    expect(computeTargets({ ...base, goal: 'lose_steady' }).energyKcal).toBe(2430); // ×0.88 = 2427.9 -> 2430
+    expect(computeTargets({ ...base, goal: 'maintain' }).energyKcal).toBe(2760);
+    expect(computeTargets({ ...base, goal: 'gain_lean' }).energyKcal).toBe(3030); // ×1.1 = 3034.9 -> 3030
+    expect(computeTargets({ ...base, goal: 'gain_fast' }).energyKcal).toBe(3310); // ×1.2 = 3310.8 -> 3310
   });
 
-  it('gain applies a 10% surplus', () => {
-    const t = computeTargets({ ...base, goal: 'gain' });
-    expect(t.energyKcal).toBe(3030); // 2759*1.1 = 3034.9 -> 3030
+  it('maps legacy goal values forward (lose->lose_steady, gain->gain_lean)', () => {
+    const legacyLose = UserProfile.parse({ ...base, goal: 'lose' });
+    expect(legacyLose.goal).toBe('lose_steady');
+    const legacyGain = UserProfile.parse({ ...base, goal: 'gain' });
+    expect(legacyGain.goal).toBe('gain_lean');
   });
 
   it('floors calories at the safe minimum', () => {
@@ -64,7 +70,7 @@ describe('computeTargets', () => {
       heightCm: 150,
       weightKg: 40,
       activity: 'sedentary',
-      goal: 'lose',
+      goal: 'lose_fast',
     };
     expect(computeTargets(tiny).energyKcal).toBe(1200);
   });

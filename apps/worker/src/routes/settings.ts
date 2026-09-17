@@ -40,6 +40,39 @@ async function mergePreferences(
   );
 }
 
+/** An https URL, trimmed, or null. Rejects non-https for safety. */
+function cleanBaseUrl(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim().replace(/\/+$/, '');
+  return /^https:\/\/.+/i.test(s) ? s : null;
+}
+
+/**
+ * Resolves the provider choice from a settings body. A known preset id
+ * (gemini/openai/deepseek) is used as-is; `custom` requires a valid https
+ * `baseUrl` (else falls back to `fallbackId`). Returns the provider id plus any
+ * custom base URL / detail flag to persist.
+ */
+function parseProviderChoice(
+  body: { aiProvider?: unknown; baseUrl?: unknown; supportsDetail?: unknown },
+  fallbackId: string,
+): { provider: string; baseUrl: string | null; supportsDetail: boolean } {
+  const raw = typeof body.aiProvider === 'string' ? body.aiProvider : '';
+  if (raw === 'custom') {
+    const baseUrl = cleanBaseUrl(body.baseUrl);
+    if (baseUrl) {
+      return { provider: 'custom', baseUrl, supportsDetail: body.supportsDetail === true };
+    }
+    // Custom requested without a valid URL — fall back to a safe preset.
+    return { provider: fallbackId, baseUrl: null, supportsDetail: false };
+  }
+  return {
+    provider: isProviderId(raw) ? raw : fallbackId,
+    baseUrl: null,
+    supportsDetail: false,
+  };
+}
+
 /**
  * Settings routes. The user's BYOK API key is AES-GCM encrypted with the
  * Worker's master key before storage. The plaintext key is never persisted,
@@ -95,12 +128,17 @@ export function settingsRoutes() {
       keyLast4,
       profile,
       targets,
+      // Custom primary provider config (null unless aiProvider === 'custom').
+      customBaseUrl: prefs.customProvider?.baseUrl ?? null,
+      customSupportsDetail: prefs.customProvider?.supportsDetail ?? false,
       // `connected` = a key is stored; `enabled` = active (absent => enabled).
       fallbackConnected: fallbackHasKey,
       fallbackEnabled: fallbackHasKey && fb?.enabled !== false,
       fallbackProvider: fb?.provider ?? null,
       fallbackModel: fb?.model ?? null,
       fallbackKeyLast4,
+      fallbackBaseUrl: fb?.baseUrl ?? null,
+      fallbackSupportsDetail: fb?.supportsDetail ?? false,
     });
   });
 
@@ -180,15 +218,22 @@ export function settingsRoutes() {
       return c.json({ error: 'Bad request', detail: 'apiKey or enabled required' }, 400);
     }
 
-    const provider =
-      typeof body.aiProvider === 'string' && isProviderId(body.aiProvider)
-        ? body.aiProvider
-        : 'openai';
+    const choice = parseProviderChoice(body, 'openai');
+    const provider = choice.provider;
     const model =
       typeof body.aiModel === 'string' && body.aiModel.trim() ? body.aiModel.trim() : null;
     const enc = await encryptSecret(apiKey, c.env.ENCRYPTION_KEY);
     await mergePreferences(db, c.get('userId'), {
-      fallback: { provider, model, keyCiphertext: enc.ciphertext, keyIv: enc.iv, enabled: true },
+      fallback: {
+        provider,
+        model,
+        keyCiphertext: enc.ciphertext,
+        keyIv: enc.iv,
+        enabled: true,
+        ...(provider === 'custom' && choice.baseUrl
+          ? { baseUrl: choice.baseUrl, supportsDetail: choice.supportsDetail }
+          : {}),
+      },
     });
     return c.json({
       ok: true,
@@ -206,7 +251,13 @@ export function settingsRoutes() {
       return c.json({ error: 'Server misconfigured', detail: 'No encryption key' }, 500);
     }
 
-    let body: { apiKey?: unknown; aiProvider?: unknown; aiModel?: unknown };
+    let body: {
+      apiKey?: unknown;
+      aiProvider?: unknown;
+      aiModel?: unknown;
+      baseUrl?: unknown;
+      supportsDetail?: unknown;
+    };
     try {
       body = await c.req.json();
     } catch {
@@ -217,10 +268,8 @@ export function settingsRoutes() {
     if (!apiKey) {
       return c.json({ error: 'Bad request', detail: 'apiKey is required' }, 400);
     }
-    const aiProvider =
-      typeof body.aiProvider === 'string' && isProviderId(body.aiProvider)
-        ? body.aiProvider
-        : DEFAULT_PROVIDER_ID;
+    const choice = parseProviderChoice(body, DEFAULT_PROVIDER_ID);
+    const aiProvider = choice.provider;
     const aiModel =
       typeof body.aiModel === 'string' && body.aiModel.trim() ? body.aiModel.trim() : null;
 
@@ -232,6 +281,13 @@ export function settingsRoutes() {
       aiModel,
       apiKeyCiphertext: enc.ciphertext,
       apiKeyIv: enc.iv,
+    });
+    // Persist (or clear) the custom base URL alongside, in preferences_json.
+    await mergePreferences(db, c.get('userId'), {
+      customProvider:
+        aiProvider === 'custom' && choice.baseUrl
+          ? { baseUrl: choice.baseUrl, supportsDetail: choice.supportsDetail }
+          : undefined,
     });
 
     return c.json({ ok: true, aiProvider, aiModel, connected: true, keyLast4: lastFour(apiKey) });
@@ -261,7 +317,13 @@ export function settingsRoutes() {
     // Lightweight check: confirm the provider constructs with the stored key +
     // provider id. A deeper check happens on the first real analyze call.
     try {
-      createProvider({ providerId: row.aiProvider, apiKey, ...(row.aiModel ? { model: row.aiModel } : {}) });
+      const custom = parsePreferences(row.preferencesJson).customProvider;
+      createProvider({
+        providerId: row.aiProvider,
+        apiKey,
+        ...(row.aiModel ? { model: row.aiModel } : {}),
+        ...(row.aiProvider === 'custom' && custom?.baseUrl ? { baseUrl: custom.baseUrl } : {}),
+      });
       return c.json({ ok: true });
     } catch (err) {
       return c.json({ ok: false, detail: err instanceof Error ? err.message : 'invalid' }, 400);

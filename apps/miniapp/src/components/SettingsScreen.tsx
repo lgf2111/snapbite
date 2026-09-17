@@ -1,4 +1,5 @@
 import { PROVIDER_PRESETS, type ProviderId, type UserProfile } from '@foodlog/core';
+import { type ProviderConfig, ProviderPicker } from './ProviderPicker.js';
 import { CheckCircle2, Download, Pencil, ShieldCheck, Target, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -32,6 +33,31 @@ interface SettingsScreenProps {
 const GOAL_LABEL: Record<string, string> = { lose: 'Lose weight', maintain: 'Maintain', gain: 'Gain' };
 
 const PROVIDERS = Object.values(PROVIDER_PRESETS);
+
+/** Human label for a stored provider id (incl. 'custom'). */
+function providerLabel(id: string): string {
+  if (id === 'custom') return 'Custom';
+  return id === 'gemini' || id === 'openai' || id === 'deepseek'
+    ? PROVIDER_PRESETS[id].label
+    : id;
+}
+
+/** Builds a ProviderConfig from stored settings fields. */
+function cfgFromSettings(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+  baseUrl: string | null | undefined,
+  supportsDetail: boolean | undefined,
+): ProviderConfig {
+  const isPreset = provider === 'gemini' || provider === 'openai' || provider === 'deepseek';
+  const p: ProviderConfig['provider'] = isPreset ? provider : provider === 'custom' ? 'custom' : 'gemini';
+  return {
+    provider: p,
+    model: model ?? (p === 'custom' ? '' : PROVIDER_PRESETS[p].defaultModel),
+    baseUrl: baseUrl ?? '',
+    supportsDetail: Boolean(supportsDetail),
+  };
+}
 
 /** Per-provider "how to get a key" steps + the console URL. */
 const KEY_GUIDE: Record<ProviderId, { url: string; steps: string[] }> = {
@@ -85,8 +111,12 @@ function KeyGuide({ provider }: { provider: ProviderId }) {
 
 export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps) {
   const [settings, setSettings] = useState<SettingsView | null>(null);
-  const [provider, setProvider] = useState<ProviderId>('gemini');
-  const [model, setModel] = useState('');
+  const [primaryCfg, setPrimaryCfg] = useState<ProviderConfig>({
+    provider: 'gemini',
+    model: PROVIDER_PRESETS.gemini.defaultModel,
+    baseUrl: '',
+    supportsDetail: false,
+  });
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -94,8 +124,12 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [deleting, setDeleting] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
-  const [fbProvider, setFbProvider] = useState<ProviderId>('openai');
-  const [fbModel, setFbModel] = useState('');
+  const [fbCfg, setFbCfg] = useState<ProviderConfig>({
+    provider: 'openai',
+    model: PROVIDER_PRESETS.openai.defaultModel,
+    baseUrl: '',
+    supportsDetail: false,
+  });
   const [fbKey, setFbKey] = useState('');
   const [savingFb, setSavingFb] = useState(false);
   const [fbEnabled, setFbEnabled] = useState(false);
@@ -105,24 +139,22 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       .getSettings()
       .then((s) => {
         setSettings(s);
-        if (s.aiProvider === 'gemini' || s.aiProvider === 'openai' || s.aiProvider === 'deepseek') {
-          setProvider(s.aiProvider);
+        setPrimaryCfg(cfgFromSettings(s.aiProvider, s.aiModel, s.customBaseUrl, s.customSupportsDetail));
+        if (s.fallbackProvider) {
+          setFbCfg(
+            cfgFromSettings(
+              s.fallbackProvider,
+              s.fallbackModel,
+              s.fallbackBaseUrl,
+              s.fallbackSupportsDetail,
+            ),
+          );
         }
-        if (s.aiModel) setModel(s.aiModel);
-        if (
-          s.fallbackProvider === 'gemini' ||
-          s.fallbackProvider === 'openai' ||
-          s.fallbackProvider === 'deepseek'
-        ) {
-          setFbProvider(s.fallbackProvider);
-        }
-        if (s.fallbackModel) setFbModel(s.fallbackModel);
         setFbEnabled(Boolean(s.fallbackEnabled));
       })
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to load settings'));
   }, [backend]);
 
-  const preset = PROVIDER_PRESETS[provider];
   const isLocal = backend.mode === 'local';
   const primaryConnected = Boolean(settings?.connected);
 
@@ -147,9 +179,22 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   async function handleSave() {
     const key = apiKey.trim();
     if (!key) return;
+    if (primaryCfg.provider === 'custom' && !/^https:\/\/.+/i.test(primaryCfg.baseUrl.trim())) {
+      toast.error('Enter a valid https base URL for the custom provider');
+      return;
+    }
     setSaving(true);
     try {
-      const updated = await backend.saveApiKey(key, provider, model.trim() || undefined);
+      const custom =
+        primaryCfg.provider === 'custom'
+          ? { baseUrl: primaryCfg.baseUrl.trim(), supportsDetail: primaryCfg.supportsDetail }
+          : undefined;
+      const updated = await backend.saveApiKey(
+        key,
+        primaryCfg.provider,
+        primaryCfg.model.trim() || undefined,
+        custom,
+      );
       setSettings(updated);
       setApiKey('');
       toast.success('Settings saved');
@@ -163,9 +208,22 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   async function handleSaveFallback() {
     const key = fbKey.trim();
     if (!key) return;
+    if (fbCfg.provider === 'custom' && !/^https:\/\/.+/i.test(fbCfg.baseUrl.trim())) {
+      toast.error('Enter a valid https base URL for the custom provider');
+      return;
+    }
     setSavingFb(true);
     try {
-      const updated = await backend.saveFallback(key, fbProvider, fbModel.trim() || undefined);
+      const custom =
+        fbCfg.provider === 'custom'
+          ? { baseUrl: fbCfg.baseUrl.trim(), supportsDetail: fbCfg.supportsDetail }
+          : undefined;
+      const updated = await backend.saveFallback(
+        key,
+        fbCfg.provider,
+        fbCfg.model.trim() || undefined,
+        custom,
+      );
       setSettings(updated);
       setFbKey('');
       toast.success('Fallback saved');
@@ -257,7 +315,6 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       setConfirmDelete(false);
       setSettings(null);
       setApiKey('');
-      setModel('');
       toast.success('Account deleted');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not delete account');
@@ -327,7 +384,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               {settings?.connected ? (
                 <span className="text-primary flex items-center gap-1 text-sm">
                   <CheckCircle2 className="size-4" />
-                  {settings.aiProvider}
+                  {providerLabel(settings.aiProvider)}
                   {settings.keyLast4 ? ` · …${settings.keyLast4}` : ''}
                 </span>
               ) : (
@@ -338,34 +395,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
           <Card>
             <CardContent className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="provider">AI provider</Label>
-                <select
-                  id="provider"
-                  value={provider}
-                  onChange={(e) => {
-                    setProvider(e.target.value as ProviderId);
-                    setModel('');
-                  }}
-                  className="border-input h-9 rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                >
-                  {PROVIDERS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="model">Model (optional)</Label>
-                <Input
-                  id="model"
-                  placeholder={`default: ${preset.defaultModel}`}
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                />
-              </div>
+              <ProviderPicker idPrefix="primary" value={primaryCfg} onChange={setPrimaryCfg} />
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="apikey">API key</Label>
@@ -377,10 +407,14 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
-                <p className="text-muted-foreground text-xs">{preset.keyHint}</p>
+                {primaryCfg.provider !== 'custom' && (
+                  <p className="text-muted-foreground text-xs">
+                    {PROVIDER_PRESETS[primaryCfg.provider].keyHint}
+                  </p>
+                )}
               </div>
 
-              <KeyGuide provider={provider} />
+              {primaryCfg.provider !== 'custom' && <KeyGuide provider={primaryCfg.provider} />}
 
               <Button disabled={!apiKey.trim() || saving} onClick={handleSave}>
                 {saving ? 'Saving…' : 'Save'}
@@ -425,34 +459,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                     it's the most accurate at food recognition.
                   </p>
 
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="fb-provider">Provider</Label>
-                    <select
-                      id="fb-provider"
-                      value={fbProvider}
-                      onChange={(e) => {
-                        setFbProvider(e.target.value as ProviderId);
-                        setFbModel('');
-                      }}
-                      className="border-input h-9 rounded-md border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                    >
-                      {PROVIDERS.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="fb-model">Model (optional)</Label>
-                    <Input
-                      id="fb-model"
-                      placeholder={`default: ${PROVIDER_PRESETS[fbProvider].defaultModel}`}
-                      value={fbModel}
-                      onChange={(e) => setFbModel(e.target.value)}
-                    />
-                  </div>
+                  <ProviderPicker idPrefix="fb" value={fbCfg} onChange={setFbCfg} />
 
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="fb-key">Fallback API key</Label>
@@ -466,12 +473,14 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                       value={fbKey}
                       onChange={(e) => setFbKey(e.target.value)}
                     />
-                    <p className="text-muted-foreground text-xs">
-                      {PROVIDER_PRESETS[fbProvider].keyHint}
-                    </p>
+                    {fbCfg.provider !== 'custom' && (
+                      <p className="text-muted-foreground text-xs">
+                        {PROVIDER_PRESETS[fbCfg.provider].keyHint}
+                      </p>
+                    )}
                   </div>
 
-                  <KeyGuide provider={fbProvider} />
+                  {fbCfg.provider !== 'custom' && <KeyGuide provider={fbCfg.provider} />}
 
                   <div className="flex gap-2">
                     <Button

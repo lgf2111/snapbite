@@ -34,7 +34,9 @@ describe('local backend (no VITE_WORKER_URL)', () => {
     saveMeal(meal('rice', 100));
     saveMeal(meal('apple', 50));
     const backend = createBackend();
-    const today = new Date().toISOString().slice(0, 10);
+    // Local calendar day (matches how the backend now buckets days).
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const dates = await backend.mealDates();
     expect(dates).toContain(today);
     const meals = await backend.mealsByDate(today);
