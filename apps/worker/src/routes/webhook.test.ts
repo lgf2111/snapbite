@@ -761,3 +761,57 @@ describe('barcode → Open Food Facts enrichment', () => {
     expect(meal?.aiProvider).toBe('openfoodfacts');
   });
 });
+
+describe('overload retry by message text (not just status 503)', () => {
+  it('retries when overload is reported in the body with a non-503 status, then succeeds', async () => {
+    const tgId = 8310;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+
+    let calls = 0;
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({
+      botClientFactory: () => mockBot(sent),
+      providerFactory: () => {
+        const mock = new MockAIProvider();
+        return {
+          id: 'primary',
+          analyzeMeal: async (img: Parameters<MockAIProvider['analyzeMeal']>[0]) => {
+            calls += 1;
+            if (calls === 1) {
+              // Gemini-style overload: status 500 but "overloaded" only in the body.
+              throw Object.assign(new Error('gemini returned HTTP 500'), {
+                kind: 'http',
+                status: 500,
+                cause: JSON.stringify({ error: { message: 'The model is overloaded. Please try again later.' } }),
+              });
+            }
+            return mock.analyzeMeal(img);
+          },
+          reviseMeal: async () => {
+            throw new Error('n/a');
+          },
+        };
+      },
+    });
+
+    const res = await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(calls).toBe(2); // retried the overload rather than surfacing "busy"
+    expect(lastText(sent)).toContain('Logged');
+  });
+});

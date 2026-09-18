@@ -543,6 +543,21 @@ interface ProviderErrorLike {
 }
 
 /**
+ * Whether an error is a transient "model overloaded / temporarily unavailable"
+ * case worth auto-retrying. Providers are inconsistent: Gemini's overload can
+ * arrive as HTTP 503, 500, or even 429/200 with the overload wording only in
+ * the body — so we match BOTH the status AND the message/cause text. This must
+ * stay in sync with the 503 branch of {@link friendlyPhotoError} so we never
+ * show "the model is busy, send again" without having actually retried.
+ */
+function isOverloadError(err: unknown): boolean {
+  const e = err as ProviderErrorLike;
+  if (e.status === 503 || e.status === 500) return true;
+  const raw = `${providerMessage(e.cause) ?? ''} ${e.message ?? ''}`;
+  return /overloaded|high demand|unavailable|temporarily|try again|UNAVAILABLE/i.test(raw);
+}
+
+/**
  * Turns a provider error into a short, friendly chat message. The two common
  * cases with the free Gemini tier get tailored guidance:
  * - 429 (quota/rate limit): daily free-tier cap or per-minute rate.
@@ -647,11 +662,14 @@ const RETRY_BACKOFF_MS = 1200;
 const RETRY_BACKOFF_CAP_MS = 4000;
 
 /**
- * Runs `analyzeMeal`, retrying transient 503 (model overloaded) errors up to
- * {@link MAX_503_RETRIES} times with a short increasing backoff. Any non-503
- * error is thrown immediately (the caller decides whether to fail over). If the
- * 503 persists past the limit, the last error is thrown so the caller can fall
- * back or report it.
+ * Runs `analyzeMeal`, retrying transient "model overloaded / temporarily
+ * unavailable" errors up to {@link MAX_503_RETRIES} times with a short
+ * increasing backoff. Overload is detected by status AND body text (see
+ * {@link isOverloadError}), since providers report it inconsistently — this way
+ * the user never sees "the model is busy, send again" without us having already
+ * retried. Any non-overload error is thrown immediately (the caller decides
+ * whether to fail over). If overload persists past the limit, the last error is
+ * thrown so the caller can fall back or report it.
  */
 async function analyzeWithRetry(
   provider: ReturnType<ProviderFactory>,
@@ -664,7 +682,7 @@ async function analyzeWithRetry(
       return await provider.analyzeMeal(image, opts);
     } catch (err) {
       lastErr = err;
-      if ((err as { status?: number }).status !== 503) throw err;
+      if (!isOverloadError(err)) throw err;
       if (attempt < MAX_503_RETRIES) {
         const wait = Math.min(RETRY_BACKOFF_MS * (attempt + 1), RETRY_BACKOFF_CAP_MS);
         await new Promise((r) => setTimeout(r, wait));

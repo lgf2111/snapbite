@@ -8,7 +8,6 @@
     "tsBuildInfoFile": "./dist/.tsbuildinfo",
     "types": [],
     "noEmit": false,
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
