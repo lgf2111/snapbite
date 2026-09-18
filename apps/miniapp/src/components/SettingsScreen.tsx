@@ -1,4 +1,5 @@
 import {
+  DEFAULT_REMINDER_TIMES,
   FEEDBACK_MAX_LEN,
   PROVIDER_PRESETS,
   type ProviderId,
@@ -6,6 +7,7 @@ import {
 } from '@foodlog/core';
 import { type ProviderConfig, ProviderPicker } from './ProviderPicker.js';
 import {
+  Bell,
   CheckCircle2,
   Download,
   MessageSquare,
@@ -139,6 +141,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [remindersOn, setRemindersOn] = useState(false);
+  const [reminderTimes, setReminderTimes] =
+    useState<Record<string, string>>(DEFAULT_REMINDER_TIMES);
+  const [savingReminders, setSavingReminders] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [fbCfg, setFbCfg] = useState<ProviderConfig>({
@@ -168,6 +174,12 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           );
         }
         setFbEnabled(Boolean(s.fallbackEnabled));
+        if (s.reminders) {
+          setRemindersOn(Boolean(s.reminders.enabled));
+          if (s.reminders.times && Object.keys(s.reminders.times).length > 0) {
+            setReminderTimes(s.reminders.times);
+          }
+        }
       })
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to load settings'));
   }, [backend]);
@@ -338,6 +350,32 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     } finally {
       setDeleting(false);
     }
+  }
+
+  async function persistReminders(enabled: boolean, times: Record<string, string>) {
+    setSavingReminders(true);
+    try {
+      const updated = await backend.saveReminders(enabled, times);
+      setSettings(updated);
+      toast.success(enabled ? 'Reminders on' : 'Reminders off');
+    } catch (e) {
+      // Revert the optimistic toggle on failure.
+      setRemindersOn(!enabled);
+      toast.error(e instanceof Error ? e.message : 'Could not save reminders');
+    } finally {
+      setSavingReminders(false);
+    }
+  }
+
+  function handleToggleReminders(on: boolean) {
+    setRemindersOn(on);
+    void persistReminders(on, reminderTimes);
+  }
+
+  function handleReminderTimeChange(label: string, value: string) {
+    const next = { ...reminderTimes, [label]: value };
+    setReminderTimes(next);
+    if (remindersOn) void persistReminders(true, next);
   }
 
   async function handleSendFeedback() {
@@ -571,6 +609,50 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               Delete account
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col">
+              <span className="flex items-center gap-2 font-medium">
+                <Bell className="text-primary size-5" /> Meal reminders
+              </span>
+              <span className="text-muted-foreground text-xs">
+                A daily Telegram nudge at each time to log your meal.
+              </span>
+            </div>
+            <Switch
+              aria-label="Enable meal reminders"
+              checked={remindersOn}
+              disabled={savingReminders}
+              onCheckedChange={handleToggleReminders}
+            />
+          </div>
+
+          <Collapsible open={remindersOn}>
+            <div className="flex flex-col gap-2 pt-1">
+              {Object.entries(reminderTimes).map(([label, time]) => (
+                <div key={label} className="flex items-center justify-between gap-3">
+                  <Label htmlFor={`reminder-${label}`} className="capitalize">
+                    {label}
+                  </Label>
+                  <Input
+                    id={`reminder-${label}`}
+                    type="time"
+                    className="w-32"
+                    value={time}
+                    disabled={savingReminders}
+                    onChange={(e) => handleReminderTimeChange(label, e.target.value)}
+                  />
+                </div>
+              ))}
+              <p className="text-muted-foreground text-xs">
+                Times use your device's timezone. You'll only be nudged once per slot per day.
+              </p>
+            </div>
+          </Collapsible>
         </CardContent>
       </Card>
 

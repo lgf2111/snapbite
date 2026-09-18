@@ -151,3 +151,26 @@ describe('DELETE /api/meals/:id', () => {
     expect(nut?.n).toBe(0);
   });
 });
+
+describe('manual meal logging (no API key)', () => {
+  it('saves a hand-built meal without any key configured', async () => {
+    const app = createApp();
+    const h = await headers(5500);
+    // No /api/settings key call — this user has no AI key at all.
+    const res = await app.request(
+      '/api/meals',
+      { method: 'POST', headers: h, body: JSON.stringify({ meal: meal('Homemade salad', 320) }) },
+      env,
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { id: string };
+    expect(body.id).toBeTruthy();
+
+    // It shows up in the user's list.
+    const list = (await (
+      await app.request('/api/meals', { headers: await headers(5500) }, env)
+    ).json()) as { meals: Array<{ foods: string[]; energyKcal: number | null }> };
+    const found = list.meals.find((m) => m.foods.includes('Homemade salad'));
+    expect(found?.energyKcal).toBe(320);
+  });
+});

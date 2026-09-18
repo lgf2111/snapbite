@@ -332,6 +332,7 @@ describe('POST /api/meals + GET /api/meals', () => {
       botClientFactory: () => ({
         async sendMessage(chatId: number, reply: { text: string }) {
           sent.push({ chatId, text: reply.text });
+          return { messageId: 1 };
         },
         async getFilePath() {
           return null;

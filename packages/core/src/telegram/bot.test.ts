@@ -35,6 +35,26 @@ describe('parseUpdate', () => {
   it('returns null when there is no chat', () => {
     expect(parseUpdate({})).toBeNull();
   });
+
+  it('captures message_id and reply_to_message id', () => {
+    const parsed = parseUpdate({
+      message: {
+        message_id: 55,
+        text: 'the rice was double',
+        chat: { id: 3 },
+        from: { id: 9 },
+        reply_to_message: { message_id: 42 },
+      },
+    });
+    expect(parsed?.messageId).toBe(55);
+    expect(parsed?.replyToMessageId).toBe(42);
+  });
+
+  it('null message/reply ids when absent', () => {
+    const parsed = parseUpdate({ message: { text: 'hi', chat: { id: 1 } } });
+    expect(parsed?.messageId).toBeNull();
+    expect(parsed?.replyToMessageId).toBeNull();
+  });
 });
 
 describe('replyForCommand', () => {

@@ -23,6 +23,8 @@ export interface TelegramUpdate {
     photo?: TelegramPhotoSize[];
     chat?: { id: number; type?: string };
     from?: { id: number; first_name?: string; username?: string };
+    /** The message this one replies to (Telegram populates it on a reply). */
+    reply_to_message?: { message_id?: number };
   };
 }
 
@@ -39,6 +41,10 @@ export interface ParsedCommand {
   photoFileId: string | null;
   /** Caption text accompanying a photo, if any. */
   caption: string;
+  /** This message's own Telegram message_id, when present. */
+  messageId: number | null;
+  /** message_id this message is a reply to, when it's a reply. */
+  replyToMessageId: number | null;
 }
 
 /** Extracts the chat id, command, args, and any photo from an update's message. */
@@ -69,6 +75,8 @@ export function parseUpdate(update: TelegramUpdate): ParsedCommand | null {
     text,
     photoFileId,
     caption: (message.caption ?? '').trim(),
+    messageId: message.message_id ?? null,
+    replyToMessageId: message.reply_to_message?.message_id ?? null,
   };
 }
 

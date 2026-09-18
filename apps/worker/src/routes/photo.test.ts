@@ -10,6 +10,7 @@ function bot(sent: Array<{ chatId: number; reply: BotReply }>) {
   return {
     async sendMessage(chatId: number, reply: BotReply) {
       sent.push({ chatId, reply });
+      return { messageId: 1 };
     },
     async getFilePath() {
       return 'photos/x.jpg';

@@ -1,5 +1,5 @@
 import { type DailyTargets, PROVIDER_PRESETS } from '@foodlog/core';
-import { Camera, Sparkles, Target } from 'lucide-react';
+import { Camera, Plus, Sparkles, Target } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { Backend, RecentMeal } from '@/lib/backend';
 import { hapticNotify } from '@/lib/telegram';
 import { DateSelector } from './DateSelector.js';
+import { ManualMealDialog } from './ManualMealDialog.js';
 import { MacroLegend, MacroLine } from './MacroLine.js';
 import { ProgressRing } from './ProgressRing.js';
 import { SwipeableRow } from './SwipeableRow.js';
@@ -57,6 +58,7 @@ export function HomeScreen({
   const [meals, setMeals] = useState<RecentMeal[] | null>(null);
   const [loggedDates, setLoggedDates] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
 
   const loadDates = useCallback(() => {
     backend
@@ -107,6 +109,9 @@ export function HomeScreen({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">FoodLog</h1>
+        <Button variant="secondary" size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
+          <Plus className="size-4" /> Add meal
+        </Button>
       </div>
 
       <DateSelector value={date} onChange={setDate} loggedDates={loggedDates} />
@@ -179,8 +184,12 @@ export function HomeScreen({
             <Camera className="text-primary size-9" />
             <p className="font-medium">No meals this day</p>
             <p className="text-muted-foreground text-sm">
-              Send a photo to the bot to log a meal — it's analyzed and logged automatically.
+              Send a photo to the bot to log a meal automatically, or tap <strong>Add meal</strong>{' '}
+              to enter one by hand.
             </p>
+            <Button variant="secondary" className="mt-1 gap-1.5" onClick={() => setAddOpen(true)}>
+              <Plus className="size-4" /> Add meal
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -227,6 +236,14 @@ export function HomeScreen({
           <MacroLegend className="justify-center pt-1" />
         </div>
       )}
+
+      <ManualMealDialog
+        backend={backend}
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onLogged={refresh}
+        onToast={onToast}
+      />
     </div>
   );
 }

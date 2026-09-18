@@ -22,6 +22,7 @@ function captureBot(sent: Array<{ chatId: number; reply: BotReply }>) {
     botClientFactory: () => ({
       async sendMessage(chatId: number, reply: BotReply) {
         sent.push({ chatId, reply });
+        return { messageId: 1 };
       },
       async getFilePath() {
         return null;

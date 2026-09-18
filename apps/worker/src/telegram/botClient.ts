@@ -6,6 +6,28 @@ export type FetchLike = (
   init: { method: string; headers: Record<string, string>; body: string },
 ) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
 
+/** Result of a send: the new message's id when Telegram returned one. */
+export interface SentMessage {
+  messageId: number | null;
+}
+
+/** Parses a Telegram sendMessage response into a {@link SentMessage}. */
+async function parseSent(res: {
+  ok: boolean;
+  text(): Promise<string>;
+}): Promise<SentMessage> {
+  if (!res.ok) return { messageId: null };
+  try {
+    const json = JSON.parse(await res.text()) as {
+      ok: boolean;
+      result?: { message_id?: number };
+    };
+    return { messageId: json.ok && json.result?.message_id != null ? json.result.message_id : null };
+  } catch {
+    return { messageId: null };
+  }
+}
+
 /**
  * Thin Telegram Bot API client. Only the calls the bot launcher needs.
  * Fetch is injectable so tests never hit the network.
@@ -30,15 +52,57 @@ export class TelegramBotClient {
     }
   }
 
-  async sendMessage(chatId: number, reply: BotReply): Promise<void> {
+  async sendMessage(chatId: number, reply: BotReply): Promise<SentMessage> {
     const body: Record<string, unknown> = { chat_id: chatId, text: reply.text };
     if (reply.replyMarkup) body.reply_markup = reply.replyMarkup;
 
-    await this.#fetch(`https://api.telegram.org/bot${this.#token}/sendMessage`, {
+    const res = await this.#fetch(`https://api.telegram.org/bot${this.#token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    return parseSent(res);
+  }
+
+  /**
+   * Edits a previously-sent message's text (and optional inline keyboard) in
+   * place. Best-effort: returns false on any failure (e.g. Telegram's 48h edit
+   * window has passed, or the message is identical). Never throws.
+   */
+  async editMessageText(chatId: number, messageId: number, reply: BotReply): Promise<boolean> {
+    const body: Record<string, unknown> = {
+      chat_id: chatId,
+      message_id: messageId,
+      text: reply.text,
+    };
+    if (reply.replyMarkup) body.reply_markup = reply.replyMarkup;
+    try {
+      const res = await this.#fetch(
+        `https://api.telegram.org/bot${this.#token}/editMessageText`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      );
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Deletes a message. Best-effort — returns false on failure, never throws. */
+  async deleteMessage(chatId: number, messageId: number): Promise<boolean> {
+    try {
+      const res = await this.#fetch(`https://api.telegram.org/bot${this.#token}/deleteMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, message_id: messageId }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 
   /**

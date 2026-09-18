@@ -3,6 +3,11 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Meal reminders: run every 15 minutes; the handler DMs users whose local time
+# matches an enabled reminder slot (see src/reminders.ts, §15).
+[triggers]
+crons = ["*/15 * * * *"]
+
 # D1 database binding.
 [[d1_databases]]
 binding = "DB"

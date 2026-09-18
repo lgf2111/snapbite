@@ -314,3 +314,46 @@ describe('POST /api/settings/test', () => {
     expect((await res.json()) as { ok: boolean }).toEqual({ ok: true });
   });
 });
+
+describe('PUT /api/settings/reminders', () => {
+  it('stores enabled + validated times and echoes them back on GET', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(2100)), 'content-type': 'application/json' };
+    const res = await app.request(
+      '/api/settings/reminders',
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          enabled: true,
+          times: { breakfast: '07:30', bogus: 'nope' },
+          tzOffsetMinutes: -480,
+        }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; reminders: { times: Record<string, string> } };
+    expect(body.ok).toBe(true);
+    // Valid time kept, malformed one dropped.
+    expect(body.reminders.times.breakfast).toBe('07:30');
+    expect(body.reminders.times.bogus).toBeUndefined();
+
+    const get = (await (
+      await app.request('/api/settings', { headers: await authHeaders(2100) }, env)
+    ).json()) as { reminders: { enabled: boolean; tzOffsetMinutes: number } | null };
+    expect(get.reminders?.enabled).toBe(true);
+    expect(get.reminders?.tzOffsetMinutes).toBe(-480);
+  });
+
+  it('works without an API key (no key required to set reminders)', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(2101)), 'content-type': 'application/json' };
+    const res = await app.request(
+      '/api/settings/reminders',
+      { method: 'PUT', headers, body: JSON.stringify({ enabled: false, tzOffsetMinutes: 0 }) },
+      env,
+    );
+    expect(res.status).toBe(200);
+  });
+});

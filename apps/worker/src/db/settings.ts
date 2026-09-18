@@ -44,13 +44,32 @@ export interface CustomProviderConfig {
   supportsDetail?: boolean;
 }
 
+/**
+ * Opt-in meal reminder config. Fixed daily times (24h "HH:MM"), interpreted in
+ * the user's local time via `tzOffsetMinutes` (as `Date.getTimezoneOffset()`:
+ * minutes to ADD to local to get UTC; positive when behind UTC). `lastSent`
+ * maps a slot label → the YYYY-MM-DD (local) it was last sent, so the cron
+ * never double-sends a slot in a day.
+ */
+export interface ReminderConfig {
+  enabled: boolean;
+  /** Fixed reminder times, e.g. { breakfast: '08:00', lunch: '12:30', dinner: '19:00' }. */
+  times: Record<string, string>;
+  /** Device UTC offset in minutes (Date.getTimezoneOffset()). */
+  tzOffsetMinutes: number;
+  /** slot label -> local YYYY-MM-DD last delivered (dedup guard). */
+  lastSent?: Record<string, string>;
+}
+
 /** The parsed shape of the `preferences_json` column. */
 export interface Preferences {
-  /** Raw profile JSON (validated by the route via the core schema). */
+  /** Raw profile JSON (validated by the core schema). */
   profile?: unknown;
   fallback?: FallbackConfig;
   /** Custom primary provider (base URL + detail support). */
   customProvider?: CustomProviderConfig;
+  /** Opt-in meal reminders (see §15). */
+  reminders?: ReminderConfig;
   updatedAt?: number;
 }
 

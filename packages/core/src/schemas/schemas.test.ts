@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AIFoodAnalysis } from './analysis.js';
 import { FoodItem } from './food.js';
-import { MealResult } from './meal.js';
+import { buildManualMeal, MealResult } from './meal.js';
 import { NutritionSource, NutritionValue } from './nutrition.js';
 
 const validNutrition = {
@@ -128,5 +128,44 @@ describe('MealResult', () => {
   it('rejects a meal missing its total nutrition', () => {
     const { total: _drop, ...rest } = validMeal;
     expect(MealResult.safeParse(rest).success).toBe(false);
+  });
+});
+
+describe('buildManualMeal', () => {
+  it('builds a valid MealResult from a single manual food', () => {
+    const meal = buildManualMeal([
+      { name: 'Chicken rice', energyKcal: 600, proteinG: 30, carbsG: 70, fatG: 18 },
+    ]);
+    expect(MealResult.safeParse(meal).success).toBe(true);
+    expect(meal.foods).toHaveLength(1);
+    expect(meal.foods[0]?.nutrition.source).toBe('manual');
+    expect(meal.total.source).toBe('manual');
+    expect(meal.total.energyKcal).toBe(600);
+    expect(meal.needsConfirmation).toBe(false);
+  });
+
+  it('sums multiple foods and tags the total mixed', () => {
+    const meal = buildManualMeal([
+      { name: 'Rice', energyKcal: 200, proteinG: 4, carbsG: 44, fatG: 1 },
+      { name: 'Egg', energyKcal: 78, proteinG: 6, carbsG: 1, fatG: 5 },
+    ]);
+    expect(meal.total.energyKcal).toBe(278);
+    expect(meal.total.proteinG).toBe(10);
+    expect(meal.total.source).toBe('mixed');
+  });
+
+  it('drops unnamed foods and throws when none remain', () => {
+    expect(() =>
+      buildManualMeal([{ name: '  ', energyKcal: 100, proteinG: 0, carbsG: 0, fatG: 0 }]),
+    ).toThrow();
+  });
+
+  it('clamps negative/NaN macros to zero', () => {
+    const meal = buildManualMeal([
+      { name: 'Weird', energyKcal: -5, proteinG: Number.NaN, carbsG: 10, fatG: 2 },
+    ]);
+    expect(meal.total.energyKcal).toBe(0);
+    expect(meal.total.proteinG).toBe(0);
+    expect(meal.total.carbsG).toBe(10);
   });
 });

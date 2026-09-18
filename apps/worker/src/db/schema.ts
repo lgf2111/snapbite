@@ -39,6 +39,11 @@ export const meals = sqliteTable(
     confidence: real('confidence'),
     /** AI provider that analyzed this meal (e.g. 'gemini', 'openai'); null for manual/older meals. */
     aiProvider: text('ai_provider'),
+    /** Chat + message id of the bot's confirmation message, so it can be edited
+     * in place when the meal is revised (Telegram allows edits for ~48h). Null
+     * for meals not logged via the bot (e.g. manual Mini App entries). */
+    telegramChatId: integer('telegram_chat_id'),
+    telegramMessageId: integer('telegram_message_id'),
     createdAt: integer('created_at').notNull(),
     loggedAt: integer('logged_at').notNull(),
   },

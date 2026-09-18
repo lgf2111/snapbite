@@ -14,6 +14,7 @@ import {
   deleteSavedMeal,
   loadMeals,
   loadProfile,
+  saveMeal as saveMealLocal,
   type SavedMeal,
   saveProfileLocal,
   updateSavedMeal,
@@ -40,6 +41,8 @@ export interface RecentMeal {
  */
 export interface Backend {
   readonly mode: 'worker' | 'local';
+  /** Manually log a meal (no AI/photo). Works without an API key. */
+  logManual(meal: MealResult): Promise<void>;
   update(id: string, meal: MealResult): Promise<void>;
   /**
    * AI-revise a meal from a plain-language instruction. Returns a DRAFT
@@ -89,6 +92,8 @@ export interface Backend {
    * local mode is a no-op (resolves) so the UI can still show a "thanks" toast.
    */
   sendFeedback(message: string): Promise<void>;
+  /** Stores the opt-in meal reminder config; returns fresh settings. */
+  saveReminders(enabled: boolean, times: Record<string, string>): Promise<SettingsView>;
 }
 
 export function createBackend(): Backend {
@@ -98,6 +103,9 @@ export function createBackend(): Backend {
     const api = new ApiClient(config.workerUrl, getRawInitData);
     return {
       mode: 'worker',
+      async logManual(meal) {
+        await api.saveMeal(meal);
+      },
       async update(id, meal) {
         await api.updateMeal(id, meal);
       },
@@ -158,6 +166,10 @@ export function createBackend(): Backend {
       photoUrl(id) {
         return api.photoUrl(id);
       },
+      async saveReminders(enabled, times) {
+        await api.saveReminders(enabled, times);
+        return api.getSettings();
+      },
       async sendFeedback(message) {
         await api.sendFeedback(message);
       },
@@ -166,6 +178,9 @@ export function createBackend(): Backend {
 
   return {
     mode: 'local',
+    async logManual(meal) {
+      saveMealLocal(meal);
+    },
     async update(id, meal) {
       updateSavedMeal(id, meal);
     },
@@ -251,6 +266,12 @@ export function createBackend(): Backend {
     // can still show a friendly confirmation.
     async sendFeedback() {
       /* no-op */
+    },
+    // Reminders need the Worker (cron + Telegram). Reflect the choice back in
+    // local mode so the UI stays consistent, but nothing is scheduled.
+    async saveReminders(enabled, times) {
+      const s = localMockSettings();
+      return { ...s, reminders: { enabled, times, tzOffsetMinutes: 0 } };
     },
   };
 }

@@ -9,9 +9,12 @@ const SECRET = 'test-webhook-secret';
 
 /** A full BotClient mock; photo helpers return canned data. */
 function mockBot(sent: Array<{ chatId: number; reply: BotReply }>) {
-  return {
+  let nextId = 1000;
+  const edits: Array<{ chatId: number; messageId: number; reply: BotReply }> = [];
+  const bot = {
     async sendMessage(chatId: number, reply: BotReply) {
       sent.push({ chatId, reply });
+      return { messageId: nextId++ };
     },
     async getFilePath() {
       return 'photos/file_1.jpg';
@@ -19,7 +22,19 @@ function mockBot(sent: Array<{ chatId: number; reply: BotReply }>) {
     async downloadFile() {
       return { base64: 'QUJD', mimeType: 'image/jpeg' };
     },
+    async editMessageText(chatId: number, messageId: number, reply: BotReply) {
+      edits.push({ chatId, messageId, reply });
+      // Reflect the edit in `sent` so lastText()/assertions see the final text.
+      sent.push({ chatId, reply });
+      return true;
+    },
+    async deleteMessage() {
+      return true;
+    },
   };
+  // Expose the edit log for assertions that need it.
+  (bot as unknown as { edits: typeof edits }).edits = edits;
+  return bot;
 }
 
 /** Captures messages the webhook would send, via an injected mock bot client. */
@@ -470,5 +485,146 @@ describe('webhook photo failure logging', () => {
     // Admin was alerted about the user-facing failure.
     const dm = sent.find((s) => s.chatId === ADMIN_ID);
     expect(dm?.reply.text).toContain(String(tgId));
+  });
+});
+
+describe('photo edit-in-place', () => {
+  it('edits the "Analyzing…" message into the logged result (no second message)', async () => {
+    const tgId = 8600;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'k', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const bot = mockBot(sent);
+    const app = createApp({
+      botClientFactory: () => bot,
+      providerFactory: () => new MockAIProvider(),
+    });
+    await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    // The analyzing ack was sent, then EDITED into the result (edit recorded).
+    const edits = (bot as unknown as { edits: Array<{ reply: BotReply }> }).edits;
+    expect(edits.length).toBeGreaterThanOrEqual(1);
+    expect(edits.some((e) => e.reply.text.includes('Logged'))).toBe(true);
+  });
+});
+
+describe('plain-text revise of the last meal', () => {
+  async function setupKeyedUser(tgId: number) {
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'k', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+  }
+
+  it('revises the single recent meal and edits its confirmation in place', async () => {
+    const tgId = 8700;
+    await setupKeyedUser(tgId);
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const bot = mockBot(sent);
+    const app = createApp({
+      botClientFactory: () => bot,
+      providerFactory: () => new MockAIProvider(),
+    });
+    // Log a photo meal first (creates one recent meal with a confirmation msg).
+    await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    const editsBefore = (bot as unknown as { edits: unknown[] }).edits.length;
+
+    // Now send plain text — should revise that meal and edit in place.
+    const res = await app.request(
+      '/webhook',
+      post({ message: { text: 'add a coke', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    const editsAfter = (bot as unknown as { edits: unknown[] }).edits.length;
+    expect(editsAfter).toBeGreaterThan(editsBefore); // the confirmation was edited again
+  });
+
+  it('asks the user to reply when several meals were logged recently', async () => {
+    const tgId = 8701;
+    await setupKeyedUser(tgId);
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({
+      botClientFactory: () => mockBot(sent),
+      providerFactory: () => new MockAIProvider(),
+    });
+    // Log two photos → two recent meals.
+    for (const f of ['a', 'b']) {
+      await app.request(
+        '/webhook',
+        post({ message: { photo: [{ file_id: f }], chat: { id: tgId }, from: { id: tgId } } }),
+        env,
+      );
+    }
+    await app.request(
+      '/webhook',
+      post({ message: { text: 'add a coke', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(lastText(sent).toLowerCase()).toContain('reply');
+  });
+
+  it('honors reply-to targeting to disambiguate', async () => {
+    const tgId = 8702;
+    await setupKeyedUser(tgId);
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const bot = mockBot(sent);
+    const app = createApp({
+      botClientFactory: () => bot,
+      providerFactory: () => new MockAIProvider(),
+    });
+    // Two meals; capture the message ids of their confirmations.
+    for (const f of ['a', 'b']) {
+      await app.request(
+        '/webhook',
+        post({ message: { photo: [{ file_id: f }], chat: { id: tgId }, from: { id: tgId } } }),
+        env,
+      );
+    }
+    const edits = (bot as unknown as { edits: Array<{ messageId: number }> }).edits;
+    const firstConfirmationId = edits[0]?.messageId;
+    expect(firstConfirmationId).toBeTruthy();
+
+    const res = await app.request(
+      '/webhook',
+      post({
+        message: {
+          text: 'add a coke',
+          chat: { id: tgId },
+          from: { id: tgId },
+          reply_to_message: { message_id: firstConfirmationId },
+        },
+      }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    // Not the ambiguity prompt — it targeted the replied-to meal.
+    expect(lastText(sent).toLowerCase()).not.toContain('reply directly');
   });
 });

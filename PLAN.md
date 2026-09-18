@@ -480,3 +480,29 @@ beyond one admin id. Sentry etc. considered but rejected for now (extra dep/acco
 3. core: `/feedback` parsing + help text; worker `POST /api/feedback`; `/feedback` + `/errors` bot handlers (admin-gated).
 4. Mini App: Settings "Send feedback" dialog + `api`/`backend` methods.
 5. Tests; deploy Worker + Pages; `wrangler secret put ADMIN_TELEGRAM_ID`; update README + this section; commit + push.
+
+## 15. Chat editing, text-revise, reminders, onboarding key + manual logging (DELIVERED)
+
+Five related features:
+
+1. **Edit the confirmation in place.** The bot's "📸 Analyzing…" message is EDITED into the
+   result (and into errors), so it's one transforming message. Bot client gained `editMessageText`
+   / `deleteMessage` and `sendMessage` now returns the `message_id`.
+2. **Plain text / reply = AI-revise the last meal.** Non-command text re-runs the AI on the target
+   meal, saves it, and edits its confirmation in place. Targeting: a reply wins; else the single
+   meal in the last 15 min; else (2+) the bot asks the user to reply to the specific one. Needs a
+   key (else a nudge). Meal→confirmation link stored via migration 0005 (`telegram_chat_id`,
+   `telegram_message_id`); `parseUpdate` now captures `message_id` + `reply_to_message`.
+3. **Multi-photo disambiguation.** Each photo is its own meal/message; ambiguity only affects text
+   revise, handled by the reply-to prompt above.
+4. **Opt-in meal reminders.** Cloudflare Cron (`*/15 * * * *`) → `scheduled` → `runReminders`.
+   Fixed daily slots (breakfast/lunch/dinner) in the user's local tz, deduped per slot per day via
+   `lastSent`. Pure due-logic in `@foodlog/core` (`dueReminderSlots`). Config in `preferences_json`;
+   `PUT /api/settings/reminders`; Mini App Settings "Meal reminders" card.
+5. **Onboarding key step + manual logging.** After the profile step, worker-mode onboarding offers
+   an optional "add your AI key" step (skippable, framed as "track manually instead"). `buildManualMeal`
+   in core + a Mini App "Add meal" dialog (name + macros) that saves via `POST /api/meals` — no key
+   required. The photo bot still needs a key; manual tracking never does.
+
+Tests: core 110, worker 92, miniapp 16, cli 8. Deployed Worker `8e29244d` (cron live), Pages
+`f0b045a2`. Migration 0005 applied local + remote.

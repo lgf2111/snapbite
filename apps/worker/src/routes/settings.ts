@@ -4,6 +4,7 @@ import {
   type DailyTargets,
   decryptSecret,
   DEFAULT_PROVIDER_ID,
+  DEFAULT_REMINDER_TIMES,
   encryptSecret,
   isProviderId,
   lastFour,
@@ -15,6 +16,7 @@ import {
   getSettings,
   parsePreferences,
   type Preferences,
+  type ReminderConfig,
   saveEncryptedKey,
   savePreferences,
 } from '../db/settings.js';
@@ -139,7 +141,46 @@ export function settingsRoutes() {
       fallbackKeyLast4,
       fallbackBaseUrl: fb?.baseUrl ?? null,
       fallbackSupportsDetail: fb?.supportsDetail ?? false,
+      // Opt-in meal reminders (see §15).
+      reminders: prefs.reminders ?? null,
     });
+  });
+
+  // PUT /api/settings/reminders — store the opt-in reminder config (no key needed).
+  // Body: { enabled: boolean, times?: Record<label,"HH:MM">, tzOffsetMinutes: number }.
+  app.put('/reminders', async (c) => {
+    let body: { enabled?: unknown; times?: unknown; tzOffsetMinutes?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
+    }
+    const enabled = body.enabled === true;
+    const tzOffsetMinutes =
+      typeof body.tzOffsetMinutes === 'number' && Number.isFinite(body.tzOffsetMinutes)
+        ? body.tzOffsetMinutes
+        : 0;
+    // Validate the times map: keep only well-formed "HH:MM" entries.
+    const times: Record<string, string> = {};
+    if (body.times && typeof body.times === 'object') {
+      for (const [label, val] of Object.entries(body.times as Record<string, unknown>)) {
+        if (typeof val === 'string' && /^\d{1,2}:\d{2}$/.test(val.trim())) {
+          times[label] = val.trim();
+        }
+      }
+    }
+    const db = createSettingsDb(c.env.DB);
+    // Preserve any existing lastSent stamps so toggling doesn't cause a re-send.
+    const existing = parsePreferences((await getSettings(db, c.get('userId')))?.preferencesJson)
+      .reminders;
+    const reminders: ReminderConfig = {
+      enabled,
+      times: Object.keys(times).length > 0 ? times : (existing?.times ?? DEFAULT_REMINDER_TIMES),
+      tzOffsetMinutes,
+      ...(existing?.lastSent ? { lastSent: existing.lastSent } : {}),
+    };
+    await mergePreferences(db, c.get('userId'), { reminders });
+    return c.json({ ok: true, reminders });
   });
 
   // PUT /api/settings/profile — store the user's profile + goal (no key needed).

@@ -85,6 +85,15 @@ export interface SettingsView {
   fallbackKeyLast4?: string | null;
   fallbackBaseUrl?: string | null;
   fallbackSupportsDetail?: boolean;
+  /** Opt-in meal reminders (null when never configured). */
+  reminders?: ReminderView | null;
+}
+
+/** Opt-in meal reminder config, as returned/sent by the API. */
+export interface ReminderView {
+  enabled: boolean;
+  times: Record<string, string>;
+  tzOffsetMinutes: number;
 }
 
 /** Extra fields for configuring a custom OpenAI-compatible provider. */
@@ -335,6 +344,17 @@ export class ApiClient {
     return this.#request<{ ok: boolean }>('/api/feedback', {
       method: 'POST',
       body: JSON.stringify({ message }),
+    });
+  }
+
+  /** Stores the opt-in meal reminder config. tz is the device offset in minutes. */
+  saveReminders(
+    enabled: boolean,
+    times: Record<string, string>,
+  ): Promise<{ ok: boolean; reminders: ReminderView }> {
+    return this.#request('/api/settings/reminders', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled, times, tzOffsetMinutes: tzOffsetMinutes() }),
     });
   }
 }

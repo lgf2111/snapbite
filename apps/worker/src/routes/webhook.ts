@@ -15,20 +15,32 @@ import {
 import { type Context, Hono } from 'hono';
 import { describeError, logError, recentErrors } from '../db/errors.js';
 import { recentFeedback, storeFeedback } from '../db/feedback.js';
-import { createMealsDb, saveMeal } from '../db/meals.js';
+import {
+  createMealsDb,
+  findMealByMessageId,
+  getMealDetail,
+  type MealTelegramRef,
+  recentMealsForUser,
+  saveMeal,
+  updateMeal,
+} from '../db/meals.js';
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import { createDb, upsertUser } from '../db/users.js';
 import { type AppBindings, parseAdminId } from '../env.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
-import { primaryProviderChoice, type ProviderFactory } from './meals.js';
+import { detailToAnalysis, primaryProviderChoice, type ProviderFactory } from './meals.js';
 
 /** The bot-client surface the webhook uses (so tests can mock just these). */
 export interface BotClient {
-  sendMessage(chatId: number, reply: BotReply): Promise<void>;
+  sendMessage(chatId: number, reply: BotReply): Promise<{ messageId: number | null }>;
   getFilePath(fileId: string): Promise<string | null>;
   downloadFile(filePath: string): Promise<{ base64: string; mimeType: string } | null>;
   /** Optional transient chat status (typing/upload_photo). Best-effort. */
   sendChatAction?(chatId: number, action: string): Promise<void>;
+  /** Edit a message in place. Best-effort (false on failure, e.g. >48h). */
+  editMessageText?(chatId: number, messageId: number, reply: BotReply): Promise<boolean>;
+  /** Delete a message. Best-effort. */
+  deleteMessage?(chatId: number, messageId: number): Promise<boolean>;
 }
 
 /** Injectable bot-client factory so tests can supply a mock (no network). */
@@ -79,13 +91,14 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
 
     // Photo sent to the bot -> analyze and auto-log.
     if (parsed.photoFileId && parsed.fromId != null) {
+      const job: PhotoJob = {
+        fileId: parsed.photoFileId,
+        fromId: parsed.fromId,
+        chatId: parsed.chatId,
+        caption: parsed.caption,
+      };
       try {
-        await handlePhoto(c, bot, providerFactory, {
-          fileId: parsed.photoFileId,
-          fromId: parsed.fromId,
-          chatId: parsed.chatId,
-          caption: parsed.caption,
-        });
+        await handlePhoto(c, bot, providerFactory, job);
       } catch (err) {
         const e = err as { message?: string; kind?: string; status?: number; cause?: unknown };
         // Persist to D1 (best-effort; also mirrors to console for `wrangler tail`).
@@ -107,7 +120,10 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
           `⚠️ Photo log failed for user ${parsed.fromId}: ${desc.message}`,
         );
         try {
-          await bot.sendMessage(parsed.chatId, { text: friendlyPhotoError(e) });
+          // Edit the "Analyzing…" message into the error (or send fresh if none).
+          await replyOrEdit(bot, parsed.chatId, job.statusMessageId, {
+            text: friendlyPhotoError(e),
+          });
         } catch {
           /* ignore */
         }
@@ -123,6 +139,14 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
     }
     if (parsed.command === 'errors') {
       await handleErrorsCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
+
+    // Plain text (not a slash command) after logging = "revise my meal with AI".
+    // Slash commands (/start, /help, /settings, unknown /foo) still fall through
+    // to the generic replyForCommand nudge below.
+    if (parsed.command === null && parsed.text.trim() && parsed.fromId != null) {
+      await handleTextRevise(c, bot, providerFactory, parsed);
       return c.json({ ok: true });
     }
 
@@ -258,6 +282,130 @@ async function handleErrorsCommand(
   await bot.sendMessage(parsed.chatId, {
     text: `⚠️ Latest errors (${rows.length}):\n\n${lines.join('\n\n')}`,
   });
+}
+
+/**
+ * How far back a plain-text message can auto-target a meal without a reply.
+ * Within this window a single recent meal is unambiguous; 2+ triggers the
+ * "reply to the specific meal" prompt.
+ */
+const REVISE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Plain text sent to the bot (no slash command) = "revise my last meal with
+ * AI". Targeting:
+ *  - If the message is a REPLY to a bot confirmation, revise that exact meal.
+ *  - Else if exactly one meal was logged in the last {@link REVISE_WINDOW_MS},
+ *    revise it.
+ *  - Else if 2+ recent meals, ask the user to reply to the specific one.
+ *  - Else (no recent meal) nudge toward sending a photo.
+ * On success the meal's confirmation message is edited in place (best-effort;
+ * Telegram allows edits for ~48h).
+ */
+async function handleTextRevise(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  providerFactory: ProviderFactory,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const { chatId, fromId, text } = parsed;
+  const miniAppUrl = c.env.MINI_APP_URL ?? '';
+  const instruction = text.trim();
+
+  const userDb = createDb(c.env.DB);
+  const user = await upsertUser(userDb, { id: fromId as number });
+
+  // Need a key to run the AI revise.
+  const settingsDb = createSettingsDb(c.env.DB);
+  const settings = await getSettings(settingsDb, user.id);
+  if (!c.env.ENCRYPTION_KEY || !settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
+    await bot.sendMessage(chatId, {
+      text: 'Send me a meal photo to log it, or open FoodLog to add your AI key and review your history.',
+      ...(miniAppUrl
+        ? { replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open FoodLog', web_app: { url: miniAppUrl } }]] } }
+        : {}),
+    });
+    return;
+  }
+
+  const mealsDb = createMealsDb(c.env.DB);
+
+  // 1) Reply targeting wins.
+  let target: MealTelegramRef | undefined;
+  if (parsed.replyToMessageId != null) {
+    target = await findMealByMessageId(mealsDb, user.id, parsed.replyToMessageId);
+    if (!target) {
+      await bot.sendMessage(chatId, {
+        text: "I couldn't match that reply to one of your logged meals. Reply to a meal's summary message and tell me the change.",
+      });
+      return;
+    }
+  } else {
+    // 2) Otherwise look at recent meals.
+    const recent = await recentMealsForUser(mealsDb, user.id, Date.now() - REVISE_WINDOW_MS, 5);
+    if (recent.length === 0) {
+      await bot.sendMessage(chatId, {
+        text: 'Send me a meal photo to log it first — then reply with a change and I\'ll update it.',
+        ...(miniAppUrl
+          ? { replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open FoodLog', web_app: { url: miniAppUrl } }]] } }
+          : {}),
+      });
+      return;
+    }
+    if (recent.length > 1) {
+      // 3) Ambiguous — ask them to reply to the specific meal message.
+      await bot.sendMessage(chatId, {
+        text: 'You logged a few meals just now — reply directly to the summary of the one you want to change, then tell me the update.',
+      });
+      return;
+    }
+    target = recent[0];
+  }
+
+  if (!target) {
+    await bot.sendMessage(chatId, { text: "Sorry — I couldn't find a meal to update." });
+    return;
+  }
+
+  // Load the full meal, revise via AI, save, and edit the confirmation in place.
+  const detail = await getMealDetail(mealsDb, target.id, user.id);
+  if (!detail) {
+    await bot.sendMessage(chatId, { text: "Sorry — I couldn't load that meal to update it." });
+    return;
+  }
+
+  const apiKey = await decryptSecret(
+    { ciphertext: settings.apiKeyCiphertext, iv: settings.apiKeyIv },
+    c.env.ENCRYPTION_KEY,
+  );
+
+  await bot.sendChatAction?.(chatId, 'typing');
+  const provider = providerFactory(primaryProviderChoice(settings, apiKey));
+  const analysis = await provider.reviseMeal(detailToAnalysis(detail), instruction, {});
+  const meal = resolveMeal(analysis);
+  await updateMeal(mealsDb, target.id, user.id, meal);
+
+  const foods = meal.foods.map((f) => f.food.name);
+  const reply = photoLoggedReply(
+    foods,
+    {
+      energyKcal: meal.total.energyKcal,
+      proteinG: meal.total.proteinG,
+      carbsG: meal.total.carbsG,
+      fatG: meal.total.fatG,
+    },
+    { miniAppUrl },
+  );
+  // Edit the original confirmation in place when we can; otherwise send fresh.
+  const ref =
+    target.telegramChatId != null && target.telegramMessageId != null
+      ? { chatId: target.telegramChatId, messageId: target.telegramMessageId }
+      : { chatId, messageId: null };
+  await replyOrEdit(bot, ref.chatId, ref.messageId, reply);
+  // Acknowledge in the current chat if the edited message lives elsewhere/older.
+  if (ref.messageId == null || ref.chatId !== chatId) {
+    await bot.sendMessage(chatId, { text: '✅ Updated your meal.' });
+  }
 }
 
 /** Extract a human message from a provider error body ({error:{message}}). */
@@ -417,6 +565,8 @@ interface PhotoJob {
   fromId: number;
   chatId: number;
   caption: string;
+  /** message_id of the "Analyzing…" ack, set once sent so errors can edit it. */
+  statusMessageId?: number | null;
 }
 
 /** Downloads the photo, runs the pipeline with the user's key, saves, and replies. */
@@ -460,19 +610,25 @@ async function handlePhoto(
   );
 
   // Let the user know we're on it — a transient "uploading photo…" status plus
-  // a quick acknowledgement message (the result follows). Best-effort.
+  // a quick acknowledgement message that we later EDIT IN PLACE into the result
+  // (so there's a single message that transforms, not a growing thread).
   await bot.sendChatAction?.(chatId, 'upload_photo');
-  await bot.sendMessage(chatId, { text: '📸 Analyzing your meal…' });
+  const ack = await bot.sendMessage(chatId, { text: '📸 Analyzing your meal…' });
+  job.statusMessageId = ack.messageId;
 
   // Download the image bytes from Telegram, analyze, and discard.
   const filePath = await bot.getFilePath(fileId);
   if (!filePath) {
-    await bot.sendMessage(chatId, { text: 'Could not fetch that photo from Telegram.' });
+    await replyOrEdit(bot, chatId, job.statusMessageId, {
+      text: 'Could not fetch that photo from Telegram.',
+    });
     return;
   }
   const file = await bot.downloadFile(filePath);
   if (!file) {
-    await bot.sendMessage(chatId, { text: 'Could not download that photo.' });
+    await replyOrEdit(bot, chatId, job.statusMessageId, {
+      text: 'Could not download that photo.',
+    });
     return;
   }
 
@@ -493,27 +649,54 @@ async function handlePhoto(
   }
   const meal = resolveMeal(analysis);
 
-  // Persist, keeping the Telegram file_id so the photo can be shown later.
+  // Persist, keeping the Telegram file_id so the photo can be shown later, and
+  // the chat + message id of the confirmation so the Mini App / a text revise
+  // can edit it in place later.
   const mealsDb = createMealsDb(c.env.DB);
-  await saveMeal(mealsDb, {
+  const foods = meal.foods.map((f) => f.food.name);
+  const reply = photoLoggedReply(
+    foods,
+    {
+      energyKcal: meal.total.energyKcal,
+      proteinG: meal.total.proteinG,
+      carbsG: meal.total.carbsG,
+      fatG: meal.total.fatG,
+    },
+    { miniAppUrl },
+  );
+
+  // Edit the "Analyzing…" message into the result (single transforming message).
+  // If the edit fails or we never got an id, fall back to sending a new message
+  // and use whatever id we end up with as the meal's confirmation reference.
+  const confirmMessageId = await replyOrEdit(bot, chatId, job.statusMessageId, reply);
+
+  const mealId = await saveMeal(mealsDb, {
     userId: user.id,
     meal,
     telegramFileId: fileId,
     aiProvider: usedProvider,
+    telegramChatId: chatId,
+    telegramMessageId: confirmMessageId,
   });
+  // (mealId retained for symmetry / future use.)
+  void mealId;
+}
 
-  const foods = meal.foods.map((f) => f.food.name);
-  await bot.sendMessage(
-    chatId,
-    photoLoggedReply(
-      foods,
-      {
-        energyKcal: meal.total.energyKcal,
-        proteinG: meal.total.proteinG,
-        carbsG: meal.total.carbsG,
-        fatG: meal.total.fatG,
-      },
-      { miniAppUrl },
-    ),
-  );
+/**
+ * Edits `messageId` in place with `reply` when we have an id and the edit
+ * succeeds; otherwise sends a new message. Returns the message id that now holds
+ * the content (the edited one, or the newly-sent one), or null if nothing sent.
+ */
+async function replyOrEdit(
+  bot: BotClient,
+  chatId: number,
+  messageId: number | null | undefined,
+  reply: BotReply,
+): Promise<number | null> {
+  if (messageId != null && bot.editMessageText) {
+    const ok = await bot.editMessageText(chatId, messageId, reply);
+    if (ok) return messageId;
+  }
+  const sent = await bot.sendMessage(chatId, reply);
+  return sent.messageId;
 }

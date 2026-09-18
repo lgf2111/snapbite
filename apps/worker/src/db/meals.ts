@@ -1,5 +1,5 @@
 import type { MealResult } from '@foodlog/core';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { type FoodItemRow, foodItems, meals, nutrition } from './schema.js';
 
@@ -16,6 +16,9 @@ export interface SaveMealInput {
   loggedAt?: number;
   /** AI provider that analyzed this meal (e.g. 'gemini'); omit for manual. */
   aiProvider?: string | null;
+  /** Chat + message id of the bot confirmation, so it can be edited on revise. */
+  telegramChatId?: number | null;
+  telegramMessageId?: number | null;
 }
 
 /**
@@ -36,6 +39,8 @@ export async function saveMeal(db: MealsDb, input: SaveMealInput): Promise<strin
       notes: m.notes ?? null,
       confidence: m.confidence,
       aiProvider: input.aiProvider ?? null,
+      telegramChatId: input.telegramChatId ?? null,
+      telegramMessageId: input.telegramMessageId ?? null,
       createdAt: now,
       loggedAt,
     }),
@@ -68,6 +73,71 @@ export async function saveMeal(db: MealsDb, input: SaveMealInput): Promise<strin
   // drizzle-d1 batch takes a non-empty tuple; we always have >= 2 statements.
   await db.batch(statements as [(typeof statements)[number], ...(typeof statements)[number][]]);
   return mealId;
+}
+
+/** Records the bot confirmation's chat + message id on a meal (for later edits). */
+export async function setMealTelegramRef(
+  db: MealsDb,
+  mealId: string,
+  chatId: number,
+  messageId: number,
+): Promise<void> {
+  await db
+    .update(meals)
+    .set({ telegramChatId: chatId, telegramMessageId: messageId })
+    .where(eq(meals.id, mealId));
+}
+
+/** A meal's Telegram confirmation reference, used to edit it in place. */
+export interface MealTelegramRef {
+  id: string;
+  loggedAt: number;
+  telegramChatId: number | null;
+  telegramMessageId: number | null;
+}
+
+/**
+ * Recent meals for a user (newest first), limited to a time window and count.
+ * Used by the bot's "plain text = revise the last meal" flow to find the target
+ * meal and to detect ambiguity (multiple recent meals).
+ */
+export async function recentMealsForUser(
+  db: MealsDb,
+  userId: string,
+  sinceMs: number,
+  limit = 5,
+): Promise<MealTelegramRef[]> {
+  const rows = await db
+    .select({
+      id: meals.id,
+      loggedAt: meals.loggedAt,
+      telegramChatId: meals.telegramChatId,
+      telegramMessageId: meals.telegramMessageId,
+    })
+    .from(meals)
+    .where(and(eq(meals.userId, userId), gte(meals.loggedAt, sinceMs)))
+    .orderBy(desc(meals.loggedAt))
+    .limit(limit);
+  return rows;
+}
+
+/** Finds a user's meal by the bot message_id it replied to (for reply-to targeting). */
+export async function findMealByMessageId(
+  db: MealsDb,
+  userId: string,
+  messageId: number,
+): Promise<MealTelegramRef | undefined> {
+  const rows = await db
+    .select({
+      id: meals.id,
+      loggedAt: meals.loggedAt,
+      telegramChatId: meals.telegramChatId,
+      telegramMessageId: meals.telegramMessageId,
+    })
+    .from(meals)
+    .where(and(eq(meals.userId, userId), eq(meals.telegramMessageId, messageId)))
+    .limit(1);
+  return rows[0];
 }
 
 export interface MealSummary {
@@ -201,6 +271,8 @@ export interface MealDetail {
   confidence: number | null;
   telegramFileId: string | null;
   aiProvider: string | null;
+  telegramChatId: number | null;
+  telegramMessageId: number | null;
   foods: Array<{
     id: string;
     name: string;
@@ -251,6 +323,8 @@ export async function getMealDetail(
     confidence: meal.confidence,
     telegramFileId: meal.telegramFileId,
     aiProvider: meal.aiProvider,
+    telegramChatId: meal.telegramChatId,
+    telegramMessageId: meal.telegramMessageId,
     foods: foods.map((f: FoodItemRow) => ({
       id: f.id,
       name: f.name,
