@@ -42,5 +42,11 @@ export const FoodItem = z.object({
    * verbatim and tags the value `manual`.
    */
   manualNutrition: NutritionPer100g.optional(),
+  /**
+   * A product barcode (EAN/UPC digits) the model read from packaging, if any.
+   * The Worker looks this up in Open Food Facts to replace the estimate with
+   * the product's exact per-100g nutrition.
+   */
+  barcode: z.string().regex(/^\d{6,14}$/).optional(),
 });
 export type FoodItem = z.infer<typeof FoodItem>;

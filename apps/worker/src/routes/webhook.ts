@@ -1,6 +1,8 @@
 import {
   type BotReply,
+  broadcastMessage,
   createProvider,
+  CURRENT_CHANGELOG,
   decryptSecret,
   FEEDBACK_MAX_LEN,
   FEEDBACK_PROMPT,
@@ -25,8 +27,9 @@ import {
   updateMeal,
 } from '../db/meals.js';
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
-import { createDb, upsertUser } from '../db/users.js';
+import { createDb, listBroadcastTargets, setBroadcastRef, upsertUser } from '../db/users.js';
 import { type AppBindings, parseAdminId } from '../env.js';
+import { lookupBarcode } from '../openfoodfacts.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
 import { detailToAnalysis, primaryProviderChoice, type ProviderFactory } from './meals.js';
 
@@ -141,6 +144,10 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
       await handleErrorsCommand(c, bot, parsed);
       return c.json({ ok: true });
     }
+    if (parsed.command === 'broadcast') {
+      await handleBroadcastCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
 
     // Plain text (not a slash command) after logging = "revise my meal with AI".
     // Slash commands (/start, /help, /settings, unknown /foo) still fall through
@@ -187,6 +194,102 @@ async function alertAdmin(
 /** Short human time (UTC) for admin listings. */
 function shortTime(ms: number): string {
   return new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + 'Z';
+}
+
+/** Telegram's edit window — a message can only be edited within ~48h of sending. */
+const EDIT_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * `/broadcast` — ADMIN-only. Sends the current changelog to every user. For a
+ * user whose last broadcast message is still editable (<48h old), it EDITS that
+ * message in place to the newest version instead of sending a new one; otherwise
+ * it sends fresh. Best-effort per user; reports a summary to the admin. In a
+ * private chat the DM chat id equals the user's Telegram id, so we can reach
+ * users we've never stored a chat id for.
+ */
+async function handleBroadcastCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const adminId = parseAdminId(c.env.ADMIN_TELEGRAM_ID);
+  const isAdmin = adminId != null && parsed.fromId === adminId;
+  if (!isAdmin) {
+    // Invisible to non-admins — behave like an unknown message.
+    const reply = replyForCommand({ command: null }, { miniAppUrl: c.env.MINI_APP_URL ?? '' });
+    if (reply) await bot.sendMessage(parsed.chatId, reply);
+    return;
+  }
+
+  const entry = CURRENT_CHANGELOG;
+  if (!entry) {
+    await bot.sendMessage(parsed.chatId, { text: 'No changelog entry to broadcast.' });
+    return;
+  }
+  const text = broadcastMessage(entry);
+  const db = createDb(c.env.DB);
+  const targets = await listBroadcastTargets(db);
+  const now = Date.now();
+
+  let edited = 0;
+  let sent = 0;
+  let failed = 0;
+
+  for (const t of targets) {
+    // The DM chat id: use the stored one if present, else the Telegram user id
+    // (equal for private chats).
+    const chatId = t.lastBroadcastChatId ?? t.telegramUserId;
+    try {
+      const canEdit =
+        t.lastBroadcastMessageId != null &&
+        t.lastBroadcastChatId != null &&
+        t.lastBroadcastAt != null &&
+        now - t.lastBroadcastAt < EDIT_WINDOW_MS &&
+        t.lastBroadcastVersion !== entry.version; // no-op if already on this version
+
+      let messageId: number | null = null;
+      if (canEdit && bot.editMessageText && t.lastBroadcastMessageId != null) {
+        const ok = await bot.editMessageText(t.lastBroadcastChatId as number, t.lastBroadcastMessageId, {
+          text,
+        });
+        if (ok) {
+          messageId = t.lastBroadcastMessageId;
+          edited += 1;
+        }
+      }
+      // Already on this version and still editable → skip (nothing to do).
+      if (
+        messageId == null &&
+        t.lastBroadcastVersion === entry.version &&
+        t.lastBroadcastAt != null &&
+        now - t.lastBroadcastAt < EDIT_WINDOW_MS
+      ) {
+        continue;
+      }
+      // Edit didn't happen (too old / failed / first time) → send a new message.
+      if (messageId == null) {
+        const res = await bot.sendMessage(chatId, { text });
+        messageId = res.messageId;
+        if (messageId != null) sent += 1;
+        else {
+          failed += 1;
+          continue;
+        }
+      }
+      await setBroadcastRef(db, t.id, {
+        chatId,
+        messageId,
+        version: entry.version,
+        at: now,
+      });
+    } catch {
+      failed += 1;
+    }
+  }
+
+  await bot.sendMessage(parsed.chatId, {
+    text: `📣 Broadcast v${entry.version} done — ${sent} sent, ${edited} edited, ${failed} failed (of ${targets.length}).`,
+  });
 }
 
 /**
@@ -571,6 +674,54 @@ async function analyzeWithRetry(
   throw lastErr;
 }
 
+/**
+ * For each analyzed food that carries a barcode, look it up in Open Food Facts
+ * and, on a hit, overwrite that food's nutrition with the product's EXACT
+ * per-100g values (set as `manualNutrition`, which the resolver uses verbatim
+ * and tags `manual`). Also adopts the OFF product name. Mutates `analysis` in
+ * place. Returns the provider label to record — `openfoodfacts` if any food was
+ * enriched, otherwise the original provider. Best-effort; never throws.
+ */
+async function enrichWithBarcodes(
+  analysis: { foods: Array<Record<string, unknown>> },
+  originalProvider: string,
+): Promise<string> {
+  let enrichedAny = false;
+  for (const food of analysis.foods) {
+    const barcode = typeof food.barcode === 'string' ? food.barcode : undefined;
+    if (!barcode) continue;
+    try {
+      const product = await lookupBarcode(barcode);
+      if (!product) continue;
+      food.name = product.name;
+      // Prefer OFF's declared serving size for the eaten amount when present;
+      // else keep the model's weight estimate (default 100g if missing).
+      const weight =
+        product.servingG && product.servingG > 0
+          ? product.servingG
+          : typeof food.estimatedWeightG === 'number' && food.estimatedWeightG > 0
+            ? food.estimatedWeightG
+            : 100;
+      const qty = typeof food.quantity === 'number' && food.quantity > 0 ? food.quantity : 1;
+      const grams = weight * qty;
+      const factor = grams / 100;
+      food.estimatedWeightG = weight;
+      // `manualNutrition` is ABSOLUTE whole-food macros (resolver uses verbatim),
+      // so scale OFF's per-100g figures by the eaten grams.
+      food.manualNutrition = {
+        energyKcal: Math.round(product.per100g.energyKcal * factor * 10) / 10,
+        proteinG: Math.round(product.per100g.proteinG * factor * 10) / 10,
+        carbsG: Math.round(product.per100g.carbsG * factor * 10) / 10,
+        fatG: Math.round(product.per100g.fatG * factor * 10) / 10,
+      };
+      enrichedAny = true;
+    } catch {
+      /* leave the AI estimate for this food */
+    }
+  }
+  return enrichedAny ? 'openfoodfacts' : originalProvider;
+}
+
 interface PhotoJob {
   fileId: string;
   fromId: number;
@@ -658,6 +809,13 @@ async function handlePhoto(
     analysis = fb.analysis;
     usedProvider = fb.provider;
   }
+
+  // Barcode → Open Food Facts: for any food the model read a barcode from, look
+  // up the exact per-100g nutrition and use it verbatim (tagged `manual` by the
+  // resolver). Best-effort — a miss/error leaves the AI estimate untouched.
+  const enrichedProvider = await enrichWithBarcodes(analysis, usedProvider);
+  usedProvider = enrichedProvider;
+
   const meal = resolveMeal(analysis);
 
   // Persist, keeping the Telegram file_id so the photo can be shown later, and

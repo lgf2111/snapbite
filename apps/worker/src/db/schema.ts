@@ -7,6 +7,13 @@ export const users = sqliteTable(
     id: text('id').primaryKey(),
     telegramUserId: integer('telegram_user_id').notNull(),
     createdAt: integer('created_at').notNull(),
+    /** The user's DM chat id + message id of the last update broadcast we sent
+     * them, so a newer update can EDIT it in place while still editable (<48h).
+     * Null until the first broadcast reaches them. */
+    lastBroadcastChatId: integer('last_broadcast_chat_id'),
+    lastBroadcastMessageId: integer('last_broadcast_message_id'),
+    lastBroadcastAt: integer('last_broadcast_at'),
+    lastBroadcastVersion: text('last_broadcast_version'),
   },
   (t) => ({
     telegramIdx: uniqueIndex('users_telegram_user_id_idx').on(t.telegramUserId),

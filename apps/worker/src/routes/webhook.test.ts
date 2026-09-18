@@ -632,3 +632,132 @@ describe('plain-text revise of the last meal', () => {
     expect(ack?.reply.replyToMessageId).toBe(firstConfirmationId);
   });
 });
+
+describe('/broadcast (admin-gated)', () => {
+  it('sends the changelog to known users and reports a summary to the admin', async () => {
+    // Create a couple of users by having them interact (upsertUser via a message).
+    const app0 = createApp({ botClientFactory: () => mockBot([]) });
+    for (const id of [7301, 7302]) {
+      await app0.request(
+        '/webhook',
+        post({ message: { text: 'hi', chat: { id }, from: { id } } }),
+        env,
+      );
+    }
+
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({ botClientFactory: () => mockBot(sent) });
+    const res = await app.request(
+      '/webhook',
+      post({ message: { text: '/broadcast', chat: { id: ADMIN_ID }, from: { id: ADMIN_ID } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    // The two users each got the update message (contains the version header).
+    expect(sent.some((s) => s.chatId === 7301 && s.reply.text.includes('FoodLog update'))).toBe(
+      true,
+    );
+    // The admin got a summary.
+    const summary = sent.find((s) => s.chatId === ADMIN_ID);
+    expect(summary?.reply.text).toContain('Broadcast');
+  });
+
+  it('is invisible to non-admins (generic nudge, no broadcast)', async () => {
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({ botClientFactory: () => mockBot(sent) });
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/broadcast', chat: { id: 7400 }, from: { id: 7400 } } }),
+      env,
+    );
+    expect(lastText(sent).toLowerCase()).toContain('open foodlog');
+    expect(lastText(sent)).not.toContain('FoodLog update');
+  });
+});
+
+describe('barcode → Open Food Facts enrichment', () => {
+  it('replaces a barcoded food\'s macros with the looked-up product and tags provider', async () => {
+    const tgId = 7500;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'k', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+
+    // Provider returns a food carrying a barcode; the global fetch is stubbed so
+    // the OFF lookup returns a known product.
+    const analysisWithBarcode = {
+      foods: [
+        {
+          name: 'unknown snack',
+          estimatedWeightG: 100,
+          quantity: 1,
+          confidence: 0.6,
+          aiNutrition: { energyKcal: 100, proteinG: 1, carbsG: 10, fatG: 2 },
+          barcode: '3017620422003',
+        },
+      ],
+      confidence: 0.6,
+      needsConfirmation: false,
+    };
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).includes('openfoodfacts.org')) {
+        return new Response(
+          JSON.stringify({
+            status: 1,
+            product: {
+              product_name: 'Test Bar',
+              serving_quantity: 50,
+              nutriments: {
+                'energy-kcal_100g': 400,
+                proteins_100g: 8,
+                carbohydrates_100g: 60,
+                fat_100g: 15,
+              },
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response('{}', { status: 200 });
+    });
+
+    try {
+      const app = createApp({
+        botClientFactory: () => mockBot(sent),
+        providerFactory: () => ({
+          id: 'primary',
+          analyzeMeal: async () => analysisWithBarcode,
+          reviseMeal: async () => {
+            throw new Error('n/a');
+          },
+        }),
+      });
+      await app.request(
+        '/webhook',
+        post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+        env,
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    // The saved meal should reflect the OFF product name + macros (400 kcal/100g
+    // × 50g serving = 200 kcal), and be tagged with the openfoodfacts provider.
+    const list = (await (
+      await createApp().request('/api/meals', { headers: { [INIT_DATA_HEADER]: initData } }, env)
+    ).json()) as { meals: Array<{ foods: string[]; energyKcal: number | null; aiProvider: string | null }> };
+    const meal = list.meals[0];
+    expect(meal?.foods).toContain('Test Bar');
+    expect(meal?.energyKcal).toBe(200);
+    expect(meal?.aiProvider).toBe('openfoodfacts');
+  });
+});

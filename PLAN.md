@@ -506,3 +506,22 @@ Five related features:
 
 Tests: core 110, worker 92, miniapp 16, cli 8. Deployed Worker `8e29244d` (cron live), Pages
 `f0b045a2`. Migration 0005 applied local + remote.
+
+## 16. Versioned update broadcasts + barcode → Open Food Facts (DELIVERED)
+
+1. **Versioned broadcasts.** `packages/core/src/version/version.ts` holds `CHANGELOG` (newest first),
+   `APP_VERSION`, `CURRENT_CHANGELOG`, and `broadcastMessage(entry)` (beta framing). Admin-only bot
+   command `/broadcast` (gated by `ADMIN_TELEGRAM_ID`, invisible to others) sends the current entry to
+   all users. Per-user tracking via migration 0006 (`users.last_broadcast_chat_id/message_id/at/version`).
+   Edit-if-editable-else-new: if a user's last broadcast is <48h old (Telegram's edit window) and on an
+   older version, the message is EDITED in place to the newest version; otherwise a new one is sent.
+   Summary DM to the admin. `/broadcast` is deliberately not in the public command menu.
+2. **Barcode → Open Food Facts.** Rather than decode barcodes from image pixels in the Worker (heavy:
+   JPEG decoder + zbar-wasm in workerd, low hit rate), the vision model reads printed EAN/UPC digits into
+   a per-food `barcode` field (`FoodItem` schema + prompt). `apps/worker/src/openfoodfacts.ts`
+   `lookupBarcode` queries the free OFF API (`/api/v2/product/<code>.json`), and `enrichWithBarcodes` in
+   the photo pipeline replaces that food's nutrition with the product's exact per-100g values (scaled to
+   the serving, tagged `manual`, provider `openfoodfacts`). Best-effort: any miss/error falls back to the
+   AI estimate. Possible follow-up: true in-image barcode decoding for photos where the digits aren't legible.
+
+Tests: core 119, worker 101, miniapp 16, cli 8. Migration 0006 applied local + remote. Worker deployed.

@@ -24,7 +24,8 @@ Respond with a single valid JSON object and nothing else — no markdown, no cod
       "portion": "human-readable portion, e.g. '1 bowl'",
       "quantity": 1,
       "confidence": 0.8,
-      "aiNutrition": { "energyKcal": 200, "proteinG": 8, "carbsG": 30, "fatG": 5 }
+      "aiNutrition": { "energyKcal": 200, "proteinG": 8, "carbsG": 30, "fatG": 5 },
+      "barcode": "optional digits if a product barcode is clearly readable"
     }
   ],
   "confidence": 0.8,
@@ -42,7 +43,7 @@ Rules:
 
 Choosing the nutrition source (in priority order):
 1. NUTRITION LABEL: If a nutrition-facts panel / ingredients label is visible, READ IT and use those exact values. Convert whatever basis the label uses (per serving, per package, per 100 g) into "aiNutrition" PER 100 GRAMS, and set "estimatedWeightG" to the amount actually being eaten (e.g. the serving or package size shown). Use the product name from the label as "name". Set confidence high (>= 0.9) and add a short "notes" like "from nutrition label".
-2. BARCODE / QR CODE: If you can clearly read a product name or brand near a barcode/QR code, use that specific product to inform your estimate and name. If you can read the barcode digits, include them in "notes" (e.g. "barcode 8888..."). Do NOT guess digits you can't read. If the packaging also has a nutrition label, prefer rule 1.
+2. BARCODE / QR CODE: If you can clearly read the digits printed under a product barcode (EAN/UPC, usually 8–13 digits), put ONLY those digits in that food's "barcode" field — they'll be looked up for exact nutrition. Do NOT guess or invent digits; omit "barcode" if you can't read them confidently. Also use any readable product name/brand for "name". If the packaging has a nutrition label too, still follow rule 1 for the estimate.
 3. VISUAL ESTIMATE: Otherwise, estimate nutrition from the food's appearance as usual.`;
 
 /**
