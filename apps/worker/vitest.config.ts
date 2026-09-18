@@ -24,6 +24,13 @@ export default defineWorkersConfig(async () => {
               TELEGRAM_WEBHOOK_SECRET: 'test-webhook-secret',
               // Owner id for admin-gated commands + DM alerts (see §14 tests).
               ADMIN_TELEGRAM_ID: '999000',
+              // Force the group-routing vars OFF in tests (independent of
+              // .dev.vars) so alerts DM the admin id, which the §14 tests assert.
+              // A dedicated test in §17 sets these to verify group routing.
+              ADMIN_GROUP_CHAT_ID: '',
+              ERRORS_THREAD_ID: '',
+              FEEDBACK_THREAD_ID: '',
+              BROADCAST_THREAD_ID: '',
               TEST_MIGRATIONS: migrations,
             },
           },

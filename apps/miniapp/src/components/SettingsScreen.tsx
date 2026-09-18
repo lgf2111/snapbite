@@ -625,6 +625,14 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                 />
               </div>
 
+              {/* Always-visible "why" so users understand the benefit before enabling. */}
+              <p className="text-muted-foreground text-xs">
+                Free AI tiers get busy — your provider can hit a rate limit, be temporarily
+                overloaded, or run out of credit, and a photo won't log. Add a second provider here
+                and FoodLog switches to it automatically when that happens, so your meals keep
+                logging without you resending the photo.
+              </p>
+
               <Collapsible open={fbEnabled && primaryConnected}>
                 <div className="flex flex-col gap-3 pt-1">
                   <p className="text-muted-foreground text-xs">

@@ -29,7 +29,9 @@ import {
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import { createDb, listBroadcastTargets, setBroadcastRef, upsertUser } from '../db/users.js';
 import { type AppBindings, parseAdminId } from '../env.js';
+import { adminNotify } from '../adminNotify.js';
 import { lookupBarcode } from '../openfoodfacts.js';
+import { enqueuePhotoRetry } from '../photoRetry.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
 import { detailToAnalysis, primaryProviderChoice, type ProviderFactory } from './meals.js';
 
@@ -117,9 +119,10 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
           detail,
         });
         // Alert the owner — webhook/photo failures are user-facing. Best-effort.
-        await alertAdmin(
-          c,
+        await adminNotify(
+          c.env,
           bot,
+          'error',
           `⚠️ Photo log failed for user ${parsed.fromId}: ${desc.message}`,
         );
         try {
@@ -177,19 +180,7 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
  * or when the admin id is the same chat that just errored is irrelevant — we
  * always send to the admin's own chat id. Never throws.
  */
-async function alertAdmin(
-  c: Context<AppBindings>,
-  bot: BotClient,
-  text: string,
-): Promise<void> {
-  const adminId = parseAdminId(c.env.ADMIN_TELEGRAM_ID);
-  if (!adminId) return;
-  try {
-    await bot.sendMessage(adminId, { text });
-  } catch {
-    /* ignore — alerting must never break the request */
-  }
-}
+
 
 /** Short human time (UTC) for admin listings. */
 function shortTime(ms: number): string {
@@ -287,9 +278,10 @@ async function handleBroadcastCommand(
     }
   }
 
-  await bot.sendMessage(parsed.chatId, {
-    text: `📣 Broadcast v${entry.version} done — ${sent} sent, ${edited} edited, ${failed} failed (of ${targets.length}).`,
-  });
+  const summary = `📣 Broadcast v${entry.version} done — ${sent} sent, ${edited} edited, ${failed} failed (of ${targets.length}).`;
+  // Reply to the command where it was typed, and log a record to the broadcast topic.
+  await bot.sendMessage(parsed.chatId, { text: summary });
+  await adminNotify(c.env, bot, 'broadcast', summary);
 }
 
 /**
@@ -335,9 +327,10 @@ async function handleFeedbackCommand(
       source: 'bot',
       message: text.slice(0, FEEDBACK_MAX_LEN),
     });
-    await alertAdmin(
-      c,
+    await adminNotify(
+      c.env,
       bot,
+      'feedback',
       `📝 New feedback from user ${parsed.fromId}:\n${row.message}`,
     );
     await bot.sendMessage(parsed.chatId, { text: FEEDBACK_THANKS });
@@ -823,9 +816,31 @@ async function handlePhoto(
   try {
     analysis = await analyzeWithRetry(provider, image, opts);
   } catch (err) {
-    const fb = await tryFallback(c, err, image, opts, providerFactory, user.id);
-    analysis = fb.analysis;
-    usedProvider = fb.provider;
+    try {
+      const fb = await tryFallback(c, err, image, opts, providerFactory, user.id);
+      analysis = fb.analysis;
+      usedProvider = fb.provider;
+    } catch (finalErr) {
+      // Primary (after inline retries) AND fallback both failed. If it's a
+      // transient overload, queue a DELAYED auto-retry (cron re-analyzes in a
+      // few minutes and edits this message into the result) instead of making
+      // the user resend. Any other error surfaces normally.
+      if (isOverloadError(finalErr)) {
+        await enqueuePhotoRetry(c.env.DB, {
+          userId: user.id,
+          telegramUserId: fromId,
+          chatId,
+          statusMessageId: job.statusMessageId ?? null,
+          fileId,
+          caption,
+        });
+        await replyOrEdit(bot, chatId, job.statusMessageId, {
+          text: "⏳ The AI is busy right now — I'll keep trying and log this automatically in a few minutes. No need to resend.",
+        });
+        return;
+      }
+      throw finalErr;
+    }
   }
 
   // Barcode → Open Food Facts: for any food the model read a barcode from, look

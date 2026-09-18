@@ -145,3 +145,33 @@ export type FoodItemRow = typeof foodItems.$inferSelect;
 export type NutritionRow = typeof nutrition.$inferSelect;
 export type ErrorLogRow = typeof errorLogs.$inferSelect;
 export type FeedbackRow = typeof feedback.$inferSelect;
+
+/**
+ * Photos whose analysis hit a transient overload (503) and couldn't be logged
+ * inline. The cron re-analyzes them a few minutes later and edits the "busy"
+ * message into the result. Deleted on success or after the attempt cap (§17).
+ */
+export const pendingPhotoRetries = sqliteTable(
+  'pending_photo_retries',
+  {
+    id: text('id').primaryKey(),
+    /** App user id (to re-load their encrypted key). */
+    userId: text('user_id').notNull(),
+    telegramUserId: integer('telegram_user_id').notNull(),
+    chatId: integer('chat_id').notNull(),
+    /** The "busy…" status message to edit into the result (null if none). */
+    statusMessageId: integer('status_message_id'),
+    /** Telegram file_id of the photo to re-download + analyze. */
+    fileId: text('file_id').notNull(),
+    caption: text('caption'),
+    attempts: integer('attempts').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    /** Earliest time (ms) the cron should try again. */
+    nextAt: integer('next_at').notNull(),
+  },
+  (t) => ({
+    nextAtIdx: index('pending_photo_retries_next_at_idx').on(t.nextAt),
+  }),
+);
+
+export type PendingPhotoRetryRow = typeof pendingPhotoRetries.$inferSelect;

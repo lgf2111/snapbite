@@ -8,6 +8,10 @@ declare module 'cloudflare:test' {
     MINI_APP_URL?: string;
     TELEGRAM_WEBHOOK_SECRET?: string;
     ADMIN_TELEGRAM_ID?: string;
+    ADMIN_GROUP_CHAT_ID?: string;
+    ERRORS_THREAD_ID?: string;
+    FEEDBACK_THREAD_ID?: string;
+    BROADCAST_THREAD_ID?: string;
     TEST_MIGRATIONS: D1Migration[];
   }
   export const env: ProvidedEnv;

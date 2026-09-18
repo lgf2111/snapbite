@@ -525,3 +525,23 @@ Tests: core 110, worker 92, miniapp 16, cli 8. Deployed Worker `8e29244d` (cron 
    AI estimate. Possible follow-up: true in-image barcode decoding for photos where the digits aren't legible.
 
 Tests: core 119, worker 101, miniapp 16, cli 8. Migration 0006 applied local + remote. Worker deployed.
+
+## 17. Admin group topics + fallback explainer + delayed 503 auto-retry (DELIVERED)
+
+1. **Admin alerts → Telegram group Topics.** `BotReply.threadId` + `sendMessage` `message_thread_id`
+   support. New `apps/worker/src/adminNotify.ts` routes error/feedback/broadcast alerts to the group's
+   Topic when `ADMIN_GROUP_CHAT_ID` is set (else DMs `ADMIN_TELEGRAM_ID`). Env: `ADMIN_GROUP_CHAT_ID`
+   (negative supergroup id) + `ERRORS_THREAD_ID` / `FEEDBACK_THREAD_ID` / `BROADCAST_THREAD_ID`
+   (`parseChatId` allows negatives, `parseThreadId` positive). Group `-1003990101342`, threads
+   errors=2, feedback=3, broadcast=4. Bot must be a group member to post. Keeps the owner's 1:1 chat
+   for personal logging.
+2. **Fallback explainer.** Settings fallback card shows an always-visible note on why a second
+   provider helps (rate limit / overload / out of credit → auto-switch, no resend).
+3. **Delayed 503 auto-retry.** Migration 0007 `pending_photo_retries`. When a photo's analysis hits a
+   sustained overload that survives inline retries + fallback, it's enqueued (`enqueuePhotoRetry`) and
+   the ack becomes "I'll retry automatically". The cron (`runPhotoRetries`, wired into `scheduled`
+   alongside reminders) re-analyzes due rows (first ~3 min, then ~15 min), edits the message into the
+   result on success, and gives up after 2 attempts with a final note. Lightweight: only queries due rows.
+
+Tests: core 119, worker 109 (adminNotify routing + photoRetry success/give-up), miniapp 16, cli 8.
+Migration 0007 applied local + remote. Deployed Worker + Pages; group-topic secrets set.

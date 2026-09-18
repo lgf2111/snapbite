@@ -92,6 +92,8 @@ export interface BotReply {
   replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] };
   /** When set, the message is sent as a reply to this Telegram message_id. */
   replyToMessageId?: number;
+  /** When set, posts into a forum/group Topic (Telegram `message_thread_id`). */
+  threadId?: number;
 }
 
 export interface BotConfig {

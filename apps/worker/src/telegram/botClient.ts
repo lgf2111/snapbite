@@ -58,6 +58,7 @@ export class TelegramBotClient {
     if (reply.replyToMessageId != null) {
       body.reply_parameters = { message_id: reply.replyToMessageId };
     }
+    if (reply.threadId != null) body.message_thread_id = reply.threadId;
 
     const res = await this.#fetch(`https://api.telegram.org/bot${this.#token}/sendMessage`, {
       method: 'POST',

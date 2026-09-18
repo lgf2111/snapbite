@@ -1,5 +1,6 @@
 import { createApp } from './app.js';
 import type { Env } from './env.js';
+import { runPhotoRetries } from './photoRetry.js';
 import { runReminders } from './reminders.js';
 
 const app = createApp();
@@ -13,5 +14,7 @@ export default {
    */
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(runReminders(env));
+    // Re-analyze photos that hit a transient AI overload earlier (§17).
+    ctx.waitUntil(runPhotoRetries(env));
   },
 };
