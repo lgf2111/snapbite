@@ -90,6 +90,8 @@ export interface BotReply {
   text: string;
   /** Optional inline keyboard (e.g. a web_app launch button). */
   replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] };
+  /** When set, the message is sent as a reply to this Telegram message_id. */
+  replyToMessageId?: number;
 }
 
 export interface BotConfig {

@@ -401,9 +401,20 @@ async function handleTextRevise(
     target.telegramChatId != null && target.telegramMessageId != null
       ? { chatId: target.telegramChatId, messageId: target.telegramMessageId }
       : { chatId, messageId: null };
-  await replyOrEdit(bot, ref.chatId, ref.messageId, reply);
-  // Acknowledge in the current chat if the edited message lives elsewhere/older.
-  if (ref.messageId == null || ref.chatId !== chatId) {
+  const editedInPlace = await replyOrEdit(bot, ref.chatId, ref.messageId, reply);
+
+  const wasReply = parsed.replyToMessageId != null;
+  if (wasReply && ref.messageId != null) {
+    // User explicitly replied to a meal: acknowledge with an "Updated" message
+    // that itself replies to the (now-edited) confirmation, so it's clear which
+    // meal changed.
+    await bot.sendMessage(chatId, {
+      text: '✅ Updated.',
+      replyToMessageId: ref.messageId,
+    });
+  } else if (editedInPlace == null || ref.chatId !== chatId) {
+    // Couldn't edit in place (or it lives in another chat) — send a plain ack so
+    // the user still gets confirmation.
     await bot.sendMessage(chatId, { text: '✅ Updated your meal.' });
   }
 }

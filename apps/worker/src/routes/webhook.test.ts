@@ -626,5 +626,9 @@ describe('plain-text revise of the last meal', () => {
     expect(res.status).toBe(200);
     // Not the ambiguity prompt — it targeted the replied-to meal.
     expect(lastText(sent).toLowerCase()).not.toContain('reply directly');
+    // An "Updated" ack was sent as a reply to the meal's confirmation message.
+    const ack = sent[sent.length - 1];
+    expect(ack?.reply.text).toContain('Updated');
+    expect(ack?.reply.replyToMessageId).toBe(firstConfirmationId);
   });
 });

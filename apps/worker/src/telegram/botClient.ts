@@ -55,6 +55,9 @@ export class TelegramBotClient {
   async sendMessage(chatId: number, reply: BotReply): Promise<SentMessage> {
     const body: Record<string, unknown> = { chat_id: chatId, text: reply.text };
     if (reply.replyMarkup) body.reply_markup = reply.replyMarkup;
+    if (reply.replyToMessageId != null) {
+      body.reply_parameters = { message_id: reply.replyToMessageId };
+    }
 
     const res = await this.#fetch(`https://api.telegram.org/bot${this.#token}/sendMessage`, {
       method: 'POST',
