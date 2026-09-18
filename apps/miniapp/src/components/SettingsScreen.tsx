@@ -141,7 +141,14 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [sendingFeedback, setSendingFeedback] = useState(false);
-  const [remindersOn, setRemindersOn] = useState(false);
+  // Each slot has its own on/off toggle + time. `times` always holds all three
+  // slots (so a toggled-off slot keeps its time); `slotOn` tracks which are
+  // enabled. We persist only the enabled slots' times to the backend.
+  const [slotOn, setSlotOn] = useState<Record<string, boolean>>({
+    breakfast: false,
+    lunch: false,
+    dinner: false,
+  });
   const [reminderTimes, setReminderTimes] =
     useState<Record<string, string>>(DEFAULT_REMINDER_TIMES);
   const [savingReminders, setSavingReminders] = useState(false);
@@ -174,12 +181,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           );
         }
         setFbEnabled(Boolean(s.fallbackEnabled));
-        if (s.reminders) {
-          setRemindersOn(Boolean(s.reminders.enabled));
-          if (s.reminders.times && Object.keys(s.reminders.times).length > 0) {
-            setReminderTimes(s.reminders.times);
-          }
-        }
+        hydrateReminders(s);
       })
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to load settings'));
   }, [backend]);
@@ -352,30 +354,61 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     }
   }
 
-  async function persistReminders(enabled: boolean, times: Record<string, string>) {
+  // Reads reminder state from a settings payload into slot toggles + times, and
+  // opportunistically refreshes the stored timezone offset if the device moved
+  // (so travel/DST self-heals on app open without the user re-saving).
+  function hydrateReminders(s: SettingsView) {
+    const times = { ...DEFAULT_REMINDER_TIMES };
+    const on: Record<string, boolean> = { breakfast: false, lunch: false, dinner: false };
+    const saved = s.reminders?.times ?? {};
+    for (const [label, time] of Object.entries(saved)) {
+      times[label] = time;
+      on[label] = true;
+    }
+    setReminderTimes(times);
+    setSlotOn(on);
+
+    const anyOn = Object.values(on).some(Boolean);
+    const deviceTz = new Date().getTimezoneOffset();
+    if (anyOn && s.reminders && s.reminders.tzOffsetMinutes !== deviceTz) {
+      // Silent self-heal: re-save the same enabled slots so the Worker gets the
+      // current offset. No toast — the user didn't do anything.
+      const enabledTimes = Object.fromEntries(
+        Object.entries(times).filter(([label]) => on[label]),
+      );
+      backend.saveReminders(true, enabledTimes).catch(() => {
+        /* best-effort; will retry next app open */
+      });
+    }
+  }
+
+  /** Persists exactly the currently-enabled slots' times (empty = all off). */
+  async function persistReminders(nextOn: Record<string, boolean>, times: Record<string, string>) {
+    const enabledTimes = Object.fromEntries(Object.entries(times).filter(([l]) => nextOn[l]));
+    const anyOn = Object.keys(enabledTimes).length > 0;
     setSavingReminders(true);
     try {
-      const updated = await backend.saveReminders(enabled, times);
+      const updated = await backend.saveReminders(anyOn, enabledTimes);
       setSettings(updated);
-      toast.success(enabled ? 'Reminders on' : 'Reminders off');
     } catch (e) {
-      // Revert the optimistic toggle on failure.
-      setRemindersOn(!enabled);
       toast.error(e instanceof Error ? e.message : 'Could not save reminders');
+      // Re-hydrate from the last known-good settings to undo the optimistic UI.
+      if (settings) hydrateReminders(settings);
     } finally {
       setSavingReminders(false);
     }
   }
 
-  function handleToggleReminders(on: boolean) {
-    setRemindersOn(on);
-    void persistReminders(on, reminderTimes);
+  function handleToggleSlot(label: string, on: boolean) {
+    const next = { ...slotOn, [label]: on };
+    setSlotOn(next);
+    void persistReminders(next, reminderTimes);
   }
 
   function handleReminderTimeChange(label: string, value: string) {
     const next = { ...reminderTimes, [label]: value };
     setReminderTimes(next);
-    if (remindersOn) void persistReminders(true, next);
+    if (slotOn[label]) void persistReminders(slotOn, next);
   }
 
   async function handleSendFeedback() {
@@ -436,6 +469,44 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               <Button onClick={() => setEditingProfile(true)}>Set your goal</Button>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <Bell className="text-primary size-5" />
+            <span className="font-medium">Meal reminders</span>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            A daily Telegram nudge to log each meal. Toggle the ones you want and set their times —
+            you'll be reminded once per slot per day, in your device's timezone.
+          </p>
+          <div className="flex flex-col gap-2 pt-1">
+            {(['breakfast', 'lunch', 'dinner'] as const).map((label) => (
+              <div key={label} className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    aria-label={`Enable ${label} reminder`}
+                    checked={Boolean(slotOn[label])}
+                    disabled={savingReminders}
+                    onCheckedChange={(on) => handleToggleSlot(label, on)}
+                  />
+                  <Label htmlFor={`reminder-${label}`} className="capitalize">
+                    {label}
+                  </Label>
+                </div>
+                <Input
+                  id={`reminder-${label}`}
+                  type="time"
+                  className="w-32"
+                  value={reminderTimes[label] ?? DEFAULT_REMINDER_TIMES[label]}
+                  disabled={savingReminders || !slotOn[label]}
+                  onChange={(e) => handleReminderTimeChange(label, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -609,50 +680,6 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               Delete account
             </Button>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="flex flex-col gap-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex flex-col">
-              <span className="flex items-center gap-2 font-medium">
-                <Bell className="text-primary size-5" /> Meal reminders
-              </span>
-              <span className="text-muted-foreground text-xs">
-                A daily Telegram nudge at each time to log your meal.
-              </span>
-            </div>
-            <Switch
-              aria-label="Enable meal reminders"
-              checked={remindersOn}
-              disabled={savingReminders}
-              onCheckedChange={handleToggleReminders}
-            />
-          </div>
-
-          <Collapsible open={remindersOn}>
-            <div className="flex flex-col gap-2 pt-1">
-              {Object.entries(reminderTimes).map(([label, time]) => (
-                <div key={label} className="flex items-center justify-between gap-3">
-                  <Label htmlFor={`reminder-${label}`} className="capitalize">
-                    {label}
-                  </Label>
-                  <Input
-                    id={`reminder-${label}`}
-                    type="time"
-                    className="w-32"
-                    value={time}
-                    disabled={savingReminders}
-                    onChange={(e) => handleReminderTimeChange(label, e.target.value)}
-                  />
-                </div>
-              ))}
-              <p className="text-muted-foreground text-xs">
-                Times use your device's timezone. You'll only be nudged once per slot per day.
-              </p>
-            </div>
-          </Collapsible>
         </CardContent>
       </Card>
 
