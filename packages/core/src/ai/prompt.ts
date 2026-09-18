@@ -38,7 +38,12 @@ Rules:
 - "aiNutrition" is your best rough estimate of that food's nutrition PER 100 GRAMS (not per portion): energyKcal, proteinG, carbsG, fatG, all numbers >= 0.
 - "quantity" is how many of that item are present (default 1).
 - Identify real, specific foods (e.g. "grilled chicken breast", "steamed white rice"), not "unknown food", whenever the image shows food.
-- If the image is unclear, ambiguous, or not food, still return your single best guess, set needsConfirmation to true, and lower confidence — but keep all numeric fields filled with realistic estimates, never zeros.`;
+- If the image is unclear, ambiguous, or not food, still return your single best guess, set needsConfirmation to true, and lower confidence — but keep all numeric fields filled with realistic estimates, never zeros.
+
+Choosing the nutrition source (in priority order):
+1. NUTRITION LABEL: If a nutrition-facts panel / ingredients label is visible, READ IT and use those exact values. Convert whatever basis the label uses (per serving, per package, per 100 g) into "aiNutrition" PER 100 GRAMS, and set "estimatedWeightG" to the amount actually being eaten (e.g. the serving or package size shown). Use the product name from the label as "name". Set confidence high (>= 0.9) and add a short "notes" like "from nutrition label".
+2. BARCODE / QR CODE: If you can clearly read a product name or brand near a barcode/QR code, use that specific product to inform your estimate and name. If you can read the barcode digits, include them in "notes" (e.g. "barcode 8888..."). Do NOT guess digits you can't read. If the packaging also has a nutrition label, prefer rule 1.
+3. VISUAL ESTIMATE: Otherwise, estimate nutrition from the food's appearance as usual.`;
 
 /**
  * Builds the user-message text. Any user-supplied hint is included as data,

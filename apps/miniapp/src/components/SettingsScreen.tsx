@@ -151,6 +151,14 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   });
   const [reminderTimes, setReminderTimes] =
     useState<Record<string, string>>(DEFAULT_REMINDER_TIMES);
+  // Committed snapshots (last saved) — used to detect unsaved changes so edits
+  // to the time pickers don't hit the network on every scroll tick.
+  const [savedSlotOn, setSavedSlotOn] = useState<Record<string, boolean>>({
+    breakfast: false,
+    lunch: false,
+    dinner: false,
+  });
+  const [savedTimes, setSavedTimes] = useState<Record<string, string>>(DEFAULT_REMINDER_TIMES);
   const [savingReminders, setSavingReminders] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -365,8 +373,11 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       times[label] = time;
       on[label] = true;
     }
+    // Both the editable draft AND the committed snapshot start equal to server.
     setReminderTimes(times);
     setSlotOn(on);
+    setSavedTimes(times);
+    setSavedSlotOn(on);
 
     const anyOn = Object.values(on).some(Boolean);
     const deviceTz = new Date().getTimezoneOffset();
@@ -382,33 +393,45 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     }
   }
 
-  /** Persists exactly the currently-enabled slots' times (empty = all off). */
-  async function persistReminders(nextOn: Record<string, boolean>, times: Record<string, string>) {
-    const enabledTimes = Object.fromEntries(Object.entries(times).filter(([l]) => nextOn[l]));
+  // Unsaved-changes detector: compares the editable draft to the last committed
+  // snapshot (a slot's time only counts when the slot is enabled).
+  const remindersDirty =
+    (['breakfast', 'lunch', 'dinner'] as const).some(
+      (l) => Boolean(slotOn[l]) !== Boolean(savedSlotOn[l]),
+    ) ||
+    (['breakfast', 'lunch', 'dinner'] as const).some(
+      (l) => slotOn[l] && reminderTimes[l] !== savedTimes[l],
+    );
+
+  /** Commits the current draft (enabled slots' times) to the backend. */
+  async function saveReminders() {
+    const enabledTimes = Object.fromEntries(
+      Object.entries(reminderTimes).filter(([l]) => slotOn[l]),
+    );
     const anyOn = Object.keys(enabledTimes).length > 0;
     setSavingReminders(true);
     try {
       const updated = await backend.saveReminders(anyOn, enabledTimes);
       setSettings(updated);
+      // Advance the committed snapshot so the button goes clean.
+      setSavedTimes({ ...reminderTimes });
+      setSavedSlotOn({ ...slotOn });
+      toast.success('Reminders saved');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not save reminders');
-      // Re-hydrate from the last known-good settings to undo the optimistic UI.
-      if (settings) hydrateReminders(settings);
     } finally {
       setSavingReminders(false);
     }
   }
 
+  // Toggles and time edits only touch local draft state — no network call per
+  // change (that caused the time-picker lag). The "Save changes" button commits.
   function handleToggleSlot(label: string, on: boolean) {
-    const next = { ...slotOn, [label]: on };
-    setSlotOn(next);
-    void persistReminders(next, reminderTimes);
+    setSlotOn((prev) => ({ ...prev, [label]: on }));
   }
 
   function handleReminderTimeChange(label: string, value: string) {
-    const next = { ...reminderTimes, [label]: value };
-    setReminderTimes(next);
-    if (slotOn[label]) void persistReminders(slotOn, next);
+    setReminderTimes((prev) => ({ ...prev, [label]: value }));
   }
 
   async function handleSendFeedback() {
@@ -507,6 +530,15 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               </div>
             ))}
           </div>
+          {remindersDirty && (
+            <Button
+              className="mt-1"
+              disabled={savingReminders}
+              onClick={() => void saveReminders()}
+            >
+              {savingReminders ? 'Saving…' : 'Save changes'}
+            </Button>
+          )}
         </CardContent>
       </Card>
 
