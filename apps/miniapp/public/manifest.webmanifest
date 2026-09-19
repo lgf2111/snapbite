@@ -1,0 +1,17 @@
+{
+  "name": "SnapBite",
+  "short_name": "SnapBite",
+  "description": "Snap a photo of your meal and log its calories and macros, right inside Telegram.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#17212b",
+  "theme_color": "#17212b",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
