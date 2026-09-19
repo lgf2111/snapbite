@@ -19,6 +19,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.17.0',
+    date: '2026-09-16',
+    notes: [
+      '👋 FoodLog is now SnapBite — same bot, same chat, all your history is right here',
+      'Nothing to do: keep sending photos to this chat as usual',
+      'Snap a nutrition label or barcode for exact product nutrition',
+      'Per-meal reminders + reply to a logged meal to update it',
+    ],
+  },
+  {
     version: '0.16.0',
     date: '2026-09-16',
     notes: [

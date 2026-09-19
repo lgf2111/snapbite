@@ -132,7 +132,7 @@ export function OnboardingScreen({ backend, onDone, onSkip, onToast }: Onboardin
   return (
     <div className="flex flex-1 flex-col gap-4 pb-4">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">Welcome to FoodLog</h1>
+        <h1 className="text-2xl font-semibold">Welcome to SnapBite</h1>
         <p className="text-muted-foreground text-sm">
           Tell us a bit about yourself to get daily calorie and macro targets. You can change these
           any time in Settings, or skip for now.

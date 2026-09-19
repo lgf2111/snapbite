@@ -95,7 +95,7 @@ describe('POST /webhook', () => {
   it('replies to a plain message with a nudge', async () => {
     const { app, sent } = appWithCapture();
     await app.request('/webhook', post({ message: { text: 'hello', chat: { id: 7 } } }), env);
-    expect(sent[0]?.reply.text.toLowerCase()).toContain('open foodlog');
+    expect(sent[0]?.reply.text.toLowerCase()).toContain('open snapbite');
   });
 
   it('acks malformed JSON without throwing', async () => {
@@ -442,7 +442,7 @@ describe('/errors command (admin-gated)', () => {
       env,
     );
     // Non-admin gets the normal fallback nudge, not an error list.
-    expect(lastText(sent).toLowerCase()).toContain('open foodlog');
+    expect(lastText(sent).toLowerCase()).toContain('open snapbite');
     expect(lastText(sent).toLowerCase()).not.toContain('latest errors');
   });
 });
@@ -670,8 +670,8 @@ describe('/broadcast (admin-gated)', () => {
       post({ message: { text: '/broadcast', chat: { id: 7400 }, from: { id: 7400 } } }),
       env,
     );
-    expect(lastText(sent).toLowerCase()).toContain('open foodlog');
-    expect(lastText(sent)).not.toContain('FoodLog update');
+    expect(lastText(sent).toLowerCase()).toContain('open snapbite');
+    expect(lastText(sent)).not.toContain('SnapBite update');
   });
 });
 

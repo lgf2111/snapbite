@@ -168,7 +168,7 @@ async function finishGiveUp(
   row: PendingPhotoRetryRow,
 ): Promise<void> {
   await editOrSend(bot, row.chatId, row.statusMessageId, {
-    text: "Sorry — the AI stayed busy and I couldn't log that photo. Please send it again, or set a fallback provider in FoodLog → Settings so this doesn't happen.",
+    text: "Sorry — the AI stayed busy and I couldn't log that photo. Please send it again, or set a fallback provider in SnapBite → Settings so this doesn't happen.",
   });
   await deleteRetry(env.DB, row.id);
 }

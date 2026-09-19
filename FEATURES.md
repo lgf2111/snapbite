@@ -1,7 +1,7 @@
-# FoodLog — Features
+# SnapBite — Features
 
-A Telegram-native, AI-assisted food & nutrition logging app. Nutrition is always shown as an
-**estimate** and is always **editable**.
+A Telegram-native, AI-assisted food & nutrition logging app (formerly FoodLog). Nutrition is always
+shown as an **estimate** and is always **editable**.
 
 ## Logging meals
 

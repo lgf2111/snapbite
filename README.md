@@ -1,8 +1,10 @@
-# FoodLog
+# SnapBite
 
 A Telegram-native, low-friction, AI-assisted food & nutrition logging app.
 
-**One-line goal:** unlock phone → open FoodLog (or just send a photo to the bot) → AI analyzes it → confirm/correct → saved.
+> Formerly **FoodLog**. The user-facing name is **SnapBite**; internal packages, the Cloudflare Worker (`foodlog-worker`), Pages project, and D1 database (`foodlog-db`) keep the `foodlog` names to avoid a disruptive infra migration.
+
+**One-line goal:** unlock phone → open SnapBite (or just send a photo to the bot) → AI analyzes it → confirm/correct → saved.
 
 Nutrition is always shown as an **estimate** and is always **editable**. The AI runs on **your own API key** (BYOK), so running costs are ~$0 beyond a few hundredths of a cent per photo.
 
@@ -94,7 +96,7 @@ TELEGRAM_BOT_TOKEN=<your-bot-token> pnpm --filter @foodlog/worker bot:commands
 
 ## AI providers
 
-FoodLog is provider-agnostic. Pick a provider and paste your key in **Settings**:
+SnapBite is provider-agnostic. Pick a provider and paste your key in **Settings**:
 
 - **Google Gemini** (default, recommended) — best food-vision value; free tier at aistudio.google.com. Default model `gemini-3.6-flash` (Gemini rotates/retires model names; override in Settings if needed).
 - **OpenAI** — `gpt-4o-mini` by default; strong and reliable.
@@ -108,7 +110,7 @@ All three are called through the same OpenAI-compatible Chat Completions shape; 
 
 ### Getting an API key
 
-You bring your own key. Create one with whichever provider you want, then paste it in **FoodLog → Settings → AI provider** (and optionally as your **Fallback provider**). A key is stored encrypted and only used server-side.
+You bring your own key. Create one with whichever provider you want, then paste it in **SnapBite → Settings → AI provider** (and optionally as your **Fallback provider**). A key is stored encrypted and only used server-side.
 
 **Google Gemini** (recommended default)
 1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and sign in with a Google account.
@@ -132,7 +134,7 @@ You bring your own key. Create one with whichever provider you want, then paste 
 
 ### How daily targets are calculated
 
-When you set a goal in onboarding/Settings, FoodLog computes daily calorie and macro targets deterministically (no AI) — all in [`packages/core/src/profile/profile.ts`](packages/core/src/profile/profile.ts). These are estimates and can be overridden in **Advanced** mode.
+When you set a goal in onboarding/Settings, SnapBite computes daily calorie and macro targets deterministically (no AI) — all in [`packages/core/src/profile/profile.ts`](packages/core/src/profile/profile.ts). These are estimates and can be overridden in **Advanced** mode.
 
 1. **BMR** (Basal Metabolic Rate) via the **Mifflin–St Jeor** equation ([Mifflin et al., 1990, *Am J Clin Nutr*](https://pubmed.ncbi.nlm.nih.gov/2305711/)):
    - Men: `BMR = 10·kg + 6.25·cm − 5·age + 5`

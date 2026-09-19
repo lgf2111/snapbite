@@ -416,9 +416,9 @@ async function handleTextRevise(
   const settings = await getSettings(settingsDb, user.id);
   if (!c.env.ENCRYPTION_KEY || !settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
     await bot.sendMessage(chatId, {
-      text: 'Send me a meal photo to log it, or open FoodLog to add your AI key and review your history.',
+      text: 'Send me a meal photo to log it, or open SnapBite to add your AI key and review your history.',
       ...(miniAppUrl
-        ? { replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open FoodLog', web_app: { url: miniAppUrl } }]] } }
+        ? { replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]] } }
         : {}),
     });
     return;
@@ -443,7 +443,7 @@ async function handleTextRevise(
       await bot.sendMessage(chatId, {
         text: 'Send me a meal photo to log it first — then reply with a change and I\'ll update it.',
         ...(miniAppUrl
-          ? { replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open FoodLog', web_app: { url: miniAppUrl } }]] } }
+          ? { replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]] } }
           : {}),
       });
       return;
@@ -562,14 +562,14 @@ function friendlyPhotoError(e: ProviderErrorLike): string {
   if (e.status === 402 || /credit|billing|insufficient|balance|payment|prepay/i.test(raw)) {
     return (
       "Sorry — your AI provider needs billing set up (it reported a credit/billing problem). " +
-      'Add credit/billing to that key, or set a working fallback provider in FoodLog → Settings.'
+      'Add credit/billing to that key, or set a working fallback provider in SnapBite → Settings.'
     );
   }
   if (e.status === 429 || /quota|rate limit|resource_exhausted|exceeded/i.test(raw)) {
     return (
       "Sorry — your AI provider's rate limit was hit. On the free tier this is usually a daily " +
       'cap or a short per-minute limit. Wait a bit and send the photo again, or switch model/' +
-      'provider in FoodLog → Settings.'
+      'provider in SnapBite → Settings.'
     );
   }
   if (e.status === 503 || /overloaded|high demand|unavailable/i.test(raw)) {
@@ -765,11 +765,11 @@ async function handlePhoto(
   const settings = await getSettings(settingsDb, user.id);
   if (!settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
     await bot.sendMessage(chatId, {
-      text: 'Add your AI key first: open FoodLog → Settings, then send the photo again.',
+      text: 'Add your AI key first: open SnapBite → Settings, then send the photo again.',
       ...(miniAppUrl
         ? {
             replyMarkup: {
-              inline_keyboard: [[{ text: '⚙️ Open FoodLog', web_app: { url: miniAppUrl } }]],
+              inline_keyboard: [[{ text: '⚙️ Open SnapBite', web_app: { url: miniAppUrl } }]],
             },
           }
         : {}),

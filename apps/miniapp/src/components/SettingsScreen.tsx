@@ -629,14 +629,14 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               <p className="text-muted-foreground text-xs">
                 Free AI tiers get busy — your provider can hit a rate limit, be temporarily
                 overloaded, or run out of credit, and a photo won't log. Add a second provider here
-                and FoodLog switches to it automatically when that happens, so your meals keep
+                and SnapBite switches to it automatically when that happens, so your meals keep
                 logging without you resending the photo.
               </p>
 
               <Collapsible open={fbEnabled && primaryConnected}>
                 <div className="flex flex-col gap-3 pt-1">
                   <p className="text-muted-foreground text-xs">
-                    If your main provider hits a rate limit or is overloaded, FoodLog retries the
+                    If your main provider hits a rate limit or is overloaded, SnapBite retries the
                     photo with this provider automatically. OpenAI (gpt-4o-mini) is recommended —
                     it's the most accurate at food recognition.
                   </p>

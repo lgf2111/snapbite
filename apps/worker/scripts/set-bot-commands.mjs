@@ -25,10 +25,10 @@ const repoRoot = join(here, '..', '..', '..');
 
 /** The public command menu (what users see under `/`). */
 const COMMANDS = [
-  { command: 'start', description: 'Get started with FoodLog' },
+  { command: 'start', description: 'Get started with SnapBite' },
   { command: 'settings', description: 'Add or update your AI key' },
   { command: 'feedback', description: 'Report a problem or send an idea' },
-  { command: 'help', description: 'How FoodLog works' },
+  { command: 'help', description: 'How SnapBite works' },
 ];
 
 function resolveToken() {

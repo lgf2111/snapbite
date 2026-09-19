@@ -108,7 +108,7 @@ export function HomeScreen({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">FoodLog</h1>
+        <h1 className="text-xl font-semibold">SnapBite</h1>
         <Button variant="secondary" size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
           <Plus className="size-4" /> Add meal
         </Button>

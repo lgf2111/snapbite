@@ -11,7 +11,7 @@ describe('parseUpdate', () => {
 
   it('strips a @botname suffix and reads args', () => {
     const parsed = parseUpdate({
-      message: { text: '/settings@FoodLogBot deepseek', chat: { id: 9 } },
+      message: { text: '/settings@SnapBiteAI_bot deepseek', chat: { id: 9 } },
     });
     expect(parsed?.command).toBe('settings');
     expect(parsed?.args).toBe('deepseek');
@@ -77,7 +77,7 @@ describe('replyForCommand', () => {
 
   it('nudges for unknown/plain messages', () => {
     const reply = replyForCommand({ chatId: 1, command: null, args: '', text: 'hi' }, CONFIG);
-    expect(reply?.text).toContain('open FoodLog');
+    expect(reply?.text).toContain('open SnapBite');
   });
 
   it('omits the button when no miniAppUrl is configured', () => {

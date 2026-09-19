@@ -58,7 +58,7 @@ export function parseUpdate(update: TelegramUpdate): ParsedCommand | null {
 
   if (text.startsWith('/')) {
     const [head, ...rest] = text.split(/\s+/);
-    // Strip a possible @botusername suffix: /start@FoodLogBot
+    // Strip a possible @botusername suffix: /start@SnapBiteAI_bot
     command = (head ?? '').slice(1).split('@')[0]?.toLowerCase() || null;
     args = rest.join(' ');
   }
@@ -110,7 +110,7 @@ export function replyForCommand(
   config: BotConfig,
 ): BotReply | null {
   const launchButton: InlineKeyboardButton[][] | undefined = config.miniAppUrl
-    ? [[{ text: '🍽️ Open FoodLog', web_app: { url: config.miniAppUrl } }]]
+    ? [[{ text: '🍽️ Open SnapBite', web_app: { url: config.miniAppUrl } }]]
     : undefined;
 
   const withButton = (text: string): BotReply =>
@@ -119,17 +119,17 @@ export function replyForCommand(
   switch (parsed.command) {
     case 'start':
       return withButton(
-        "Welcome to FoodLog. Just send me a photo of your meal and I'll log it — calories, protein, carbs, and fat, always editable. Open the app to review your history, search, and trends.\n\nFirst time? Open FoodLog → Settings and add your AI key.",
+        "Welcome to SnapBite. Just send me a photo of your meal and I'll log it — calories, protein, carbs, and fat, always editable. Open the app to review your history, search, and trends.\n\nFirst time? Open SnapBite → Settings and add your AI key.",
       );
     case 'help':
       return withButton(
-        'FoodLog logs meals from photos.\n\n• Send a photo straight to this chat — I analyze it and log it\n• Open the app to review or correct any entry\n• Browse history, search, and see your trends there\n\nUse /settings to add or update your AI key.\nHit a problem? Send /feedback <your message> and it goes straight to the maintainer.',
+        'SnapBite logs meals from photos.\n\n• Send a photo straight to this chat — I analyze it and log it\n• Open the app to review or correct any entry\n• Browse history, search, and see your trends there\n\nUse /settings to add or update your AI key.\nHit a problem? Send /feedback <your message> and it goes straight to the maintainer.',
       );
     case 'settings':
-      return withButton('Open FoodLog and go to Settings to add or update your AI key.');
+      return withButton('Open SnapBite and go to Settings to add or update your AI key.');
     default:
       // Any other message: nudge toward the actual flow rather than staying silent.
-      return withButton('Send me a meal photo to log it, or open FoodLog to view your history.');
+      return withButton('Send me a meal photo to log it, or open SnapBite to view your history.');
   }
 }
 
@@ -189,7 +189,7 @@ export function photoLoggedReply(
   if (config.miniAppUrl) {
     return {
       text,
-      replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open FoodLog', web_app: { url: config.miniAppUrl } }]] },
+      replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: config.miniAppUrl } }]] },
     };
   }
   return { text };
