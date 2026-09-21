@@ -17,48 +17,46 @@ export interface CachedResult<T> {
  * updates only if the value changed. A warm cache means no spinner — the app
  * feels instant on back-navigation and reopens.
  *
+ * Correctness: every fetch is tagged with the key it was started for, and its
+ * result is applied ONLY if that's still the current key. This prevents a slow
+ * response for a previous key (e.g. yesterday's meals) from overwriting the
+ * data after the user has switched keys (to today) — which caused the list to
+ * show the wrong day and "jump".
+ *
  * `key` may be null to skip fetching (e.g. while inputs aren't ready).
  */
 export function useCachedData<T>(
   key: string | null,
   fetcher: () => Promise<T>,
 ): CachedResult<T> {
-  const [data, setData] = useState<T | undefined>(() =>
-    key ? getCached<T>(key) : undefined,
+  const [data, setData] = useState<T | undefined>(() => (key ? getCached<T>(key) : undefined));
+  const [loading, setLoading] = useState<boolean>(() =>
+    key ? getCached<T>(key) === undefined : false,
   );
-  const [loading, setLoading] = useState<boolean>(() => (key ? getCached<T>(key) === undefined : false));
   const [error, setError] = useState<string | null>(null);
 
-  // Keep the latest fetcher without making it a dependency (avoids refetch loops
-  // when callers pass inline closures).
+  // Latest fetcher (not a dependency, to avoid refetch loops on inline closures).
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
-  // Track the last value we've shown so a background refresh (e.g. after a
-  // mutation invalidates the cache) can keep showing it instead of flashing a
-  // skeleton.
-  const lastShown = useRef<T | undefined>(data);
-  lastShown.current = data;
+  // The key the hook currently cares about. A resolved fetch is only applied if
+  // it still matches this — otherwise it's a stale response for an old key.
+  const currentKey = useRef<string | null>(key);
+  currentKey.current = key;
 
-  const run = useCallback((k: string, keepStale: boolean) => {
-    const cached = getCached<T>(k);
-    // On a background refresh (same key, e.g. after a mutation) keep showing the
-    // current data so there's no skeleton flash. On a cold load for a new key,
-    // only fall back to cache (never to another key's stale data).
-    const shown = cached ?? (keepStale ? lastShown.current : undefined);
-    setData(shown);
-    setLoading(shown === undefined);
+  const run = useCallback((k: string) => {
     setError(null);
     revalidate<T>(k, () => fetcherRef.current())
       .then((fresh) => {
+        if (currentKey.current !== k) return; // stale response — ignore
         setData(fresh);
         setLoading(false);
       })
       .catch((e: unknown) => {
-        // Keep showing what we had on a failed revalidation; only surface an
-        // error when we had nothing to show.
+        if (currentKey.current !== k) return; // stale response — ignore
         setLoading(false);
-        if (shown === undefined) {
+        // Only surface an error when we have nothing cached to show.
+        if (getCached<T>(k) === undefined) {
           setError(e instanceof Error ? e.message : 'Failed to load');
         }
       });
@@ -70,19 +68,21 @@ export function useCachedData<T>(
       setLoading(false);
       return;
     }
-    // Show cache immediately; revalidate unless very fresh (avoids redundant
-    // refetch when navigating quickly).
+    // Snap to THIS key's cached value immediately (never another key's data),
+    // so the list always matches the selected day with no cross-day flash.
     const cached = getCached<T>(key);
     setData(cached);
+    setLoading(cached === undefined);
+    // Skip a redundant refetch when the cache is still fresh.
     if (cached !== undefined && isFresh(key)) {
       setLoading(false);
       return;
     }
-    run(key, false);
+    run(key);
   }, [key, run]);
 
   const refresh = useCallback(() => {
-    if (key) run(key, true);
+    if (key) run(key);
   }, [key, run]);
 
   return { data, loading, error, refresh };
