@@ -10,7 +10,7 @@ import { RotateCcw, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { getCached, revalidate } from '@/lib/cache';
+import { getCached, setCached } from '@/lib/cache';
 import { shareOrSaveImage } from '@/lib/share';
 import { renderMealShareCard } from '@/lib/shareCard';
 import {
@@ -125,11 +125,17 @@ export function MealDetailScreen({
       setFoods(loaded);
       setBaseline(JSON.stringify(loaded));
     };
-    // Instant from cache (opening a meal you just saw), then revalidate.
+    // Show a cached copy instantly (reopening a meal you just saw), then fetch
+    // fresh. For a NEW meal (no cache) this is the same as a plain fetch — no
+    // extra delay compared to the pre-cache behavior.
     const cached = getCached<MealDetail>(`meal:${mealId}`);
     if (cached) apply(cached);
-    revalidate<MealDetail>(`meal:${mealId}`, () => backend.detail(mealId))
-      .then(apply)
+    backend
+      .detail(mealId)
+      .then((d) => {
+        setCached(`meal:${mealId}`, d);
+        apply(d);
+      })
       .catch((e: unknown) => {
         if (!cached) setError(e instanceof Error ? e.message : 'Failed to load');
       });
