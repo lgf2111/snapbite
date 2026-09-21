@@ -1,8 +1,8 @@
-# FoodLog product & engineering principles
+# SnapBite product & engineering principles
 
 ## Core vision: stay lightweight
 
-FoodLog's guiding principle is to be **as lightweight and low-resource as possible** — small
+SnapBite's guiding principle is to be **as lightweight and low-resource as possible** — small
 bundles, minimal dependencies, and cheap runtime cost. Every feature is weighed against this.
 When there's a choice between a heavier "do it ourselves" approach and a lighter one that reuses
 what we already have, prefer the lighter one.

@@ -1,5 +1,5 @@
 {
-  "name": "@foodlog/miniapp",
+  "name": "@snapbite/miniapp",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,10 +10,10 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run",
-    "deploy": "wrangler pages deploy dist --project-name=foodlog --branch=main --commit-dirty=true"
+    "deploy": "wrangler pages deploy dist --project-name=snapbite --branch=main --commit-dirty=true"
   },
   "dependencies": {
-    "@foodlog/core": "workspace:*",
+    "@snapbite/core": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-label": "^2.1.1",
     "@radix-ui/react-popover": "^1.1.23",

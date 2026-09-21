@@ -1,4 +1,4 @@
-import type { MealResult } from '@foodlog/core';
+import type { MealResult } from '@snapbite/core';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';

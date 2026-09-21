@@ -1,5 +1,5 @@
 import { extname } from 'node:path';
-import type { MealImage } from '@foodlog/core';
+import type { MealImage } from '@snapbite/core';
 
 export interface CliOptions {
   imagePath?: string;

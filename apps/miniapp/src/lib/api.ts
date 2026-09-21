@@ -1,4 +1,4 @@
-import type { DailyTargets, MealImage, MealResult, UserProfile } from '@foodlog/core';
+import type { DailyTargets, MealImage, MealResult, UserProfile } from '@snapbite/core';
 
 /** Header the Worker expects the signed initData in (matches the Worker). */
 const INIT_DATA_HEADER = 'x-telegram-init-data';

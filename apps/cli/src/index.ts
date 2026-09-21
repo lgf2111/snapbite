@@ -7,7 +7,7 @@ import {
   type MealImage,
   MockAIProvider,
   resolveMeal,
-} from '@foodlog/core';
+} from '@snapbite/core';
 import { HELP_TEXT, mimeTypeForPath, parseArgs } from './args.js';
 
 async function main(): Promise<number> {

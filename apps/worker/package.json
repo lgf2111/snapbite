@@ -1,5 +1,5 @@
 {
-  "name": "@foodlog/worker",
+  "name": "@snapbite/worker",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,11 +10,11 @@
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply foodlog-db --local",
+    "db:migrate:local": "wrangler d1 migrations apply snapbite-db --local",
     "bot:commands": "node scripts/set-bot-commands.mjs"
   },
   "dependencies": {
-    "@foodlog/core": "workspace:*",
+    "@snapbite/core": "workspace:*",
     "drizzle-orm": "^0.38.2",
     "hono": "^4.6.14"
   },

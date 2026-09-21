@@ -4,7 +4,7 @@ import {
   PROVIDER_PRESETS,
   type ProviderId,
   type UserProfile,
-} from '@foodlog/core';
+} from '@snapbite/core';
 import { type ProviderConfig, ProviderPicker } from './ProviderPicker.js';
 import {
   Bell,

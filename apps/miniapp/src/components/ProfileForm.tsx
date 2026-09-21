@@ -11,7 +11,7 @@ import {
   type Sex,
   type Units,
   type UserProfile,
-} from '@foodlog/core';
+} from '@snapbite/core';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

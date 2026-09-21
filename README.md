@@ -2,7 +2,7 @@
 
 A Telegram-native, low-friction, AI-assisted food & nutrition logging app.
 
-> Formerly **FoodLog**. The user-facing name is **SnapBite**; internal packages, the Cloudflare Worker (`foodlog-worker`), Pages project, and D1 database (`foodlog-db`) keep the `foodlog` names to avoid a disruptive infra migration.
+> Formerly **FoodLog**, now fully rebranded to **SnapBite** — including a new bot (`@SnapBiteAI_bot`) and renamed infrastructure (`snapbite-worker`, `snapbite` Pages, `snapbite-db`, `@snapbite/*` packages). Existing FoodLog users are migrated over; see the cutover runbook in `PLAN.md`.
 
 **One-line goal:** unlock phone → open SnapBite (or just send a photo to the bot) → AI analyzes it → confirm/correct → saved.
 
@@ -45,14 +45,14 @@ pnpm -r build        # build all packages
 Run one workspace, e.g. the Worker locally:
 
 ```bash
-pnpm --filter @foodlog/worker dev          # wrangler dev (local D1)
-pnpm --filter @foodlog/miniapp dev         # Vite dev server (mock mode without VITE_WORKER_URL)
+pnpm --filter @snapbite/worker dev          # wrangler dev (local D1)
+pnpm --filter @snapbite/miniapp dev         # Vite dev server (mock mode without VITE_WORKER_URL)
 ```
 
 Try the pipeline from the CLI:
 
 ```bash
-pnpm --filter @foodlog/cli build
+pnpm --filter @snapbite/cli build
 node apps/cli/dist/index.js path/to/meal.jpg            # mock provider
 node --env-file=.env apps/cli/dist/index.js meal.jpg --real   # real provider (needs a key)
 ```
@@ -72,17 +72,17 @@ Production secrets are set with `wrangler secret put` and are not stored in the 
 ```bash
 # One-time
 wrangler login
-wrangler d1 create foodlog-db        # put the id in apps/worker/wrangler.toml
-wrangler d1 migrations apply foodlog-db --remote
+wrangler d1 create snapbite-db        # put the id in apps/worker/wrangler.toml
+wrangler d1 migrations apply snapbite-db --remote
 # Set secrets: TELEGRAM_BOT_TOKEN, ENCRYPTION_KEY, MINI_APP_URL, TELEGRAM_WEBHOOK_SECRET
 # Optional: ADMIN_TELEGRAM_ID (your numeric Telegram id) to enable /errors, /feedback review, and alerts
 
 # Worker
-pnpm --filter @foodlog/worker exec wrangler deploy
+pnpm --filter @snapbite/worker exec wrangler deploy
 
 # Mini App (Pages)
-VITE_WORKER_URL=https://<worker-url> pnpm --filter @foodlog/miniapp build
-pnpm --filter @foodlog/miniapp exec wrangler pages deploy dist --project-name=foodlog
+VITE_WORKER_URL=https://<worker-url> pnpm --filter @snapbite/miniapp build
+pnpm --filter @snapbite/miniapp exec wrangler pages deploy dist --project-name=snapbite
 
 # Bot: register the webhook (with the secret) via the Telegram Bot API. The Mini App is set as
 # the bot's Main Mini App in BotFather, so it launches from the bot profile's "Open App" button
@@ -90,7 +90,7 @@ pnpm --filter @foodlog/miniapp exec wrangler pages deploy dist --project-name=fo
 
 # Bot command menu (the `/` autocomplete): registers /start, /settings, /feedback, /help.
 # Admin-only /errors and /feedback-review are intentionally NOT listed (gated by ADMIN_TELEGRAM_ID).
-TELEGRAM_BOT_TOKEN=<your-bot-token> pnpm --filter @foodlog/worker bot:commands
+TELEGRAM_BOT_TOKEN=<your-bot-token> pnpm --filter @snapbite/worker bot:commands
 # (or drop the token in a gitignored .bot-token file at the repo root and run the command without it)
 ```
 

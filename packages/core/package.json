@@ -1,5 +1,5 @@
 {
-  "name": "@foodlog/core",
+  "name": "@snapbite/core",
   "version": "0.0.0",
   "private": true,
   "description": "Transport-agnostic domain core for FoodLog: schemas, AI provider interface, nutrition resolver.",

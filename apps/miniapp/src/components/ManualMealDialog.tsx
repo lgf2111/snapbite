@@ -1,4 +1,4 @@
-import { buildManualMeal, type ManualFoodInput } from '@foodlog/core';
+import { buildManualMeal, type ManualFoodInput } from '@snapbite/core';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {

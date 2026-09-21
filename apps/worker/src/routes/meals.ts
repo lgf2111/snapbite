@@ -8,7 +8,7 @@ import {
   MealResult,
   resolveMeal,
   verifyInitData,
-} from '@foodlog/core';
+} from '@snapbite/core';
 import { Hono } from 'hono';
 import {
   createMealsDb,

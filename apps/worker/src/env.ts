@@ -1,4 +1,4 @@
-import type { TelegramUser } from '@foodlog/core';
+import type { TelegramUser } from '@snapbite/core';
 
 /** Cloudflare bindings + secrets available to the Worker. */
 export interface Env {

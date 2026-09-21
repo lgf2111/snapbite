@@ -13,7 +13,7 @@ import {
   replyForCommand,
   resolveMeal,
   type TelegramUpdate,
-} from '@foodlog/core';
+} from '@snapbite/core';
 import { type Context, Hono } from 'hono';
 import { describeError, logError, recentErrors } from '../db/errors.js';
 import { recentFeedback, storeFeedback } from '../db/feedback.js';

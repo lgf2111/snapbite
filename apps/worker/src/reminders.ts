@@ -1,4 +1,4 @@
-import { dueReminderSlots, reminderMessage } from '@foodlog/core';
+import { dueReminderSlots, reminderMessage } from '@snapbite/core';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { logError } from './db/errors.js';

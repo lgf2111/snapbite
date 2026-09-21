@@ -19,6 +19,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.18.0',
+    date: '2026-09-16',
+    notes: [
+      '🚚 We’ve moved! FoodLog is now SnapBite, on a brand-new bot',
+      '👉 Continue here: https://t.me/SnapBiteAI_bot — just tap it and press Start',
+      'Your meals, targets, settings and AI key all carry over automatically — nothing to re-enter',
+      'This old bot will stop working soon, so switch over now',
+    ],
+  },
+  {
     version: '0.17.0',
     date: '2026-09-16',
     notes: [
@@ -54,10 +64,10 @@ export const CURRENT_CHANGELOG: ChangelogEntry | undefined = CHANGELOG[0];
 export function broadcastMessage(entry: ChangelogEntry): string {
   const bullets = entry.notes.map((n) => `• ${n}`).join('\n');
   return [
-    `🚀 FoodLog update — v${entry.version}`,
+    `🚀 SnapBite update — v${entry.version}`,
     '',
     bullets,
     '',
-    "You're an early beta user, so expect frequent updates and improvements. Thanks for helping shape FoodLog! Send /feedback anytime.",
+    "You're an early beta user, so expect frequent updates and improvements. Thanks for helping shape SnapBite! Send /feedback anytime.",
   ].join('\n');
 }

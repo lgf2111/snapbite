@@ -1,4 +1,4 @@
-name = "foodlog-worker"
+name = "snapbite-worker"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
@@ -9,8 +9,11 @@ compatibility_flags = ["nodejs_compat"]
 crons = ["*/15 * * * *"]
 
 # D1 database binding.
+# Cutover (§ rename): after `wrangler d1 create snapbite-db`, paste the new id
+# into `database_id` below. Old foodlog-db id was f0312e67-2fef-47a6-a9ca-59cb9c21a79b
+# (source for the one-time data export/import — see the cutover runbook in PLAN.md).
 [[d1_databases]]
 binding = "DB"
-database_name = "foodlog-db"
-database_id = "f0312e67-2fef-47a6-a9ca-59cb9c21a79b"
+database_name = "snapbite-db"
+database_id = "REPLACE_WITH_SNAPBITE_DB_ID"
 migrations_dir = "migrations"

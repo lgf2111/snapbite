@@ -1,4 +1,4 @@
-import type { TelegramUser } from '@foodlog/core';
+import type { TelegramUser } from '@snapbite/core';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { settings, users, type UserRow } from './schema.js';

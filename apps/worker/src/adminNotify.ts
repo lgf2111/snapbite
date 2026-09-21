@@ -1,4 +1,4 @@
-import type { BotReply } from '@foodlog/core';
+import type { BotReply } from '@snapbite/core';
 import { type Env, parseAdminId, parseChatId, parseThreadId } from './env.js';
 
 /** The bot-send surface adminNotify needs (a subset of the full client). */

@@ -1,4 +1,4 @@
-import { type BotReply, signInitData } from '@foodlog/core';
+import { type BotReply, signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';

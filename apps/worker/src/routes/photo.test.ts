@@ -1,4 +1,4 @@
-import { type BotReply, signInitData } from '@foodlog/core';
+import { type BotReply, signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
@@ -87,7 +87,7 @@ describe('GET /api/meal-photo/:id', () => {
       env,
     );
 
-    const { MockAIProvider } = await import('@foodlog/core');
+    const { MockAIProvider } = await import('@snapbite/core');
     const app = createApp({
       botClientFactory: () => bot([]),
       providerFactory: () => new MockAIProvider(),

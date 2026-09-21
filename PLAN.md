@@ -90,7 +90,7 @@ Delivered features (all live):
 
 ## 4. Files touched (map)
 
-### packages/core (`@foodlog/core`, transport-agnostic; build with `pnpm build`)
+### packages/core (`@snapbite/core`, transport-agnostic; build with `pnpm build`)
 - `src/ai/types.ts` — `AIProvider` interface (`analyzeMeal`, `reviseMeal`), `MealImage`, `AIProviderError` (has `kind`, `status`).
 - `src/ai/openai-compatible.ts` — `OpenAICompatibleProvider` (shared `#complete()` for analyze + revise; JSON mode; `image_url.detail` when `supportsDetail`).
 - `src/ai/registry.ts` — `PROVIDER_PRESETS` (gemini/openai/deepseek), `createProvider()`, `DEFAULT_PROVIDER_ID='gemini'`, `isProviderId()`.
@@ -253,7 +253,7 @@ pnpm install
 
 ### Build core (required after editing packages/core; workers/miniapp consume built dist)
 ```
-pnpm --filter @foodlog/core build          # or: cd packages/core && pnpm build  (tsc -b)
+pnpm --filter @snapbite/core build          # or: cd packages/core && pnpm build  (tsc -b)
 ```
 
 ### Typecheck (per package — `pnpm -r typecheck` may time out; run individually)
@@ -285,17 +285,81 @@ cd apps/miniapp && export VITE_WORKER_URL=https://foodlog-worker.lgf2111.workers
 cd apps/worker && pnpm exec wrangler deploy
 
 # Mini App to Cloudflare Pages (from apps/miniapp, after building):
-cd apps/miniapp && pnpm exec wrangler pages deploy dist --project-name=foodlog --branch=main --commit-dirty=true
+cd apps/miniapp && pnpm exec wrangler pages deploy dist --project-name=snapbite --branch=main --commit-dirty=true
 ```
 Do NOT run long-lived dev servers via automation (they block). If you need one, ask the user to run
 `pnpm dev` themselves.
 
 ### Live URLs & infra
+**Rebrand in progress — FoodLog → SnapBite (new bot + new infra).** During cutover both exist.
+
+OLD (being retired after cutover):
 - Worker: `https://foodlog-worker.lgf2111.workers.dev`
 - Mini App (Pages): `https://foodlog-7f5.pages.dev`
-- D1 database: `foodlog-db`, id `f0312e67-2fef-47a6-a9ca-59cb9c21a79b` (APAC)
-- Bot is configured in BotFather as a **Main Mini App** (launches from the profile "Open App" button)
-  + a menu button also points to the Pages URL. Commands/description/about are set in BotFather.
+- D1: `foodlog-db`, id `f0312e67-2fef-47a6-a9ca-59cb9c21a79b` (APAC) — **data export source**
+- Bot: `@foodlog2111_bot`
+
+NEW (target names; URLs/id finalized when the user creates them in the cutover):
+- Worker: `snapbite-worker` → `https://snapbite-worker.lgf2111.workers.dev`
+- Mini App (Pages): `snapbite` → `https://snapbite-<hash>.pages.dev`
+- D1: `snapbite-db`, id `REPLACE_WITH_SNAPBITE_DB_ID` (paste into `apps/worker/wrangler.toml`)
+- Bot: `@SnapBiteAI_bot` (its own token)
+- Bot is a **Main Mini App** in BotFather; set the new Pages URL + avatar + commands after cutover.
+
+### CUTOVER RUNBOOK — FoodLog → SnapBite (user runs these; needs bot tokens + Cloudflare auth)
+Data migrates because users are keyed by Telegram user id, so their meals/settings/encrypted key
+resolve on the new bot automatically once the DB rows are copied.
+
+**Phase 2 — announce the move from the OLD bot (do this FIRST, while old bot still works):**
+1. Deploy the current code to the OLD worker so the v0.18.0 migration changelog is live:
+   `git stash` is NOT needed — just make sure `wrangler.toml` temporarily points at the OLD worker
+   name/db, OR simply run `/broadcast` before changing infra. Simplest: broadcast BEFORE Phase 3.
+2. In the OLD bot (`@foodlog2111_bot`), run `/broadcast` as admin → every user gets the "we've moved
+   to @SnapBiteAI_bot, your data carries over" message.
+
+**Phase 3 — stand up SnapBite infra + migrate data:**
+3. Create the new DB + apply migrations:
+   ```
+   cd apps/worker
+   pnpm exec wrangler d1 create snapbite-db          # copy the new id
+   # paste the id into wrangler.toml database_id (replace REPLACE_WITH_SNAPBITE_DB_ID)
+   pnpm exec wrangler d1 migrations apply snapbite-db --remote
+   ```
+4. Migrate data (export old → import new):
+   ```
+   pnpm exec wrangler d1 export foodlog-db --remote --output=/tmp/foodlog-dump.sql --no-schema
+   pnpm exec wrangler d1 execute snapbite-db --remote --file=/tmp/foodlog-dump.sql
+   ```
+   (`--no-schema`: tables already exist from migrations; import only the data. If FK/order issues,
+   export without `--no-schema` into a fresh empty snapbite-db instead of applying migrations first.)
+5. Deploy the new worker + set ALL secrets on it (TELEGRAM_BOT_TOKEN = the NEW bot's token):
+   ```
+   pnpm exec wrangler deploy
+   pnpm exec wrangler secret put TELEGRAM_BOT_TOKEN        # new @SnapBiteAI_bot token
+   pnpm exec wrangler secret put ENCRYPTION_KEY            # SAME key as old (or keys won't decrypt!)
+   pnpm exec wrangler secret put TELEGRAM_WEBHOOK_SECRET
+   pnpm exec wrangler secret put MINI_APP_URL             # new Pages URL from step 6
+   pnpm exec wrangler secret put ADMIN_TELEGRAM_ID        # 844007785
+   pnpm exec wrangler secret put ADMIN_GROUP_CHAT_ID      # -1003990101342
+   pnpm exec wrangler secret put ERRORS_THREAD_ID         # 2
+   pnpm exec wrangler secret put FEEDBACK_THREAD_ID       # 3
+   pnpm exec wrangler secret put BROADCAST_THREAD_ID      # 4
+   ```
+   ⚠️ ENCRYPTION_KEY MUST equal the old one, or migrated encrypted API keys become undecryptable.
+6. Build + deploy the Mini App to the new Pages project:
+   ```
+   cd apps/miniapp && export VITE_WORKER_URL=https://snapbite-worker.lgf2111.workers.dev && pnpm build
+   pnpm exec wrangler pages deploy dist --project-name=snapbite --branch=main --commit-dirty=true
+   # note the snapbite-<hash>.pages.dev URL → set it as MINI_APP_URL secret (step 5)
+   ```
+7. Register the NEW bot's webhook to the new worker (with the webhook secret):
+   ```
+   curl "https://api.telegram.org/bot<NEW_BOT_TOKEN>/setWebhook?url=https://snapbite-worker.lgf2111.workers.dev/webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+   ```
+8. In BotFather for `@SnapBiteAI_bot`: set the Mini App URL (new Pages), the avatar (icon.png), and
+   run `bot:commands` with the new token to register the `/` menu.
+9. Verify: open the new bot, send a photo, confirm history from the old DB is present. Then retire the
+   old worker/Pages/bot.
 
 ### Debugging the bot
 ```
@@ -497,7 +561,7 @@ Five related features:
    revise, handled by the reply-to prompt above.
 4. **Opt-in meal reminders.** Cloudflare Cron (`*/15 * * * *`) → `scheduled` → `runReminders`.
    Fixed daily slots (breakfast/lunch/dinner) in the user's local tz, deduped per slot per day via
-   `lastSent`. Pure due-logic in `@foodlog/core` (`dueReminderSlots`). Config in `preferences_json`;
+   `lastSent`. Pure due-logic in `@snapbite/core` (`dueReminderSlots`). Config in `preferences_json`;
    `PUT /api/settings/reminders`; Mini App Settings "Meal reminders" card.
 5. **Onboarding key step + manual logging.** After the profile step, worker-mode onboarding offers
    an optional "add your AI key" step (skippable, framed as "track manually instead"). `buildManualMeal`

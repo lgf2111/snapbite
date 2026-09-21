@@ -1,4 +1,4 @@
-import { signInitData } from '@foodlog/core';
+import { signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { createApp } from './app.js';

@@ -1,4 +1,4 @@
-import type { MealResult, UserProfile } from '@foodlog/core';
+import type { MealResult, UserProfile } from '@snapbite/core';
 
 /** A meal saved locally (Task 5 has no backend). */
 export interface SavedMeal {

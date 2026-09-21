@@ -1,4 +1,4 @@
-import type { BotReply } from '@foodlog/core';
+import type { BotReply } from '@snapbite/core';
 
 /** Minimal fetch signature so the client is mockable in tests. */
 export type FetchLike = (

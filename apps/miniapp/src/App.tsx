@@ -1,4 +1,4 @@
-import type { DailyTargets } from '@foodlog/core';
+import type { DailyTargets } from '@snapbite/core';
 import { Home, Settings as SettingsIcon } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { toast } from 'sonner';

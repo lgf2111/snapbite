@@ -3,7 +3,7 @@ import {
   formatMealResult,
   MockAIProvider,
   resolveMeal,
-} from '@foodlog/core';
+} from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { mimeTypeForPath, parseArgs } from './args.js';
 

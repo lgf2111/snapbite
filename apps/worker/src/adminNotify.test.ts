@@ -1,4 +1,4 @@
-import type { BotReply } from '@foodlog/core';
+import type { BotReply } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { adminNotify } from './adminNotify.js';
 import type { Env } from './env.js';

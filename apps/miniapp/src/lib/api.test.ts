@@ -1,4 +1,4 @@
-import type { MealResult } from '@foodlog/core';
+import type { MealResult } from '@snapbite/core';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiClient, ApiError } from './api.js';
 

@@ -1,4 +1,4 @@
-import { computeTargets, type DailyTargets, type MealResult, type UserProfile } from '@foodlog/core';
+import { computeTargets, type DailyTargets, type MealResult, type UserProfile } from '@snapbite/core';
 import {
   ApiClient,
   type CustomProviderInput,

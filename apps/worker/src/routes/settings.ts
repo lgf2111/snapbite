@@ -9,7 +9,7 @@ import {
   isProviderId,
   lastFour,
   UserProfile,
-} from '@foodlog/core';
+} from '@snapbite/core';
 import { Hono } from 'hono';
 import {
   createSettingsDb,

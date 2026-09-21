@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { MealResult } from '@foodlog/core';
+import type { MealResult } from '@snapbite/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { loadMeals, saveMeal } from './store.js';
 

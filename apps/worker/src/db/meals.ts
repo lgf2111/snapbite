@@ -1,4 +1,4 @@
-import type { MealResult } from '@foodlog/core';
+import type { MealResult } from '@snapbite/core';
 import { and, desc, eq, gte } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { type FoodItemRow, foodItems, meals, nutrition } from './schema.js';

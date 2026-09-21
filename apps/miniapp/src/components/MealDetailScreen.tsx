@@ -5,7 +5,7 @@ import {
   PROVIDER_PRESETS,
   resolveFoodNutrition,
   sourceLabel,
-} from '@foodlog/core';
+} from '@snapbite/core';
 import { RotateCcw, Sparkles, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';

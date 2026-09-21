@@ -1,4 +1,4 @@
-import { type AIFoodAnalysis, MockAIProvider, signInitData } from '@foodlog/core';
+import { type AIFoodAnalysis, MockAIProvider, signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';

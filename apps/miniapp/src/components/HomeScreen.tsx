@@ -1,4 +1,4 @@
-import { type DailyTargets, PROVIDER_PRESETS } from '@foodlog/core';
+import { type DailyTargets, PROVIDER_PRESETS } from '@snapbite/core';
 import { Camera, Plus, Sparkles, Target } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';

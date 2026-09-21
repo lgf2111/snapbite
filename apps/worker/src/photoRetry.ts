@@ -1,4 +1,4 @@
-import { type BotReply, createProvider, decryptSecret, photoLoggedReply, resolveMeal } from '@foodlog/core';
+import { type BotReply, createProvider, decryptSecret, photoLoggedReply, resolveMeal } from '@snapbite/core';
 import { and, asc, eq, lte } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { logError } from './db/errors.js';

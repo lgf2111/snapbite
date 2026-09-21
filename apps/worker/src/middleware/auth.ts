@@ -1,4 +1,4 @@
-import { verifyInitData } from '@foodlog/core';
+import { verifyInitData } from '@snapbite/core';
 import type { MiddlewareHandler } from 'hono';
 import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';

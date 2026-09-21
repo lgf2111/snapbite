@@ -1,4 +1,4 @@
-import { type AIFoodAnalysis, type BotReply, MockAIProvider, signInitData } from '@foodlog/core';
+import { type AIFoodAnalysis, type BotReply, MockAIProvider, signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
@@ -654,7 +654,7 @@ describe('/broadcast (admin-gated)', () => {
     );
     expect(res.status).toBe(200);
     // The two users each got the update message (contains the version header).
-    expect(sent.some((s) => s.chatId === 7301 && s.reply.text.includes('FoodLog update'))).toBe(
+    expect(sent.some((s) => s.chatId === 7301 && s.reply.text.includes('SnapBite update'))).toBe(
       true,
     );
     // The admin got a summary.
