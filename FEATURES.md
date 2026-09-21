@@ -53,6 +53,9 @@ shown as an **estimate** and is always **editable**.
 - **Age stays current** — you give your date of birth (not a fixed age), so your age — and the
   targets derived from it — update automatically as birthdays pass. Older profiles that stored a
   plain age keep working unchanged.
+- **Daily or weekly totals** — the Home screen toggles between a single day and a whole week. In
+  Settings you choose what "week" means: the rolling last 7 days, or the calendar week (starting
+  Monday or Sunday). Weekly compares your totals against your target × 7.
 - **Home day view** — pick any day on a calendar and see that day's totals against your targets as
   progress rings, plus every meal logged that day (swipe to delete, tap to edit).
 

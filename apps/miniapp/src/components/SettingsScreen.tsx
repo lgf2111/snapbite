@@ -11,6 +11,7 @@ import {
 import { type ProviderConfig, ProviderPicker } from './ProviderPicker.js';
 import {
   Bell,
+  CalendarRange,
   CheckCircle2,
   Download,
   MessageSquare,
@@ -21,6 +22,14 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import {
+  loadWeekPrefs,
+  saveWeekPrefs,
+  type WeekMode,
+  type WeekPrefs,
+  type WeekStart,
+} from '@/lib/weekPrefs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -165,6 +174,16 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [savingReminders, setSavingReminders] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // How the Home "Weekly" view defines a week (client-only, localStorage).
+  const [weekPrefs, setWeekPrefs] = useState<WeekPrefs>(() => loadWeekPrefs());
+  function updateWeekPrefs(patch: Partial<WeekPrefs>) {
+    setWeekPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      saveWeekPrefs(next);
+      return next;
+    });
+  }
   const [fbCfg, setFbCfg] = useState<ProviderConfig>({
     provider: 'openai',
     model: PROVIDER_PRESETS.openai.defaultModel,
@@ -553,6 +572,77 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             >
               {savingReminders ? 'Saving…' : 'Save changes'}
             </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <CalendarRange className="text-primary size-5" />
+            <span className="font-medium">Weekly view</span>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            How the Home “Weekly” toggle groups your days.
+          </p>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Week is</Label>
+            <div className="bg-muted flex gap-1 rounded-md p-1">
+              {(
+                [
+                  { value: 'rolling', label: 'Last 7 days' },
+                  { value: 'calendar', label: 'Calendar week' },
+                ] as Array<{ value: WeekMode; label: string }>
+              ).map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => updateWeekPrefs({ mode: o.value })}
+                  className={cn(
+                    'flex-1 rounded px-2 py-1.5 text-sm font-medium transition-colors',
+                    weekPrefs.mode === o.value
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground',
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {weekPrefs.mode === 'rolling'
+                ? 'Today and the previous 6 days.'
+                : 'The calendar week that contains the selected day.'}
+            </p>
+          </div>
+
+          {weekPrefs.mode === 'calendar' && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Week starts on</Label>
+              <div className="bg-muted flex gap-1 rounded-md p-1">
+                {(
+                  [
+                    { value: 'monday', label: 'Monday' },
+                    { value: 'sunday', label: 'Sunday' },
+                  ] as Array<{ value: WeekStart; label: string }>
+                ).map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => updateWeekPrefs({ weekStart: o.value })}
+                    className={cn(
+                      'flex-1 rounded px-2 py-1.5 text-sm font-medium transition-colors',
+                      weekPrefs.weekStart === o.value
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground',
+                    )}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

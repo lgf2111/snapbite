@@ -53,6 +53,8 @@ export interface Backend {
   recent(): Promise<RecentMeal[]>;
   /** Meals for one day (YYYY-MM-DD), newest first. */
   mealsByDate(date: string): Promise<RecentMeal[]>;
+  /** Meals within an inclusive local-day range (YYYY-MM-DD), newest first. */
+  mealsInRange(startKey: string, endKey: string): Promise<RecentMeal[]>;
   /** Distinct days (YYYY-MM-DD) that have meals, for the calendar. */
   mealDates(): Promise<string[]>;
   detail(id: string): Promise<MealDetail>;
@@ -122,6 +124,17 @@ export function createBackend(): Backend {
       async mealsByDate(date) {
         const { meals } = await api.listMeals(date);
         return meals.map((m) => toRecent(m, (id) => api.photoUrl(id)));
+      },
+      async mealsInRange(startKey, endKey) {
+        // One call for all meals, filtered client-side by local day key in the
+        // inclusive [startKey, endKey] range (lighter than 7 per-day requests).
+        const { meals } = await api.listMeals();
+        return meals
+          .map((m) => toRecent(m, (id) => api.photoUrl(id)))
+          .filter((m) => {
+            const key = localDayKey(m.when);
+            return key >= startKey && key <= endKey;
+          });
       },
       async mealDates() {
         const { dates } = await api.mealDates();
@@ -199,6 +212,14 @@ export function createBackend(): Backend {
     async mealsByDate(date) {
       return loadMeals()
         .filter((m) => localDayKey(new Date(m.savedAt).getTime()) === date)
+        .map(fromSaved);
+    },
+    async mealsInRange(startKey, endKey) {
+      return loadMeals()
+        .filter((m) => {
+          const key = localDayKey(new Date(m.savedAt).getTime());
+          return key >= startKey && key <= endKey;
+        })
         .map(fromSaved);
     },
     async mealDates() {

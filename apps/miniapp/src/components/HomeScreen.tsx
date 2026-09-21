@@ -1,11 +1,13 @@
 import { type DailyTargets, PROVIDER_PRESETS } from '@snapbite/core';
 import { Camera, Plus, Sparkles, Target } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Backend, RecentMeal } from '@/lib/backend';
 import { hapticNotify } from '@/lib/telegram';
+import { cn } from '@/lib/utils';
+import { loadWeekPrefs, weekRange } from '@/lib/weekPrefs';
 import { DateSelector } from './DateSelector.js';
 import { ManualMealDialog } from './ManualMealDialog.js';
 import { MacroLegend, MacroLine } from './MacroLine.js';
@@ -55,10 +57,15 @@ export function HomeScreen({
   onToast,
 }: HomeScreenProps) {
   const [date, setDate] = useState(todayKey());
+  const [view, setView] = useState<'daily' | 'weekly'>('daily');
   const [meals, setMeals] = useState<RecentMeal[] | null>(null);
   const [loggedDates, setLoggedDates] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+
+  // Week definition preference (rolling vs calendar Sun/Mon) from Settings.
+  const weekPrefs = useMemo(() => loadWeekPrefs(), []);
+  const range = useMemo(() => weekRange(date, weekPrefs), [date, weekPrefs]);
 
   const loadDates = useCallback(() => {
     backend
@@ -67,25 +74,39 @@ export function HomeScreen({
       .catch(() => setLoggedDates([]));
   }, [backend]);
 
-  const loadDay = useCallback(
-    (d: string) => {
-      setMeals(null);
-      setError(null);
-      backend
-        .mealsByDate(d)
-        .then(setMeals)
-        .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'));
-    },
-    [backend],
-  );
+  const loadMealsForView = useCallback(() => {
+    setMeals(null);
+    setError(null);
+    const p =
+      view === 'weekly'
+        ? backend.mealsInRange(range.startKey, range.endKey)
+        : backend.mealsByDate(date);
+    p.then(setMeals).catch((e: unknown) =>
+      setError(e instanceof Error ? e.message : 'Failed to load'),
+    );
+  }, [backend, view, date, range.startKey, range.endKey]);
 
-  useEffect(() => loadDay(date), [loadDay, date]);
+  useEffect(() => loadMealsForView(), [loadMealsForView]);
   useEffect(loadDates, [loadDates]);
 
   const refresh = () => {
-    loadDay(date);
+    loadMealsForView();
     loadDates();
   };
+
+  const weekly = view === 'weekly';
+  // Weekly targets scale the daily target by the number of days in the range.
+  const viewTargets = useMemo(() => {
+    if (!targets) return null;
+    if (!weekly) return targets;
+    const d = range.days;
+    return {
+      energyKcal: targets.energyKcal * d,
+      proteinG: targets.proteinG * d,
+      carbsG: targets.carbsG * d,
+      fatG: targets.fatG * d,
+    };
+  }, [targets, weekly, range.days]);
 
   async function handleDelete(id: string) {
     try {
@@ -114,9 +135,32 @@ export function HomeScreen({
         </Button>
       </div>
 
+      {/* Daily / Weekly view toggle. */}
+      <div className="bg-muted flex gap-1 rounded-md p-1">
+        {(['daily', 'weekly'] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setView(v)}
+            className={cn(
+              'flex-1 rounded px-3 py-1.5 text-sm font-medium capitalize transition-colors',
+              view === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
+            )}
+          >
+            {v}
+          </button>
+        ))}
+      </div>
+
       <DateSelector value={date} onChange={setDate} loggedDates={loggedDates} />
 
-      {targets ? (
+      {weekly && (
+        <p className="text-muted-foreground -mt-1 text-center text-xs">
+          Week total · {range.label}
+        </p>
+      )}
+
+      {viewTargets ? (
         <Card>
           <CardContent
             className="place-items-center gap-x-2 gap-y-4"
@@ -124,7 +168,7 @@ export function HomeScreen({
           >
             <ProgressRing
               consumed={consumed.energyKcal}
-              target={targets.energyKcal}
+              target={viewTargets.energyKcal}
               label="kcal"
               icon="🔥"
               size={76}
@@ -132,7 +176,7 @@ export function HomeScreen({
             />
             <ProgressRing
               consumed={consumed.proteinG}
-              target={targets.proteinG}
+              target={viewTargets.proteinG}
               label="protein"
               icon="🥩"
               size={76}
@@ -140,7 +184,7 @@ export function HomeScreen({
             />
             <ProgressRing
               consumed={consumed.carbsG}
-              target={targets.carbsG}
+              target={viewTargets.carbsG}
               label="carbs"
               icon="🍚"
               size={76}
@@ -148,7 +192,7 @@ export function HomeScreen({
             />
             <ProgressRing
               consumed={consumed.fatG}
-              target={targets.fatG}
+              target={viewTargets.fatG}
               label="fat"
               icon="🧈"
               size={76}
@@ -185,7 +229,7 @@ export function HomeScreen({
         <Card>
           <CardContent className="flex flex-col items-center gap-2 text-center">
             <Camera className="text-primary size-9" />
-            <p className="font-medium">No meals this day</p>
+            <p className="font-medium">{weekly ? 'No meals this week' : 'No meals this day'}</p>
             <p className="text-muted-foreground text-sm">
               Send a photo to the bot to log a meal automatically, or tap <strong>Add meal</strong>{' '}
               to enter one by hand.
