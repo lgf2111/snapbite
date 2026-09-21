@@ -118,13 +118,13 @@ export function HomeScreen({
 
       {targets ? (
         <Card>
-          <CardContent className="grid grid-cols-4 place-items-center gap-2">
+          <CardContent className="grid grid-cols-2 place-items-center gap-x-2 gap-y-4">
             <ProgressRing
               consumed={consumed.energyKcal}
               target={targets.energyKcal}
               label="kcal"
               icon="🔥"
-              size={84}
+              size={76}
               colorClass="text-primary"
             />
             <ProgressRing
@@ -132,7 +132,7 @@ export function HomeScreen({
               target={targets.proteinG}
               label="protein"
               icon="🥩"
-              size={72}
+              size={76}
               colorClass="text-rose-500"
             />
             <ProgressRing
@@ -140,7 +140,7 @@ export function HomeScreen({
               target={targets.carbsG}
               label="carbs"
               icon="🍚"
-              size={72}
+              size={76}
               colorClass="text-amber-500"
             />
             <ProgressRing
@@ -148,7 +148,7 @@ export function HomeScreen({
               target={targets.fatG}
               label="fat"
               icon="🧈"
-              size={72}
+              size={76}
               colorClass="text-sky-500"
             />
           </CardContent>
