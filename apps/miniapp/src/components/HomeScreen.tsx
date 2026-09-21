@@ -1,5 +1,5 @@
 import { type DailyTargets, PROVIDER_PRESETS } from '@snapbite/core';
-import { Camera, Plus, Sparkles, Target } from 'lucide-react';
+import { Camera, Plus, RefreshCw, Sparkles, Target } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -64,6 +64,7 @@ export function HomeScreen({
   onToast,
 }: HomeScreenProps) {
   const [addOpen, setAddOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Week definition preference (rolling vs calendar Sun/Mon) from Settings.
   const weekPrefs = useMemo(() => loadWeekPrefs(), []);
@@ -93,6 +94,16 @@ export function HomeScreen({
     refreshMeals();
     refreshDates();
   }, [refreshMeals, refreshDates]);
+
+  // Manual pull: revalidate now (useful if a bot-logged meal hasn't shown yet).
+  // Spins briefly as feedback; the list updates in place (no skeleton).
+  const manualRefresh = useCallback(() => {
+    if (refreshing) return;
+    setRefreshing(true);
+    hapticNotify('success');
+    refresh();
+    window.setTimeout(() => setRefreshing(false), 700);
+  }, [refresh, refreshing]);
 
   // App bumps refreshSignal after an edit/delete; revalidate without remounting
   // (so the selected day/view is preserved). Skip the initial mount.
@@ -162,9 +173,20 @@ export function HomeScreen({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">SnapBite</h1>
-        <Button variant="secondary" size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
-          <Plus className="size-4" /> Add meal
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Refresh"
+            disabled={refreshing}
+            onClick={manualRefresh}
+          >
+            <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
+          </Button>
+          <Button variant="secondary" size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
+            <Plus className="size-4" /> Add meal
+          </Button>
+        </div>
       </div>
 
       {/* Daily / Weekly view toggle. */}
