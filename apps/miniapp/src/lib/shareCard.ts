@@ -130,22 +130,25 @@ function wrapToLines(
   const words = text.trim().split(/\s+/);
   const lines: string[] = [];
   let line = '';
-  for (const word of words) {
+  let i = 0;
+  for (; i < words.length; i++) {
+    const word = words[i]!;
     const candidate = line ? `${line} ${word}` : word;
     if (ctx.measureText(candidate).width <= maxWidth || !line) {
       line = candidate;
     } else {
       lines.push(line);
       line = word;
-      if (lines.length === maxLines) break;
+      // Reached the final allowed line: fill it with the remaining words and
+      // ellipsize to fit, so nothing overflows past maxLines.
+      if (lines.length === maxLines - 1) {
+        const rest = [word, ...words.slice(i + 1)].join(' ');
+        lines.push(truncateToWidth(ctx, rest, maxWidth));
+        return lines;
+      }
     }
   }
-  if (lines.length < maxLines && line) lines.push(line);
-  // If content remains beyond maxLines, ellipsize the last line to fit.
-  const shown = lines.join(' ');
-  if (shown.replace(/\s+/g, ' ').length < text.trim().replace(/\s+/g, ' ').length) {
-    lines[lines.length - 1] = truncateToWidth(ctx, lines[lines.length - 1] ?? '', maxWidth);
-  }
+  if (line) lines.push(line);
   return lines;
 }
 
@@ -254,7 +257,7 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   // The photo is drawn a bit TALLER than the visible area, then dissolved to
   // transparent over a long span so it blends continuously into the underlying
   // background gradient — no hard photo edge and no solid-color seam.
-  const photoH = 1180; // where the photo has fully dissolved into the bg
+  const photoH = 1020; // where the photo has fully dissolved into the bg
   const photoDraw = photoH + 60; // draw slightly past so the fade has image to work on
   if (input.photoUrl) {
     try {
@@ -333,22 +336,28 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   });
   const titleBottom = titleTop + titleSize + (titleLines.length - 1) * titleLineH;
 
-  // --- Hero calories -------------------------------------------------------
-  // Two clearly separated rows so nothing overlaps:
-  //   row 1: flame chip + "CALORIES" label
-  //   row 2: big number + "kcal" unit (with a comfortable gap)
+  // The whole calories → pills → footer block is bottom-anchored, so the title
+  // (1 or 2 lines) can grow at the top without ever pushing content into the
+  // footer. `titleBottom` is only used to keep a minimum gap.
+  void titleBottom;
   const kcal = Math.round(input.calories);
+  const gap = 26;
+  const pillW = (contentW - gap * 2) / 3;
+  const pillH = 190;
+  const footerY = H - 56;
+  const pillY = footerY - 64 - pillH;
 
-  // Row 1 — header.
-  const headerY = titleBottom + 92; // vertical center of the flame chip / label
+  // --- Hero calories (sits just above the pills) ---------------------------
+  const numBaseline = pillY - 70; // baseline of the big number
   const chipR = 44;
   const chipCx = pad + chipR;
+  const headerY = numBaseline - 138 - 46; // header row centered above the number
+
+  // Row 1 — flame chip + "CALORIES".
   ctx.fillStyle = 'rgba(255,122,89,0.16)';
   ctx.beginPath();
   ctx.arc(chipCx, headerY, chipR, 0, Math.PI * 2);
   ctx.fill();
-  // Emoji don't sit on the geometric center with textBaseline alone; using
-  // alphabetic baseline + a measured vertical nudge centers it in the chip.
   ctx.font = `48px ${FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
@@ -357,15 +366,13 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
     (flameMetrics.actualBoundingBoxAscent || 34) + (flameMetrics.actualBoundingBoxDescent || 6);
   const flameBaseline = headerY + flameH / 2 - (flameMetrics.actualBoundingBoxDescent || 6);
   ctx.fillText('🔥', chipCx, flameBaseline);
-
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = COLOR.sub;
   ctx.font = `700 34px ${FONT}`;
   ctx.fillText('CALORIES', chipCx + chipR + 28, headerY);
 
-  // Row 2 — big number + unit, on their own baseline well below the header.
-  const numBaseline = headerY + chipR + 118;
+  // Row 2 — big number + unit.
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = COLOR.ink;
@@ -373,19 +380,13 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   ctx.font = numFont;
   const numText = String(kcal);
   ctx.fillText(numText, pad, numBaseline);
-  // Measure with the SAME font that drew the number, then place "kcal" after a
-  // clear gap so they never overlap.
   ctx.font = numFont;
   const numW = ctx.measureText(numText).width;
   ctx.fillStyle = COLOR.kcal;
   ctx.font = `700 50px ${FONT}`;
   ctx.fillText('kcal', pad + numW + 18, numBaseline);
 
-  // --- Macro pills row -----------------------------------------------------
-  const pillY = numBaseline + 70;
-  const gap = 26;
-  const pillW = (contentW - gap * 2) / 3;
-  const pillH = 190;
+  // --- Macro pills row (bottom-anchored) -----------------------------------
   drawMacroPill(ctx, pad, pillY, pillW, pillH, COLOR.protein, 'Protein', `${Math.round(input.proteinG)}g`);
   drawMacroPill(ctx, pad + pillW + gap, pillY, pillW, pillH, COLOR.carbs, 'Carbs', `${Math.round(input.carbsG)}g`);
   drawMacroPill(
@@ -404,7 +405,7 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   ctx.font = `600 30px ${FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText('Snap a photo · log your meal · SnapBite', W / 2, H - 56);
+  ctx.fillText('Snap a photo · log your meal · SnapBite', W / 2, footerY);
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
