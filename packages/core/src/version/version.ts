@@ -22,10 +22,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '0.18.0',
     date: '2026-09-16',
     notes: [
-      '🚚 We’ve moved! FoodLog is now SnapBite, on a brand-new bot',
-      '👉 Continue here: https://t.me/SnapBiteAI_bot — just tap it and press Start',
-      'Your meals, targets, settings and AI key all carry over automatically — nothing to re-enter',
-      'This old bot will stop working soon, so switch over now',
+      '🔧 We’re doing some behind-the-scenes upgrades over the next little while',
+      '⏳ You might notice brief downtime — if a photo doesn’t log, just wait a bit and resend',
+      '✅ Your meals, targets and settings are safe and staying put',
+      'Thanks for your patience while we make SnapBite better!',
     ],
   },
   {
