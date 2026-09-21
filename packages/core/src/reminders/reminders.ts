@@ -39,6 +39,35 @@ export function parseHhMm(hhmm: string): number | null {
 }
 
 /**
+ * The reminder cron's granularity in minutes. Reminder times are only
+ * meaningful on this grid: the cron checks every {@link REMINDER_STEP_MINUTES}
+ * minutes, so an off-grid time (e.g. 08:07) would silently fire at the next
+ * slot. UIs should restrict/snap picks to this step.
+ */
+export const REMINDER_STEP_MINUTES = 15;
+
+/** Formats minutes-since-midnight back to a zero-padded "HH:MM". */
+function formatHhMm(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/**
+ * Snaps an "HH:MM" time to the nearest {@link REMINDER_STEP_MINUTES} slot so the
+ * time a user sees matches when the cron will actually fire. Rounds to nearest,
+ * clamps the final slot to 23:45 so a round-up near midnight stays same-day, and
+ * returns the input unchanged when it isn't a valid time.
+ */
+export function snapToReminderStep(hhmm: string): string {
+  const total = parseHhMm(hhmm);
+  if (total == null) return hhmm;
+  const snapped = Math.round(total / REMINDER_STEP_MINUTES) * REMINDER_STEP_MINUTES;
+  const clamped = Math.min(snapped, 23 * 60 + 45);
+  return formatHhMm(clamped);
+}
+
+/**
  * The user's LOCAL date + minutes-since-midnight for a UTC instant, given their
  * `Date.getTimezoneOffset()` value (minutes to add to local to reach UTC).
  */

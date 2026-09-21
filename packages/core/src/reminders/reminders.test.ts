@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { dueReminderSlots, localParts, parseHhMm, reminderMessage } from './reminders.js';
+import {
+  dueReminderSlots,
+  localParts,
+  parseHhMm,
+  REMINDER_STEP_MINUTES,
+  reminderMessage,
+  snapToReminderStep,
+} from './reminders.js';
 
 describe('parseHhMm', () => {
   it('parses valid times', () => {
@@ -11,6 +18,29 @@ describe('parseHhMm', () => {
     expect(parseHhMm('nope')).toBeNull();
     expect(parseHhMm('24:00')).toBeNull();
     expect(parseHhMm('10:60')).toBeNull();
+  });
+});
+
+describe('snapToReminderStep', () => {
+  it('uses a 15-minute grid', () => {
+    expect(REMINDER_STEP_MINUTES).toBe(15);
+  });
+  it('leaves on-grid times unchanged', () => {
+    expect(snapToReminderStep('08:00')).toBe('08:00');
+    expect(snapToReminderStep('12:30')).toBe('12:30');
+    expect(snapToReminderStep('19:45')).toBe('19:45');
+  });
+  it('rounds off-grid times to the nearest slot', () => {
+    expect(snapToReminderStep('08:07')).toBe('08:00'); // down
+    expect(snapToReminderStep('08:08')).toBe('08:15'); // up
+    expect(snapToReminderStep('08:52')).toBe('08:45'); // down within hour
+    expect(snapToReminderStep('08:53')).toBe('09:00'); // rolls into next hour
+  });
+  it('clamps a round-up near midnight to 23:45 (stays same day)', () => {
+    expect(snapToReminderStep('23:53')).toBe('23:45');
+  });
+  it('returns malformed input unchanged', () => {
+    expect(snapToReminderStep('nope')).toBe('nope');
   });
 });
 

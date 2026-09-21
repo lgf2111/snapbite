@@ -346,6 +346,29 @@ describe('PUT /api/settings/reminders', () => {
     expect(get.reminders?.tzOffsetMinutes).toBe(-480);
   });
 
+  it('snaps off-grid times to the 15-min reminder cron slots', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(2102)), 'content-type': 'application/json' };
+    const res = await app.request(
+      '/api/settings/reminders',
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          enabled: true,
+          // 08:07 -> 08:00, 12:38 -> 12:45 (both off-grid picks).
+          times: { breakfast: '08:07', lunch: '12:38' },
+          tzOffsetMinutes: 0,
+        }),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { reminders: { times: Record<string, string> } };
+    expect(body.reminders.times.breakfast).toBe('08:00');
+    expect(body.reminders.times.lunch).toBe('12:45');
+  });
+
   it('works without an API key (no key required to set reminders)', async () => {
     const app = createApp();
     const headers = { ...(await authHeaders(2101)), 'content-type': 'application/json' };

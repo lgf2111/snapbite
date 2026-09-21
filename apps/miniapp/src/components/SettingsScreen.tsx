@@ -4,6 +4,8 @@ import {
   PROVIDER_PRESETS,
   profileAge,
   type ProviderId,
+  REMINDER_STEP_MINUTES,
+  snapToReminderStep,
   type UserProfile,
 } from '@snapbite/core';
 import { type ProviderConfig, ProviderPicker } from './ProviderPicker.js';
@@ -432,7 +434,11 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   }
 
   function handleReminderTimeChange(label: string, value: string) {
-    setReminderTimes((prev) => ({ ...prev, [label]: value }));
+    // Snap to the nearest 15-min slot: the cron only checks every 15 min, so
+    // picking 08:07 would silently behave like 08:15. Snapping keeps what the
+    // user sees and what actually fires in sync. Native/mobile time pickers
+    // allow any minute regardless of `step`, so this is the real guard.
+    setReminderTimes((prev) => ({ ...prev, [label]: snapToReminderStep(value) }));
   }
 
   async function handleSendFeedback() {
@@ -523,10 +529,15 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                 <Input
                   id={`reminder-${label}`}
                   type="time"
+                  // Reminders are checked by a 15-min cron, so only :00/:15/:30/:45
+                  // are meaningful. step=900s hints native pickers to 15-min
+                  // increments; onBlur snaps whatever was chosen to the grid.
+                  step={REMINDER_STEP_MINUTES * 60}
                   className="w-32"
                   value={reminderTimes[label] ?? DEFAULT_REMINDER_TIMES[label]}
                   disabled={savingReminders || !slotOn[label]}
                   onChange={(e) => handleReminderTimeChange(label, e.target.value)}
+                  onBlur={(e) => handleReminderTimeChange(label, e.target.value)}
                 />
               </div>
             ))}

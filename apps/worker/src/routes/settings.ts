@@ -8,6 +8,7 @@ import {
   encryptSecret,
   isProviderId,
   lastFour,
+  snapToReminderStep,
   UserProfile,
 } from '@snapbite/core';
 import { Hono } from 'hono';
@@ -160,12 +161,13 @@ export function settingsRoutes() {
       typeof body.tzOffsetMinutes === 'number' && Number.isFinite(body.tzOffsetMinutes)
         ? body.tzOffsetMinutes
         : 0;
-    // Validate the times map: keep only well-formed "HH:MM" entries.
+    // Validate the times map: keep only well-formed "HH:MM" entries, snapped to
+    // the reminder cron's 15-min grid so a stored time matches when it fires.
     const times: Record<string, string> = {};
     if (body.times && typeof body.times === 'object') {
       for (const [label, val] of Object.entries(body.times as Record<string, unknown>)) {
         if (typeof val === 'string' && /^\d{1,2}:\d{2}$/.test(val.trim())) {
-          times[label] = val.trim();
+          times[label] = snapToReminderStep(val.trim());
         }
       }
     }
