@@ -52,6 +52,36 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
+// The real SnapBite logo (bundled at /icon.png, same-origin). Cached across
+// renders. Falls back to the drawn mark if it can't load.
+let logoPromise: Promise<HTMLImageElement | null> | null = null;
+function loadLogo(): Promise<HTMLImageElement | null> {
+  if (!logoPromise) {
+    logoPromise = loadImage('/icon.png').catch(() => null);
+  }
+  return logoPromise;
+}
+
+/** Draws the SnapBite logo image (or the drawn fallback) as a disc at (cx,cy). */
+function drawLogo(
+  ctx: CanvasRenderingContext2D,
+  logo: HTMLImageElement | null,
+  cx: number,
+  cy: number,
+  r: number,
+): void {
+  if (!logo) {
+    drawBrandMark(ctx, cx, cy, r);
+    return;
+  }
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.drawImage(logo, cx - r, cy - r, r * 2, r * 2);
+  ctx.restore();
+}
+
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -242,6 +272,8 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D not supported');
 
+  const logo = await loadLogo();
+
   // --- Background: deep navy gradient --------------------------------------
   // Hold a constant bgTop through the upper ~65% (where the photo dissolves)
   // so the dissolve's end color matches the page bg exactly — no seam — then
@@ -269,10 +301,10 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
       drawImageCover(ctx, img, 0, 0, W, photoDraw);
       ctx.restore();
     } catch {
-      drawPlaceholderPhoto(ctx, photoDraw);
+      drawPlaceholderPhoto(ctx, photoDraw, logo);
     }
   } else {
-    drawPlaceholderPhoto(ctx, photoDraw);
+    drawPlaceholderPhoto(ctx, photoDraw, logo);
   }
 
   // Dissolve the photo into the background with a SINGLE smooth gradient (no
@@ -298,8 +330,8 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   ctx.fillStyle = topScrim;
   ctx.fillRect(0, 0, W, 240);
 
-  // --- Brand lockup (top-left): mark + wordmark ----------------------------
-  drawBrandMark(ctx, 78, 88, 44);
+  // --- Brand lockup (top-left): real logo + wordmark -----------------------
+  drawLogo(ctx, logo, 78, 88, 44);
   ctx.fillStyle = '#ffffff';
   ctx.font = `800 44px ${FONT}`;
   ctx.textAlign = 'left';
@@ -415,12 +447,16 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   });
 }
 
-/** Branded header used when there's no photo: blue gradient + the mark. */
-function drawPlaceholderPhoto(ctx: CanvasRenderingContext2D, h: number): void {
+/** Branded header used when there's no photo: blue gradient + the logo. */
+function drawPlaceholderPhoto(
+  ctx: CanvasRenderingContext2D,
+  h: number,
+  logo: HTMLImageElement | null,
+): void {
   const grad = ctx.createLinearGradient(0, 0, W, h);
   grad.addColorStop(0, COLOR.brand);
   grad.addColorStop(1, COLOR.brandBright);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, h);
-  drawBrandMark(ctx, W / 2, h / 2 - 30, 150);
+  drawLogo(ctx, logo, W / 2, h / 2 - 30, 150);
 }
