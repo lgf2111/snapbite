@@ -87,6 +87,22 @@ function drawImageCover(
   ctx.drawImage(img, dx, dy, dw, dh);
 }
 
+/**
+ * Cleans an AI-written meal title for display: drops leading filler like
+ * "Identified as " / "This is " / "A photo of " and capitalizes the first
+ * letter. Falls back to "Meal" when empty.
+ */
+function cleanTitle(raw: string | undefined): string {
+  let t = (raw ?? '').trim();
+  t = t.replace(
+    /^(identified as|this (?:is|appears to be)|appears to be|looks like|a photo of|photo of|image of|the meal is|meal:)\s+/i,
+    '',
+  );
+  t = t.trim().replace(/^["'“”]+|["'“”]+$/g, '');
+  if (!t) return 'Meal';
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 /** Truncates text to a single line with an ellipsis when it exceeds maxWidth. */
 function truncateToWidth(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
   const t = text.trim();
@@ -118,23 +134,30 @@ function drawMacroPill(
   ctx.stroke();
 
   const cx = x + w / 2;
-  // Colored dot + label centered on the top row.
+
+  // Top row: colored dot + label, centered together as a group.
+  ctx.font = `600 30px ${FONT}`;
+  const labelW = ctx.measureText(label).width;
+  const dotR = 11;
+  const dotGap = 16;
+  const groupW = dotR * 2 + dotGap + labelW;
+  const groupLeft = cx - groupW / 2;
+  const rowY = y + 58;
   ctx.fillStyle = dotColor;
   ctx.beginPath();
-  ctx.arc(x + 40, y + 52, 11, 0, Math.PI * 2);
+  ctx.arc(groupLeft + dotR, rowY, dotR, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = COLOR.sub;
-  ctx.font = `600 30px ${FONT}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, x + 40 + 26, y + 52);
+  ctx.fillText(label, groupLeft + dotR * 2 + dotGap, rowY);
 
   // Big value, centered.
   ctx.fillStyle = COLOR.ink;
   ctx.font = `800 62px ${FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText(value, cx, y + h - 42);
+  ctx.fillText(value, cx, y + h - 44);
 }
 
 /** Draws the SnapBite mark (fork inside a ring/plate) at (cx,cy) with radius r. */
@@ -238,9 +261,9 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   const titleY = photoH + 40;
-  const rawTitle = (input.title || 'Meal').trim();
-  let titleSize = 64;
-  const minTitleSize = 40;
+  const rawTitle = cleanTitle(input.title);
+  let titleSize = 72;
+  const minTitleSize = 52;
   ctx.font = `800 ${titleSize}px ${FONT}`;
   while (titleSize > minTitleSize && ctx.measureText(rawTitle).width > contentW) {
     titleSize -= 2;
@@ -296,7 +319,7 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   const numW = ctx.measureText(numText).width;
   ctx.fillStyle = COLOR.kcal;
   ctx.font = `700 50px ${FONT}`;
-  ctx.fillText('kcal', pad + numW + 48, numBaseline);
+  ctx.fillText('kcal', pad + numW + 18, numBaseline);
 
   // --- Macro pills row -----------------------------------------------------
   const pillY = numBaseline + 70;
