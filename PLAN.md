@@ -290,21 +290,25 @@ cd apps/miniapp && pnpm exec wrangler pages deploy dist --project-name=snapbite 
 Do NOT run long-lived dev servers via automation (they block). If you need one, ask the user to run
 `pnpm dev` themselves.
 
-### Live URLs & infra
-**Rebrand in progress — FoodLog → SnapBite (new bot + new infra).** During cutover both exist.
-
-OLD (being retired after cutover):
-- Worker: `https://foodlog-worker.lgf2111.workers.dev`
-- Mini App (Pages): `https://foodlog-7f5.pages.dev`
-- D1: `foodlog-db`, id `f0312e67-2fef-47a6-a9ca-59cb9c21a79b` (APAC) — **data export source**
-- Bot: `@foodlog2111_bot`
-
-NEW (target names; URLs/id finalized when the user creates them in the cutover):
+### Live URLs & infra (SnapBite — cutover DONE)
 - Worker: `snapbite-worker` → `https://snapbite-worker.lgf2111.workers.dev`
-- Mini App (Pages): `snapbite` → `https://snapbite-<hash>.pages.dev`
-- D1: `snapbite-db`, id `REPLACE_WITH_SNAPBITE_DB_ID` (paste into `apps/worker/wrangler.toml`)
-- Bot: `@SnapBiteAI_bot` (its own token)
-- Bot is a **Main Mini App** in BotFather; set the new Pages URL + avatar + commands after cutover.
+- Mini App (Pages): project `snapbite` → **`https://snapbite-8f7.pages.dev`** (the bare
+  `snapbite.pages.dev` belongs to a different account — always use the `-8f7` URL; it's what
+  `MINI_APP_URL` and both BotFather URLs point to).
+- D1: `snapbite-db`, id `6c331800-c9a5-4c32-b5b4-17190c23dd6c`
+- Bot: `@SnapBiteAI_bot` — webhook → the worker; Menu Button + Configure Mini App both set to
+  the `-8f7` Pages URL; avatar = `apps/miniapp/public/icon.png`.
+
+RETIRED (kept temporarily as backup — safe to delete once migration is confirmed stable):
+- Old worker `foodlog-worker`, old Pages `foodlog` (`foodlog-7f5.pages.dev`), old bot `@foodlog2111_bot`.
+- Old D1 `foodlog-db`, id `f0312e67-2fef-47a6-a9ca-59cb9c21a79b` — **keep as data backup** for now.
+
+Migration notes:
+- Data copied old→new via `d1 export --no-schema` then filtered out `d1_migrations` + `sqlite_sequence`
+  lines and imported wrapped in `PRAGMA foreign_keys=OFF; … ON;` (D1 ignored the dump's defer pragma).
+- Users key on Telegram user id, so meals/settings/**encrypted keys** resolve on the new bot as-is.
+- **Old meal photos don't display on the new bot**: photos were never stored (only Telegram `file_id`,
+  which is bot-specific), so `@SnapBiteAI_bot` can't fetch files issued to the old bot. New photos work.
 
 ### CUTOVER RUNBOOK — FoodLog → SnapBite (user runs these; needs bot tokens + Cloudflare auth)
 Data migrates because users are keyed by Telegram user id, so their meals/settings/encrypted key

@@ -15,5 +15,5 @@ crons = ["*/15 * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "snapbite-db"
-database_id = "REPLACE_WITH_SNAPBITE_DB_ID"
+database_id = "6c331800-c9a5-4c32-b5b4-17190c23dd6c"
 migrations_dir = "migrations"

@@ -22,10 +22,11 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '0.18.0',
     date: '2026-09-16',
     notes: [
-      '🔧 We’re doing some behind-the-scenes upgrades over the next little while',
-      '⏳ You might notice brief downtime — if a photo doesn’t log, just wait a bit and resend',
-      '✅ Your meals, targets and settings are safe and staying put',
-      'Thanks for your patience while we make SnapBite better!',
+      '🔧 Heads up: we’re moving SnapBite to a new home over the next little while',
+      '⏳ Expect brief downtime — if a photo doesn’t log, wait a bit and try again',
+      '👉 We’re moving to a new bot: @SnapBiteAI_bot — please open it and press Start',
+      '✅ Your meals, targets, settings and AI key all come with you automatically — nothing to re-enter',
+      '🙏 This bot stops working after the move, so switch over when you see this',
     ],
   },
   {
