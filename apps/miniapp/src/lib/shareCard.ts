@@ -114,6 +114,39 @@ function truncateToWidth(ctx: CanvasRenderingContext2D, text: string, maxWidth: 
   return `${s.trimEnd()}…`;
 }
 
+/**
+ * Word-wraps text into at most `maxLines` lines at the current font. Long
+ * single words are allowed to overflow rather than break mid-word; if the text
+ * needs more than `maxLines`, the last line is ellipsized.
+ */
+function wrapToLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  const words = text.trim().split(/\s+/);
+  const lines: string[] = [];
+  let line = '';
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxWidth || !line) {
+      line = candidate;
+    } else {
+      lines.push(line);
+      line = word;
+      if (lines.length === maxLines) break;
+    }
+  }
+  if (lines.length < maxLines && line) lines.push(line);
+  // If content remains beyond maxLines, ellipsize the last line to fit.
+  const shown = lines.join(' ');
+  if (shown.replace(/\s+/g, ' ').length < text.trim().replace(/\s+/g, ' ').length) {
+    lines[lines.length - 1] = truncateToWidth(ctx, lines[lines.length - 1] ?? '', maxWidth);
+  }
+  return lines;
+}
+
 /** A macro pill: translucent rounded card, colored dot, label, and value. */
 function drawMacroPill(
   ctx: CanvasRenderingContext2D,
@@ -211,37 +244,51 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  // --- Photo (full-bleed top) that fades into the background ---------------
-  const photoH = 1120;
+  // --- Photo (full-bleed top) that dissolves into the background -----------
+  // The photo is drawn a bit TALLER than the visible area, then dissolved to
+  // transparent over a long span so it blends continuously into the underlying
+  // background gradient — no hard photo edge and no solid-color seam.
+  const photoH = 1180; // where the photo has fully dissolved into the bg
+  const photoDraw = photoH + 60; // draw slightly past so the fade has image to work on
   if (input.photoUrl) {
     try {
       const img = await loadImage(input.photoUrl);
       ctx.save();
       ctx.beginPath();
-      ctx.rect(0, 0, W, photoH);
+      ctx.rect(0, 0, W, photoDraw);
       ctx.clip();
-      drawImageCover(ctx, img, 0, 0, W, photoH);
+      drawImageCover(ctx, img, 0, 0, W, photoDraw);
       ctx.restore();
     } catch {
-      drawPlaceholderPhoto(ctx, photoH);
+      drawPlaceholderPhoto(ctx, photoDraw);
     }
   } else {
-    drawPlaceholderPhoto(ctx, photoH);
+    drawPlaceholderPhoto(ctx, photoDraw);
   }
 
-  // Fade the bottom of the photo into the navy background (no hard seam).
-  const fadeH = 340;
-  const fade = ctx.createLinearGradient(0, photoH - fadeH, 0, photoH);
-  fade.addColorStop(0, 'rgba(15,24,48,0)');
-  fade.addColorStop(1, COLOR.bgTop);
-  ctx.fillStyle = fade;
-  ctx.fillRect(0, photoH - fadeH, W, fadeH);
+  // Dissolve the photo into the background: paint the SAME background gradient
+  // on top of the lower photo with an alpha ramp (0 -> 1). Because it's the
+  // exact bg gradient, wherever it reaches full opacity it matches the pixels
+  // just below the photo perfectly — so there's no visible band.
+  const fadeTop = photoH - 560;
+  const steps = 48;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const y = fadeTop + (photoDraw - fadeTop) * t;
+    const bandH = (photoDraw - fadeTop) / steps + 2;
+    // Ease-in so the top of the fade is very gentle.
+    ctx.globalAlpha = t * t;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, y, W, bandH);
+  }
+  ctx.globalAlpha = 1;
+
   // A slim top scrim so the wordmark stays legible over bright photos.
-  const topScrim = ctx.createLinearGradient(0, 0, 0, 220);
-  topScrim.addColorStop(0, 'rgba(0,0,0,0.35)');
+  const topScrim = ctx.createLinearGradient(0, 0, 0, 240);
+  topScrim.addColorStop(0, 'rgba(0,0,0,0.38)');
   topScrim.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = topScrim;
-  ctx.fillRect(0, 0, W, 220);
+  ctx.fillRect(0, 0, W, 240);
 
   // --- Brand lockup (top-left): mark + wordmark ----------------------------
   drawBrandMark(ctx, 78, 88, 44);
@@ -254,24 +301,32 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   const pad = 72;
   const contentW = W - pad * 2;
 
-  // --- Title: shrink font to fit, then truncate as a last resort -----------
-  // Guarantees the whole (possibly ellipsized) title always fits within the
-  // content width, so it never runs off the edge of the card.
+  // --- Title: show it in full, wrapping up to 2 lines and shrinking to fit --
+  // Prefer showing the whole name. Try 68px on up to 2 lines; if it still
+  // doesn't fit, step the size down; ellipsize only in the extreme case.
   ctx.fillStyle = COLOR.ink;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  const titleY = photoH + 40;
+  const titleTop = photoH + 44;
   const rawTitle = cleanTitle(input.title);
-  let titleSize = 72;
-  const minTitleSize = 52;
-  ctx.font = `800 ${titleSize}px ${FONT}`;
-  while (titleSize > minTitleSize && ctx.measureText(rawTitle).width > contentW) {
-    titleSize -= 2;
+  const maxTitleLines = 2;
+  let titleSize = 68;
+  const minTitleSize = 48;
+  let titleLines: string[] = [];
+  for (;;) {
     ctx.font = `800 ${titleSize}px ${FONT}`;
+    titleLines = wrapToLines(ctx, rawTitle, contentW, maxTitleLines);
+    const fits = titleLines.every((l) => ctx.measureText(l).width <= contentW);
+    const wholeShown = titleLines.join(' ').replace(/…$/, '').length >= rawTitle.length - 1;
+    if ((fits && wholeShown) || titleSize <= minTitleSize) break;
+    titleSize -= 2;
   }
-  // Even at the smallest size it may still be too long — truncate to fit.
-  const titleText = truncateToWidth(ctx, rawTitle, contentW);
-  ctx.fillText(titleText, pad, titleY);
+  const titleLineH = titleSize * 1.16;
+  ctx.font = `800 ${titleSize}px ${FONT}`;
+  titleLines.forEach((line, i) => {
+    ctx.fillText(line, pad, titleTop + titleSize + i * titleLineH);
+  });
+  const titleBottom = titleTop + titleSize + (titleLines.length - 1) * titleLineH;
 
   // --- Hero calories -------------------------------------------------------
   // Two clearly separated rows so nothing overlaps:
@@ -280,7 +335,7 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   const kcal = Math.round(input.calories);
 
   // Row 1 — header.
-  const headerY = titleY + 92; // vertical center of the flame chip / label
+  const headerY = titleBottom + 92; // vertical center of the flame chip / label
   const chipR = 44;
   const chipCx = pad + chipR;
   ctx.fillStyle = 'rgba(255,122,89,0.16)';
