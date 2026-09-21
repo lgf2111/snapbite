@@ -836,6 +836,10 @@ describe('/setup conversational onboarding', () => {
     // Final message shows targets.
     expect(lastText(sent).toLowerCase()).toContain('daily targets');
     expect(lastText(sent)).toContain('kcal');
+    // With no key stored, it points the user to Settings and explains why the
+    // key isn't taken over chat (Telegram history).
+    expect(lastText(sent).toLowerCase()).toContain('settings');
+    expect(lastText(sent).toLowerCase()).toContain('history');
 
     // The profile is persisted in preferences_json.
     const { createSettingsDb, getSettings, parsePreferences } = await import('../db/settings.js');

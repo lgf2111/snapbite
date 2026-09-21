@@ -497,10 +497,15 @@ async function handleOnboardingAnswer(
   const hasKey = Boolean(settings?.apiKeyCiphertext && settings?.apiKeyIv);
 
   const lines = ['✅ All set!', '', targetsSummary(result.profile)];
-  if (!hasKey) {
+  if (hasKey) {
     lines.push(
       '',
-      'One more thing: to log meals from photos, add your AI key in SnapBite → Settings. (You can still add meals by hand without one.)',
+      "Your AI key is already saved, so photo logging works. To change it, open SnapBite → Settings — I don't take API keys over chat, since anything you type here stays in your Telegram history.",
+    );
+  } else {
+    lines.push(
+      '',
+      'One more thing: to log meals from photos, add your AI key in SnapBite → Settings. I ask for it there rather than over chat, because a key typed into this chat would be saved in your Telegram history — the Settings screen sends it securely instead. (You can still add meals by hand without a key.)',
     );
   }
   await bot.sendMessage(parsed.chatId, {
