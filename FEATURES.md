@@ -11,9 +11,13 @@ shown as an **estimate** and is always **editable**.
   the "✅ Logged" result, so the chat stays one message per meal instead of a growing thread.
 - **Add a meal by hand** — in the Mini App, log a meal manually (name + macros) with no photo and no
   AI key required.
-- **Save meals to reuse** — from a meal's detail view, tap **Save meal** to keep it as a reusable
-  favorite (its name + macros). In **Add meal**, your saved meals appear at the top — tap one to log
-  it again instantly, with no photo and no AI call. Saved meals sync with your account.
+- **Save meals to reuse** — from a meal's detail view, tap the **star** to save it as a reusable
+  favorite (name it when you save; the star stays filled while it's saved, tap again to remove). In
+  **Add meal**, your saved meals appear at the top — tap one to fill the form, tweak anything, then
+  log. Saved meals sync with your account.
+- **Instant loading** — the app caches your meals, saved meals, and settings and shows them
+  immediately, refreshing in the background and only updating when something actually changed, so
+  reopening and navigating back feel instant.
 - **Photo kept for free** — the meal photo is retained via its Telegram `file_id` and shown back only
   to you (image bytes are never stored on our side).
 

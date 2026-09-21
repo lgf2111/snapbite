@@ -6,7 +6,9 @@ import { HomeScreen } from './components/HomeScreen.js';
 import { Skeleton } from './components/ui/skeleton';
 import { Toaster } from './components/ui/sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+import type { SettingsView } from './lib/api.js';
 import { type Backend, createBackend } from './lib/backend.js';
+import { cacheKey, getCached, revalidate } from './lib/cache.js';
 
 // Lazy-loaded so they don't bloat the initial (Home) bundle.
 const SettingsScreen = lazy(() =>
@@ -55,15 +57,23 @@ export function App() {
   const [onboardingSkipped, setOnboardingSkipped] = useState(false);
 
   const refreshProfile = () => {
-    backend
-      .getSettings()
+    // Seed instantly from cache (no flash of the onboarding gate on reopen),
+    // then revalidate and only update if the settings actually changed.
+    const cached = getCached<SettingsView>(cacheKey.settings());
+    if (cached) {
+      setTargets(cached.targets ?? null);
+      setHasProfile(Boolean(cached.profile));
+    }
+    revalidate<SettingsView>(cacheKey.settings(), () => backend.getSettings())
       .then((s) => {
         setTargets(s.targets ?? null);
         setHasProfile(Boolean(s.profile));
       })
       .catch(() => {
-        setTargets(null);
-        setHasProfile(false);
+        if (!cached) {
+          setTargets(null);
+          setHasProfile(false);
+        }
       });
   };
 

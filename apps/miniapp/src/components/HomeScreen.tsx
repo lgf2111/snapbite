@@ -1,11 +1,13 @@
 import { type DailyTargets, PROVIDER_PRESETS } from '@snapbite/core';
 import { Camera, Plus, Sparkles, Target } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cacheKey } from '@/lib/cache';
 import type { Backend, RecentMeal } from '@/lib/backend';
 import { hapticNotify } from '@/lib/telegram';
+import { useCachedData } from '@/lib/useCachedData';
 import { cn } from '@/lib/utils';
 import { loadWeekPrefs, weekRange } from '@/lib/weekPrefs';
 import { DateSelector } from './DateSelector.js';
@@ -58,41 +60,36 @@ export function HomeScreen({
 }: HomeScreenProps) {
   const [date, setDate] = useState(todayKey());
   const [view, setView] = useState<'daily' | 'weekly'>('daily');
-  const [meals, setMeals] = useState<RecentMeal[] | null>(null);
-  const [loggedDates, setLoggedDates] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
 
   // Week definition preference (rolling vs calendar Sun/Mon) from Settings.
   const weekPrefs = useMemo(() => loadWeekPrefs(), []);
   const range = useMemo(() => weekRange(date, weekPrefs), [date, weekPrefs]);
 
-  const loadDates = useCallback(() => {
-    backend
-      .mealDates()
-      .then(setLoggedDates)
-      .catch(() => setLoggedDates([]));
-  }, [backend]);
+  // Meals for the current view, served instantly from cache then revalidated.
+  const mealsKey =
+    view === 'weekly' ? cacheKey.mealsRange(range.startKey, range.endKey) : cacheKey.mealsByDate(date);
+  const {
+    data: mealsData,
+    loading: mealsLoading,
+    error,
+    refresh: refreshMeals,
+  } = useCachedData<RecentMeal[]>(mealsKey, () =>
+    view === 'weekly' ? backend.mealsInRange(range.startKey, range.endKey) : backend.mealsByDate(date),
+  );
+  const meals = mealsLoading ? null : (mealsData ?? []);
 
-  const loadMealsForView = useCallback(() => {
-    setMeals(null);
-    setError(null);
-    const p =
-      view === 'weekly'
-        ? backend.mealsInRange(range.startKey, range.endKey)
-        : backend.mealsByDate(date);
-    p.then(setMeals).catch((e: unknown) =>
-      setError(e instanceof Error ? e.message : 'Failed to load'),
-    );
-  }, [backend, view, date, range.startKey, range.endKey]);
+  // Logged days for the calendar dots (cached).
+  const { data: loggedDatesData, refresh: refreshDates } = useCachedData<string[]>(
+    cacheKey.mealDates(),
+    () => backend.mealDates(),
+  );
+  const loggedDates = loggedDatesData ?? [];
 
-  useEffect(() => loadMealsForView(), [loadMealsForView]);
-  useEffect(loadDates, [loadDates]);
-
-  const refresh = () => {
-    loadMealsForView();
-    loadDates();
-  };
+  const refresh = useCallback(() => {
+    refreshMeals();
+    refreshDates();
+  }, [refreshMeals, refreshDates]);
 
   const weekly = view === 'weekly';
   // Weekly targets scale the daily target by the number of days in the range.

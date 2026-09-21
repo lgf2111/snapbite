@@ -10,6 +10,7 @@ import { RotateCcw, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { getCached, revalidate } from '@/lib/cache';
 import { shareOrSaveImage } from '@/lib/share';
 import { renderMealShareCard } from '@/lib/shareCard';
 import {
@@ -112,18 +113,48 @@ export function MealDetailScreen({
   const [sharing, setSharing] = useState(false); // sharing from the preview
   const [cardPreview, setCardPreview] = useState<{ blob: Blob; url: string } | null>(null);
   const [savingFav, setSavingFav] = useState(false);
+  /** The favorite id when this meal is already saved (filled star); null otherwise. */
+  const [savedFavId, setSavedFavId] = useState<string | null>(null);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [favLabel, setFavLabel] = useState('');
 
   useEffect(() => {
-    backend
-      .detail(mealId)
-      .then((d) => {
-        setDetail(d);
-        const loaded = d.foods.map(detailFoodToDraft);
-        setFoods(loaded);
-        setBaseline(JSON.stringify(loaded));
-      })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load'));
+    const apply = (d: MealDetail) => {
+      setDetail(d);
+      const loaded = d.foods.map(detailFoodToDraft);
+      setFoods(loaded);
+      setBaseline(JSON.stringify(loaded));
+    };
+    // Instant from cache (opening a meal you just saw), then revalidate.
+    const cached = getCached<MealDetail>(`meal:${mealId}`);
+    if (cached) apply(cached);
+    revalidate<MealDetail>(`meal:${mealId}`, () => backend.detail(mealId))
+      .then(apply)
+      .catch((e: unknown) => {
+        if (!cached) setError(e instanceof Error ? e.message : 'Failed to load');
+      });
   }, [backend, mealId]);
+
+  // Detect whether this meal is already a saved favorite (filled star).
+  useEffect(() => {
+    if (!detail) return;
+    let active = true;
+    const label = detail.notes?.trim() || detail.foods.map((f) => f.name).join(', ');
+    const kcal = Math.round(detail.total?.energyKcal ?? 0);
+    backend
+      .listFavorites()
+      .then((favs) => {
+        if (!active) return;
+        const match = favs.find(
+          (f) => f.label === label && Math.round(f.meal.total.energyKcal) === kcal,
+        );
+        setSavedFavId(match ? match.id : null);
+      })
+      .catch(() => active && setSavedFavId(null));
+    return () => {
+      active = false;
+    };
+  }, [backend, detail]);
 
   // If opened with an instruction (from the Home row), start the AI edit.
   useEffect(() => {
@@ -257,8 +288,24 @@ export function MealDetailScreen({
     });
   }
 
-  /** Saves the current meal (with any edits) as a reusable favorite. */
-  async function saveAsFavorite() {
+  /** The default favorite name for the current meal. */
+  function defaultFavLabel(): string {
+    return detail?.notes?.trim() || kept.map((f) => f.name).join(', ') || 'Saved meal';
+  }
+
+  /** Star tapped: if already saved, unsave; otherwise open the rename dialog. */
+  function onToggleFavorite() {
+    if (savingFav) return;
+    if (savedFavId) {
+      void unsaveFavorite();
+    } else {
+      setFavLabel(defaultFavLabel());
+      setRenameOpen(true);
+    }
+  }
+
+  /** Saves the current meal as a favorite under the entered name. */
+  async function confirmSaveFavorite() {
     if (!detail || kept.length === 0 || savingFav) return;
     setSavingFav(true);
     const meal: MealResult = {
@@ -268,12 +315,29 @@ export function MealDetailScreen({
       needsConfirmation: false,
       ...(detail.notes ? { notes: detail.notes } : {}),
     };
-    const label = detail.notes?.trim() || kept.map((f) => f.name).join(', ') || 'Saved meal';
+    const label = favLabel.trim() || defaultFavLabel();
     try {
-      await backend.addFavorite(meal, label);
+      const id = await backend.addFavorite(meal, label);
+      setSavedFavId(id);
+      setRenameOpen(false);
       onToast?.('success', 'Saved to your meals');
     } catch (e) {
       onToast?.('error', e instanceof Error ? e.message : 'Could not save meal');
+    } finally {
+      setSavingFav(false);
+    }
+  }
+
+  /** Removes this meal from saved meals (star was filled). */
+  async function unsaveFavorite() {
+    if (!savedFavId || savingFav) return;
+    setSavingFav(true);
+    try {
+      await backend.removeFavorite(savedFavId);
+      setSavedFavId(null);
+      onToast?.('success', 'Removed from saved meals');
+    } catch (e) {
+      onToast?.('error', e instanceof Error ? e.message : 'Could not remove saved meal');
     } finally {
       setSavingFav(false);
     }
@@ -328,7 +392,8 @@ export function MealDetailScreen({
   }
 
   useBackButton(true, () => {
-    if (cardPreview) closeCardPreview();
+    if (renameOpen) setRenameOpen(false);
+    else if (cardPreview) closeCardPreview();
     else if (confirmDelete) setConfirmDelete(false);
     else if (confirmDiscard) setConfirmDiscard(false);
     else discardAndBack();
@@ -383,10 +448,13 @@ export function MealDetailScreen({
               variant="secondary"
               className="flex-1 gap-2"
               disabled={savingFav}
-              onClick={() => void saveAsFavorite()}
+              aria-pressed={savedFavId !== null}
+              onClick={onToggleFavorite}
             >
-              <Star className="size-4" />
-              {savingFav ? 'Saving…' : 'Save meal'}
+              <Star
+                className={cn('size-4', savedFavId !== null && 'fill-current text-primary')}
+              />
+              {savedFavId !== null ? 'Saved' : 'Save meal'}
             </Button>
             <Button
               variant="secondary"
@@ -536,6 +604,39 @@ export function MealDetailScreen({
                 </Button>
                 <Button variant="destructive" disabled={busy !== null} onClick={handleDelete}>
                   {busy === 'deleting' ? 'Deleting…' : 'Delete'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={renameOpen} onOpenChange={(o) => (savingFav ? null : setRenameOpen(o))}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Save this meal</DialogTitle>
+                <DialogDescription>
+                  Name it so you can find and log it again later.
+                </DialogDescription>
+              </DialogHeader>
+              <Input
+                autoFocus
+                value={favLabel}
+                disabled={savingFav}
+                placeholder="e.g. Chicken rice bowl"
+                onChange={(e) => setFavLabel(e.target.value)}
+              />
+              <DialogFooter>
+                <Button
+                  variant="secondary"
+                  disabled={savingFav}
+                  onClick={() => setRenameOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={savingFav || favLabel.trim().length === 0}
+                  onClick={() => void confirmSaveFavorite()}
+                >
+                  {savingFav ? 'Saving…' : 'Save'}
                 </Button>
               </DialogFooter>
             </DialogContent>

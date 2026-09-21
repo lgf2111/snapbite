@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { cacheKey, getCached, revalidate } from '@/lib/cache';
 import { cn } from '@/lib/utils';
 import {
   loadWeekPrefs,
@@ -195,25 +196,31 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [fbEnabled, setFbEnabled] = useState(false);
 
   useEffect(() => {
-    backend
-      .getSettings()
-      .then((s) => {
-        setSettings(s);
-        setPrimaryCfg(cfgFromSettings(s.aiProvider, s.aiModel, s.customBaseUrl, s.customSupportsDetail));
-        if (s.fallbackProvider) {
-          setFbCfg(
-            cfgFromSettings(
-              s.fallbackProvider,
-              s.fallbackModel,
-              s.fallbackBaseUrl,
-              s.fallbackSupportsDetail,
-            ),
-          );
-        }
-        setFbEnabled(Boolean(s.fallbackEnabled));
-        hydrateReminders(s);
-      })
-      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Failed to load settings'));
+    const apply = (s: SettingsView) => {
+      setSettings(s);
+      setPrimaryCfg(cfgFromSettings(s.aiProvider, s.aiModel, s.customBaseUrl, s.customSupportsDetail));
+      if (s.fallbackProvider) {
+        setFbCfg(
+          cfgFromSettings(
+            s.fallbackProvider,
+            s.fallbackModel,
+            s.fallbackBaseUrl,
+            s.fallbackSupportsDetail,
+          ),
+        );
+      }
+      setFbEnabled(Boolean(s.fallbackEnabled));
+      hydrateReminders(s);
+    };
+
+    // Render cached settings instantly, then revalidate in the background.
+    const cached = getCached<SettingsView>(cacheKey.settings());
+    if (cached) apply(cached);
+    revalidate<SettingsView>(cacheKey.settings(), () => backend.getSettings())
+      .then(apply)
+      .catch((e: unknown) => {
+        if (!cached) toast.error(e instanceof Error ? e.message : 'Failed to load settings');
+      });
   }, [backend]);
 
   const isLocal = backend.mode === 'local';

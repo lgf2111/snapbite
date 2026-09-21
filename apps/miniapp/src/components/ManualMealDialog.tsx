@@ -41,12 +41,14 @@ export function ManualMealDialog({
   const [form, setForm] = useState({ ...EMPTY });
   const [busy, setBusy] = useState(false);
   const [favorites, setFavorites] = useState<Favorite[] | null>(null);
-  const [loggingFavId, setLoggingFavId] = useState<string | null>(null);
+  const [showSaved, setShowSaved] = useState(true);
+  const loggingFavId: string | null = null;
 
   // Load saved meals when the dialog opens so the user can re-log one.
   useEffect(() => {
     if (!open) return;
     let active = true;
+    setShowSaved(true);
     backend
       .listFavorites()
       .then((f) => active && setFavorites(f))
@@ -59,26 +61,29 @@ export function ManualMealDialog({
   const num = (v: string) => (v.trim() === '' ? 0 : Number(v));
   const canSave = form.name.trim().length > 0 && !busy;
 
-  /** Logs a copy of a saved meal to today (no AI, no key needed). */
-  async function logFavorite(fav: Favorite) {
+  /**
+   * Prefills the form from a saved meal so the user can tweak it before logging
+   * (edit-then-log). Totals come from the favorite's meal total.
+   */
+  function pickFavorite(fav: Favorite) {
     if (busy || loggingFavId) return;
-    setLoggingFavId(fav.id);
-    try {
-      await backend.logManual(fav.meal);
-      onToast?.('success', `Logged ${fav.label}`);
-      onOpenChange(false);
-      onLogged();
-    } catch (e) {
-      onToast?.('error', e instanceof Error ? e.message : 'Could not log meal');
-    } finally {
-      setLoggingFavId(null);
-    }
+    const t = fav.meal.total;
+    setForm({
+      name: fav.label,
+      energyKcal: String(Math.round(t.energyKcal)),
+      proteinG: String(Math.round(t.proteinG)),
+      carbsG: String(Math.round(t.carbsG)),
+      fatG: String(Math.round(t.fatG)),
+    });
+    // Fold the picker away so the editable form is front-and-center.
+    setShowSaved(false);
   }
 
   async function removeFavorite(fav: Favorite) {
     try {
       await backend.removeFavorite(fav.id);
       setFavorites((prev) => (prev ? prev.filter((f) => f.id !== fav.id) : prev));
+      onToast?.('success', `Removed ${fav.label}`);
     } catch (e) {
       onToast?.('error', e instanceof Error ? e.message : 'Could not remove saved meal');
     }
@@ -131,7 +136,7 @@ export function ManualMealDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          {favorites && favorites.length > 0 && (
+          {showSaved && favorites && favorites.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <Label>Saved meals</Label>
               <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
@@ -140,14 +145,14 @@ export function ManualMealDialog({
                     <button
                       type="button"
                       disabled={busy || loggingFavId !== null}
-                      onClick={() => void logFavorite(fav)}
+                      onClick={() => pickFavorite(fav)}
                       className="border-input hover:bg-accent flex min-w-0 flex-1 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50"
                     >
-                      <Star className="text-primary size-4 shrink-0" />
+                      <Star className="text-primary size-4 shrink-0 fill-current" />
                       <span className="min-w-0 flex-1 truncate">{fav.label}</span>
                       {fav.energyKcal != null && (
                         <span className="text-muted-foreground shrink-0 text-xs">
-                          {loggingFavId === fav.id ? 'Logging…' : `${Math.round(fav.energyKcal)} kcal`}
+                          {Math.round(fav.energyKcal)} kcal
                         </span>
                       )}
                     </button>
@@ -163,7 +168,9 @@ export function ManualMealDialog({
                   </div>
                 ))}
               </div>
-              <p className="text-muted-foreground text-xs">Tap a saved meal to log it again.</p>
+              <p className="text-muted-foreground text-xs">
+                Tap a saved meal to fill it in below — tweak anything, then log.
+              </p>
             </div>
           )}
 

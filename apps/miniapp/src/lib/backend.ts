@@ -8,6 +8,7 @@ import {
   type SettingsView,
   type UserExport,
 } from './api.js';
+import { cacheKey, clearCache, invalidate, setCached } from './cache.js';
 import { readConfig } from './config.js';
 import {
   clearMeals,
@@ -117,15 +118,18 @@ export function createBackend(): Backend {
       mode: 'worker',
       async logManual(meal) {
         await api.saveMeal(meal);
+        invalidate(cacheKey.mealsPrefix);
       },
       async update(id, meal) {
         await api.updateMeal(id, meal);
+        invalidate(cacheKey.mealsPrefix);
       },
       reviseDraft(id, instruction) {
         return api.reviseMeal(id, instruction);
       },
       async remove(id) {
         await api.deleteMeal(id);
+        invalidate(cacheKey.mealsPrefix);
       },
       async recent() {
         const { meals } = await api.listMeals();
@@ -159,10 +163,12 @@ export function createBackend(): Backend {
       },
       async addFavorite(meal, label) {
         const { id } = await api.addFavorite(meal, label);
+        invalidate(cacheKey.favorites());
         return id;
       },
       async removeFavorite(id) {
         await api.removeFavorite(id);
+        invalidate(cacheKey.favorites());
       },
       getSettings() {
         return api.getSettings();
@@ -170,23 +176,32 @@ export function createBackend(): Backend {
       async saveApiKey(apiKey, aiProvider, aiModel, custom) {
         await api.saveApiKey(apiKey, aiProvider, aiModel, custom);
         // Re-fetch so profile/targets/custom fields all round-trip correctly.
-        return api.getSettings();
+        const s = await api.getSettings();
+        setCached(cacheKey.settings(), s);
+        return s;
       },
       async saveProfile(profile) {
         const res = await api.saveProfile(profile);
+        invalidate(cacheKey.settings());
         return res.targets;
       },
       async saveFallback(apiKey, aiProvider, aiModel, custom) {
         await api.saveFallback(apiKey, aiProvider, aiModel, custom);
-        return api.getSettings();
+        const s = await api.getSettings();
+        setCached(cacheKey.settings(), s);
+        return s;
       },
       async setFallbackEnabled(enabled) {
         await api.setFallbackEnabled(enabled);
-        return api.getSettings();
+        const s = await api.getSettings();
+        setCached(cacheKey.settings(), s);
+        return s;
       },
       async removeFallback() {
         await api.removeFallback();
-        return api.getSettings();
+        const s = await api.getSettings();
+        setCached(cacheKey.settings(), s);
+        return s;
       },
       exportData() {
         return api.exportData();
@@ -196,13 +211,16 @@ export function createBackend(): Backend {
       },
       async deleteAccount() {
         await api.deleteAccount();
+        clearCache();
       },
       photoUrl(id) {
         return api.photoUrl(id);
       },
       async saveReminders(enabled, times) {
         await api.saveReminders(enabled, times);
-        return api.getSettings();
+        const s = await api.getSettings();
+        setCached(cacheKey.settings(), s);
+        return s;
       },
       async sendFeedback(message) {
         await api.sendFeedback(message);
