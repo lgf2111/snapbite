@@ -292,12 +292,18 @@ Do NOT run long-lived dev servers via automation (they block). If you need one, 
 
 ### Live URLs & infra (SnapBite — cutover DONE)
 - Worker: `snapbite-worker` → `https://snapbite-worker.lgf2111.workers.dev`
-- Mini App (Pages): project `snapbite` → **`https://snapbite-8f7.pages.dev`** (the bare
-  `snapbite.pages.dev` belongs to a different account — always use the `-8f7` URL; it's what
-  `MINI_APP_URL` and both BotFather URLs point to).
+- Mini App (Pages): project `snapbite`.
+  - Canonical URL: **`https://snapbite.leeguanfeng.com`** (custom domain; DNS on Namecheap via a
+    `snapbite` CNAME → the Pages `-8f7` target, SSL issued by Cloudflare Pages). `MINI_APP_URL` and
+    both BotFather URLs point here.
+  - Direct Pages URL still works: `https://snapbite-8f7.pages.dev` (the bare `snapbite.pages.dev`
+    belongs to a different account — never use it).
+  - The same URL serves a **public landing page** in a normal browser (static HTML in
+    `apps/miniapp/index.html`) and the **Mini App** inside Telegram (`main.tsx` mounts React only
+    when `window.Telegram` is present).
 - D1: `snapbite-db`, id `6c331800-c9a5-4c32-b5b4-17190c23dd6c`
 - Bot: `@SnapBiteAI_bot` — webhook → the worker; Menu Button + Configure Mini App both set to
-  the `-8f7` Pages URL; avatar = `apps/miniapp/public/icon.png`.
+  `https://snapbite.leeguanfeng.com`; avatar = `apps/miniapp/public/icon.png`.
 
 RETIRED (kept temporarily as backup — safe to delete once migration is confirmed stable):
 - Old worker `foodlog-worker`, old Pages `foodlog` (`foodlog-7f5.pages.dev`), old bot `@foodlog2111_bot`.
