@@ -36,6 +36,10 @@ shown as an **estimate** and is always **editable**.
   to the specific one you want to change.
 - **Full edit in the Mini App** — review, edit, and correct any logged meal; "Update with AI" lets
   you revise from a plain-language instruction with a review-before-save step.
+- **Share or save a meal card** — from a meal's detail view, generate a shareable image (the photo
+  plus its name, calories, and macros) to post to Instagram/socials via the native share sheet, or
+  save it to your device. The card is drawn on a canvas in-app (no extra libraries), so it stays
+  lightweight.
 
 ## Goals & targets
 
