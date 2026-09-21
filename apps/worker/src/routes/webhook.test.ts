@@ -827,8 +827,8 @@ describe('/setup conversational onboarding', () => {
     await app.request('/webhook', post({ message: { text: '/setup', ...chat(tgId) } }), env);
     expect(lastText(sent).toLowerCase()).toContain('male');
 
-    // Answer each step in order: sex, age, height, weight, activity, goal.
-    const answers = ['male', '28', '180cm', '75kg', '3', '2'];
+    // Answer each step in order: sex, birthday, height, weight, activity, goal.
+    const answers = ['male', '1996-01-01', '180cm', '75kg', '3', '2'];
     for (const a of answers) {
       await app.request('/webhook', post({ message: { text: a, ...chat(tgId) } }), env);
     }
@@ -845,7 +845,7 @@ describe('/setup conversational onboarding', () => {
       (await getSettings(createSettingsDb(env.DB), user.id))?.preferencesJson,
     );
     expect((prefs.profile as { sex?: string } | undefined)?.sex).toBe('male');
-    expect((prefs.profile as { age?: number } | undefined)?.age).toBe(28);
+    expect((prefs.profile as { birthDate?: string } | undefined)?.birthDate).toBe('1996-01-01');
     // Onboarding state is cleared on completion.
     expect(prefs.onboarding).toBeUndefined();
   });

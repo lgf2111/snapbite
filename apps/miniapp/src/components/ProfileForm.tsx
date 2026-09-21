@@ -1,5 +1,6 @@
 import {
   type ActivityLevel,
+  ageFromBirthDate,
   computeTargets,
   feetInchesToCm,
   type Goal,
@@ -83,13 +84,27 @@ const num = (v: string, fallback = 0): number => {
 };
 
 /**
+ * Seeds the birth-date input for an existing profile. Prefers a stored
+ * `birthDate`; for legacy profiles that only have `age`, approximates a birth
+ * date (Jan 1 of the implied year) so they aren't blocked when re-editing.
+ */
+function seedBirthDate(initial: UserProfile | null): string {
+  if (initial?.birthDate) return initial.birthDate;
+  if (initial?.age != null) {
+    const year = new Date().getFullYear() - initial.age;
+    return `${year}-01-01`;
+  }
+  return '';
+}
+
+/**
  * Profile + goal form shared by onboarding and Settings. Collects sex, age,
  * height, weight (in the chosen units), activity, and goal; advanced mode adds
  * manual calorie/macro overrides. Shows a live preview of the computed targets.
  */
 export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileFormProps) {
   const [sex, setSex] = useState<Sex>(initial?.sex ?? 'male');
-  const [age, setAge] = useState<number>(initial?.age ?? 30);
+  const [birthDate, setBirthDate] = useState<string>(() => seedBirthDate(initial));
   const [activity, setActivity] = useState<ActivityLevel>(initial?.activity ?? 'moderate');
   const [goal, setGoal] = useState<Goal>(initial?.goal ?? 'maintain');
   const [units, setUnits] = useState<Units>(initial?.units ?? 'metric');
@@ -113,11 +128,20 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
     initial?.macroOverride ? String(initial.macroOverride.fatG) : '',
   );
 
+  // Age derived from the entered birth date (auto-updating), when valid.
+  const derivedAge = useMemo(() => (birthDate ? ageFromBirthDate(birthDate) : null), [birthDate]);
+  const birthDateValid = derivedAge != null && derivedAge >= 13 && derivedAge <= 100;
+
   const profile = useMemo<UserProfile>(() => {
     const macroFilled = advanced && pOverride && cOverride && fOverride;
+    // Prefer birthDate; fall back to the initial legacy age so the profile
+    // stays valid while the user is still editing an incomplete date.
+    const dob = birthDateValid
+      ? { birthDate }
+      : { age: initial?.age ?? 30 };
     return {
       sex,
-      age,
+      ...dob,
       heightCm,
       weightKg,
       activity,
@@ -135,7 +159,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
           }
         : {}),
     };
-  }, [sex, age, heightCm, weightKg, activity, goal, units, advanced, calOverride, pOverride, cOverride, fOverride]);
+  }, [sex, birthDate, birthDateValid, initial?.age, heightCm, weightKg, activity, goal, units, advanced, calOverride, pOverride, cOverride, fOverride]);
 
   const targets = useMemo(() => computeTargets(profile), [profile]);
 
@@ -163,15 +187,18 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
 
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="age">Age</Label>
-          <NumberField
-            id="age"
-            min={13}
-            max={100}
-            fallback={30}
-            value={age}
-            onCommit={(v) => setAge(Math.round(v))}
+          <Label htmlFor="birthDate">Date of birth</Label>
+          <Input
+            id="birthDate"
+            type="date"
+            min="1900-01-01"
+            max={new Date().toISOString().slice(0, 10)}
+            value={birthDate}
+            onChange={(e) => setBirthDate(e.target.value)}
           />
+          <span className="text-muted-foreground text-xs">
+            {birthDateValid ? `Age ${derivedAge} · stays up to date` : 'Used to compute your age'}
+          </span>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="weight">Weight ({imperial ? 'lb' : 'kg'})</Label>

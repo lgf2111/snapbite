@@ -93,25 +93,81 @@ const optionalMacroOverride = z
   })
   .optional();
 
-export const UserProfile = z.object({
-  sex: Sex,
-  age: z.number().int().min(13).max(100),
-  /** Canonical height in centimeters. */
-  heightCm: z.number().finite().positive(),
-  /** Canonical weight in kilograms. */
-  weightKg: z.number().finite().positive(),
-  activity: ActivityLevel,
-  goal: Goal,
-  /** Display unit preference (math is always metric). */
-  units: Units.default('metric'),
-  /** simple = presets only; advanced = manual overrides available. */
-  mode: ProfileMode.default('simple'),
-  /** Advanced: override the computed calorie target. */
-  calorieTargetOverride: z.number().finite().positive().optional(),
-  /** Advanced: override the computed macro grams. */
-  macroOverride: optionalMacroOverride,
-});
+/** ISO date-of-birth string `YYYY-MM-DD`, within a sane range. */
+export const BirthDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'birthDate must be YYYY-MM-DD')
+  .refine((s) => {
+    const a = ageFromBirthDate(s);
+    return a != null && a >= 13 && a <= 100;
+  }, 'birthDate must correspond to an age between 13 and 100');
+
+export const UserProfile = z
+  .object({
+    sex: Sex,
+    /**
+     * Date of birth (`YYYY-MM-DD`), preferred so age auto-updates over time.
+     * Optional for back-compat with older profiles that stored `age` only.
+     */
+    birthDate: BirthDate.optional(),
+    /**
+     * Legacy static age. Kept for profiles saved before `birthDate` existed.
+     * When both are present, `birthDate` wins (see {@link profileAge}).
+     */
+    age: z.number().int().min(13).max(100).optional(),
+    /** Canonical height in centimeters. */
+    heightCm: z.number().finite().positive(),
+    /** Canonical weight in kilograms. */
+    weightKg: z.number().finite().positive(),
+    activity: ActivityLevel,
+    goal: Goal,
+    /** Display unit preference (math is always metric). */
+    units: Units.default('metric'),
+    /** simple = presets only; advanced = manual overrides available. */
+    mode: ProfileMode.default('simple'),
+    /** Advanced: override the computed calorie target. */
+    calorieTargetOverride: z.number().finite().positive().optional(),
+    /** Advanced: override the computed macro grams. */
+    macroOverride: optionalMacroOverride,
+  })
+  // A profile must carry age somehow: either a birthDate or a legacy age.
+  .refine((p) => p.birthDate != null || p.age != null, {
+    message: 'Provide birthDate (preferred) or age',
+    path: ['birthDate'],
+  });
 export type UserProfile = z.infer<typeof UserProfile>;
+
+/** Current age in whole years from an ISO `YYYY-MM-DD` birth date, or null. */
+export function ageFromBirthDate(birthDate: string, now: Date = new Date()): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDate);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  let age = now.getFullYear() - y;
+  // Not had this year's birthday yet? subtract one.
+  const beforeBirthday =
+    now.getMonth() + 1 < mo || (now.getMonth() + 1 === mo && now.getDate() < d);
+  if (beforeBirthday) age -= 1;
+  return age;
+}
+
+/**
+ * The age to use in calculations: derived from `birthDate` when present (so it
+ * auto-increments), else the legacy stored `age`. Returns 0 if neither is set
+ * (shouldn't happen given the schema refinement).
+ */
+export function profileAge(
+  profile: Pick<UserProfile, 'age' | 'birthDate'>,
+  now: Date = new Date(),
+): number {
+  if (profile.birthDate) {
+    const a = ageFromBirthDate(profile.birthDate, now);
+    if (a != null) return a;
+  }
+  return profile.age ?? 0;
+}
 
 /** Computed (or overridden) daily targets. */
 export interface DailyTargets {
@@ -145,15 +201,20 @@ export const feetInchesToCm = (feet: number, inches: number): number =>
 
 // --- the math --------------------------------------------------------------
 
-/** Basal metabolic rate via Mifflin-St Jeor (kcal/day). */
-export function computeBmr(profile: Pick<UserProfile, 'sex' | 'age' | 'heightCm' | 'weightKg'>): number {
-  const base = 10 * profile.weightKg + 6.25 * profile.heightCm - 5 * profile.age;
+/**
+ * Basal metabolic rate via Mifflin-St Jeor (kcal/day). Age is derived from
+ * `birthDate` when present (auto-updating), else the legacy `age`.
+ */
+export function computeBmr(
+  profile: Pick<UserProfile, 'sex' | 'age' | 'birthDate' | 'heightCm' | 'weightKg'>,
+): number {
+  const base = 10 * profile.weightKg + 6.25 * profile.heightCm - 5 * profileAge(profile);
   return base + (profile.sex === 'male' ? 5 : -161);
 }
 
 /** Total daily energy expenditure = BMR × activity factor (kcal/day). */
 export function computeTdee(
-  profile: Pick<UserProfile, 'sex' | 'age' | 'heightCm' | 'weightKg' | 'activity'>,
+  profile: Pick<UserProfile, 'sex' | 'age' | 'birthDate' | 'heightCm' | 'weightKg' | 'activity'>,
 ): number {
   return computeBmr(profile) * ACTIVITY_FACTORS[profile.activity];
 }

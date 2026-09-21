@@ -2,6 +2,7 @@ import {
   DEFAULT_REMINDER_TIMES,
   FEEDBACK_MAX_LEN,
   PROVIDER_PRESETS,
+  profileAge,
   type ProviderId,
   type UserProfile,
 } from '@snapbite/core';
@@ -472,7 +473,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             <>
               <p className="text-muted-foreground text-sm">
                 {GOAL_LABEL[settings.profile.goal] ?? settings.profile.goal} ·{' '}
-                {settings.profile.sex}, {settings.profile.age}y
+                {settings.profile.sex}, {profileAge(settings.profile)}y
               </p>
               <MacroLine
                 energyKcal={settings.targets.energyKcal}

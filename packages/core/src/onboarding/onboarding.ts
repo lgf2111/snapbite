@@ -10,6 +10,7 @@
  */
 import {
   type ActivityLevel,
+  ageFromBirthDate,
   feetInchesToCm,
   type Goal,
   GOAL_LABELS,
@@ -22,7 +23,7 @@ import {
 /** Ordered onboarding steps. The last step, once answered, completes the flow. */
 export const ONBOARDING_STEPS = [
   'sex',
-  'age',
+  'birthday',
   'height',
   'weight',
   'activity',
@@ -33,7 +34,8 @@ export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 /** Partial profile accumulated across answers (all optional until complete). */
 export interface OnboardingPartial {
   sex?: Sex;
-  age?: number;
+  /** ISO YYYY-MM-DD; age is derived from this so it stays current. */
+  birthDate?: string;
   heightCm?: number;
   weightKg?: number;
   activity?: ActivityLevel;
@@ -62,8 +64,8 @@ export function promptFor(step: OnboardingStep): string {
   switch (step) {
     case 'sex':
       return "Let's set up your goal. First — what's your sex? Reply *male* or *female*.";
-    case 'age':
-      return 'How old are you? (in years, 13–100)';
+    case 'birthday':
+      return "What's your date of birth? Send it as `YYYY-MM-DD` (e.g. 1998-04-25). I'll keep your age up to date automatically.";
     case 'height':
       return "What's your height? e.g. `175cm` or `5'9`.";
     case 'weight':
@@ -95,11 +97,22 @@ function parseSex(text: string): ParseResult<Sex> {
   return { ok: false, error: 'Please reply *male* or *female* (or m/f).' };
 }
 
-function parseAge(text: string): ParseResult<number> {
-  const n = Number.parseInt(text.replace(/[^\d]/g, ''), 10);
-  if (!Number.isFinite(n)) return { ok: false, error: 'Please send your age as a number, e.g. 28.' };
-  if (n < 13 || n > 100) return { ok: false, error: 'Age must be between 13 and 100.' };
-  return { ok: true, value: n };
+/** Accepts `YYYY-MM-DD` (also tolerates `/` or `.` separators). Returns ISO. */
+function parseBirthday(text: string): ParseResult<string> {
+  const t = text.trim().replace(/[./]/g, '-');
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
+  if (!m) {
+    return { ok: false, error: 'Please send your birth date as YYYY-MM-DD, e.g. 1998-04-25.' };
+  }
+  const iso = `${m[1]}-${m[2]!.padStart(2, '0')}-${m[3]!.padStart(2, '0')}`;
+  const age = ageFromBirthDate(iso);
+  if (age == null) {
+    return { ok: false, error: "That date doesn't look valid — try YYYY-MM-DD, e.g. 1998-04-25." };
+  }
+  if (age < 13 || age > 100) {
+    return { ok: false, error: 'Your age (from that date) must be between 13 and 100.' };
+  }
+  return { ok: true, value: iso };
 }
 
 /** Accepts `175cm`, `175`, `1.75m`, `5'9`, `5ft9`, `5 9`. Returns cm. */
@@ -192,10 +205,10 @@ export function applyAnswer(
       partial.sex = r.value;
       break;
     }
-    case 'age': {
-      const r = parseAge(text);
+    case 'birthday': {
+      const r = parseBirthday(text);
       if (!r.ok) return r;
-      partial.age = r.value;
+      partial.birthDate = r.value;
       break;
     }
     case 'height': {
@@ -248,7 +261,7 @@ export function applyAnswer(
 export function buildProfile(partial: OnboardingPartial): UserProfile | null {
   const parsed = UserProfile.safeParse({
     sex: partial.sex,
-    age: partial.age,
+    birthDate: partial.birthDate,
     heightCm: partial.heightCm,
     weightKg: partial.weightKg,
     activity: partial.activity,
