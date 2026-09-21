@@ -19,14 +19,23 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.19.0',
+    date: '2026-09-16',
+    notes: [
+      '✅ We’ve moved! SnapBite now lives on a new bot: @SnapBiteAI_bot',
+      '👉 Open it now and press Start: https://t.me/SnapBiteAI_bot',
+      'Your meals, targets, settings and AI key are already there — nothing to re-enter',
+      '⚠️ This old bot is being retired and will stop working — please switch over now',
+    ],
+  },
+  {
     version: '0.18.0',
     date: '2026-09-16',
     notes: [
       '🔧 Heads up: we’re moving SnapBite to a new home over the next little while',
       '⏳ Expect brief downtime — if a photo doesn’t log, wait a bit and try again',
       '👉 We’re moving to a new bot: @SnapBiteAI_bot — please open it and press Start',
-      '✅ Your meals, targets, settings and AI key all come with you automatically — nothing to re-enter',
-      '🙏 This bot stops working after the move, so switch over when you see this',
+      'Your meals, targets, settings and AI key all come with you automatically',
     ],
   },
   {
