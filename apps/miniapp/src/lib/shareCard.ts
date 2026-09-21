@@ -231,18 +231,29 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   const pad = 72;
   const contentW = W - pad * 2;
 
-  // --- Title (single line, truncated if long) ------------------------------
+  // --- Title: shrink font to fit, then truncate as a last resort -----------
+  // Guarantees the whole (possibly ellipsized) title always fits within the
+  // content width, so it never runs off the edge of the card.
   ctx.fillStyle = COLOR.ink;
-  ctx.font = `800 64px ${FONT}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   const titleY = photoH + 40;
-  ctx.fillText(truncateToWidth(ctx, input.title || 'Meal', contentW), pad, titleY);
+  const rawTitle = (input.title || 'Meal').trim();
+  let titleSize = 64;
+  const minTitleSize = 40;
+  ctx.font = `800 ${titleSize}px ${FONT}`;
+  while (titleSize > minTitleSize && ctx.measureText(rawTitle).width > contentW) {
+    titleSize -= 2;
+    ctx.font = `800 ${titleSize}px ${FONT}`;
+  }
+  // Even at the smallest size it may still be too long — truncate to fit.
+  const titleText = truncateToWidth(ctx, rawTitle, contentW);
+  ctx.fillText(titleText, pad, titleY);
 
   // --- Hero calories -------------------------------------------------------
   // Two clearly separated rows so nothing overlaps:
   //   row 1: flame chip + "CALORIES" label
-  //   row 2: big number + "cal" unit (with a comfortable gap)
+  //   row 2: big number + "kcal" unit (with a comfortable gap)
   const kcal = Math.round(input.calories);
 
   // Row 1 — header.
@@ -253,10 +264,16 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   ctx.beginPath();
   ctx.arc(chipCx, headerY, chipR, 0, Math.PI * 2);
   ctx.fill();
-  ctx.font = `52px ${FONT}`;
+  // Emoji don't sit on the geometric center with textBaseline alone; using
+  // alphabetic baseline + a measured vertical nudge centers it in the chip.
+  ctx.font = `48px ${FONT}`;
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('🔥', chipCx, headerY + 2);
+  ctx.textBaseline = 'alphabetic';
+  const flameMetrics = ctx.measureText('🔥');
+  const flameH =
+    (flameMetrics.actualBoundingBoxAscent || 34) + (flameMetrics.actualBoundingBoxDescent || 6);
+  const flameBaseline = headerY + flameH / 2 - (flameMetrics.actualBoundingBoxDescent || 6);
+  ctx.fillText('🔥', chipCx, flameBaseline);
 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -269,12 +286,17 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = COLOR.ink;
-  ctx.font = `800 138px ${FONT}`;
-  ctx.fillText(String(kcal), pad, numBaseline);
-  const numW = ctx.measureText(String(kcal)).width;
+  const numFont = `800 138px ${FONT}`;
+  ctx.font = numFont;
+  const numText = String(kcal);
+  ctx.fillText(numText, pad, numBaseline);
+  // Measure with the SAME font that drew the number, then place "kcal" after a
+  // clear gap so they never overlap.
+  ctx.font = numFont;
+  const numW = ctx.measureText(numText).width;
   ctx.fillStyle = COLOR.kcal;
   ctx.font = `700 50px ${FONT}`;
-  ctx.fillText('cal', pad + numW + 40, numBaseline);
+  ctx.fillText('kcal', pad + numW + 48, numBaseline);
 
   // --- Macro pills row -----------------------------------------------------
   const pillY = numBaseline + 70;
