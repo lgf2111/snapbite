@@ -118,7 +118,10 @@ export function HomeScreen({
 
       {targets ? (
         <Card>
-          <CardContent className="grid grid-cols-2 place-items-center gap-x-2 gap-y-4">
+          <CardContent
+            className="place-items-center gap-x-2 gap-y-4"
+            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}
+          >
             <ProgressRing
               consumed={consumed.energyKcal}
               target={targets.energyKcal}
