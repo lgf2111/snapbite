@@ -108,7 +108,9 @@ export function MealDetailScreen({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
-  const [cardBusy, setCardBusy] = useState<'share' | null>(null);
+  const [cardBusy, setCardBusy] = useState(false); // generating the preview
+  const [sharing, setSharing] = useState(false); // sharing from the preview
+  const [cardPreview, setCardPreview] = useState<{ blob: Blob; url: string } | null>(null);
 
   useEffect(() => {
     backend
@@ -126,6 +128,13 @@ export function MealDetailScreen({
   useEffect(() => {
     if (initialAiInstruction && detail) setAiOpen(true);
   }, [initialAiInstruction, detail]);
+
+  // Release the preview object URL if we unmount while it's still open.
+  useEffect(() => {
+    return () => {
+      if (cardPreview) URL.revokeObjectURL(cardPreview.url);
+    };
+  }, [cardPreview]);
 
   // Dirty when the draft (incl. pending removals) differs from the loaded meal.
   const dirty = useMemo(() => JSON.stringify(foods) !== baseline, [foods, baseline]);
@@ -247,17 +256,45 @@ export function MealDetailScreen({
     });
   }
 
-  async function handleShareCard() {
+  /** Generates the card and opens a preview so the user can see it first. */
+  async function openCardPreview() {
     if (cardBusy) return;
-    setCardBusy('share');
+    setCardBusy(true);
     try {
       const blob = await buildCardBlob();
-      const result = await shareOrSaveImage(blob, 'snapbite-meal.png', 'My meal, logged with SnapBite');
-      if (result === 'downloaded') onToast?.('success', 'Image saved');
+      const url = URL.createObjectURL(blob);
+      setCardPreview({ blob, url });
     } catch (e) {
       onToast?.('error', e instanceof Error ? e.message : 'Could not create image');
     } finally {
-      setCardBusy(null);
+      setCardBusy(false);
+    }
+  }
+
+  /** Closes the preview and releases the object URL. */
+  function closeCardPreview() {
+    setCardPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+  }
+
+  /** Shares the previewed card via the native sheet (or downloads as fallback). */
+  async function shareFromPreview() {
+    if (!cardPreview || sharing) return;
+    setSharing(true);
+    try {
+      const result = await shareOrSaveImage(
+        cardPreview.blob,
+        'snapbite-meal.png',
+        'My meal, logged with SnapBite',
+      );
+      if (result === 'downloaded') onToast?.('success', 'Image saved');
+      if (result !== 'cancelled') closeCardPreview();
+    } catch (e) {
+      onToast?.('error', e instanceof Error ? e.message : 'Could not share');
+    } finally {
+      setSharing(false);
     }
   }
 
@@ -268,7 +305,8 @@ export function MealDetailScreen({
   }
 
   useBackButton(true, () => {
-    if (confirmDelete) setConfirmDelete(false);
+    if (cardPreview) closeCardPreview();
+    else if (confirmDelete) setConfirmDelete(false);
     else if (confirmDiscard) setConfirmDiscard(false);
     else discardAndBack();
   });
@@ -316,15 +354,15 @@ export function MealDetailScreen({
             />
           )}
 
-          {/* Share a composed image of this meal (native sheet incl. Save). */}
+          {/* Preview the composed image, then share from the preview dialog. */}
           <Button
             variant="secondary"
             className="w-full gap-2"
-            disabled={cardBusy !== null}
-            onClick={() => void handleShareCard()}
+            disabled={cardBusy}
+            onClick={() => void openCardPreview()}
           >
             <Share2 className="size-4" />
-            {cardBusy === 'share' ? 'Preparing…' : 'Share meal card'}
+            {cardBusy ? 'Preparing…' : 'Share meal card'}
           </Button>
 
           <Card>
@@ -464,6 +502,36 @@ export function MealDetailScreen({
                 </Button>
                 <Button variant="destructive" disabled={busy !== null} onClick={handleDelete}>
                   {busy === 'deleting' ? 'Deleting…' : 'Delete'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={cardPreview !== null}
+            onOpenChange={(open) => {
+              if (!open) closeCardPreview();
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Share this meal</DialogTitle>
+                <DialogDescription>Preview your meal card, then share it.</DialogDescription>
+              </DialogHeader>
+              {cardPreview && (
+                <img
+                  src={cardPreview.url}
+                  alt="Meal card preview"
+                  className="mx-auto max-h-[60vh] w-auto rounded-xl border"
+                />
+              )}
+              <DialogFooter>
+                <Button variant="secondary" onClick={closeCardPreview} disabled={sharing}>
+                  Cancel
+                </Button>
+                <Button className="gap-2" onClick={() => void shareFromPreview()} disabled={sharing}>
+                  <Share2 className="size-4" />
+                  {sharing ? 'Sharing…' : 'Share'}
                 </Button>
               </DialogFooter>
             </DialogContent>
