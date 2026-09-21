@@ -510,7 +510,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           </div>
           <p className="text-muted-foreground text-xs">
             A daily Telegram nudge to log each meal. Toggle the ones you want and set their times —
-            you'll be reminded once per slot per day, in your device's timezone.
+            you'll be reminded once per slot per day, in your device's timezone. Times snap to the
+            nearest {REMINDER_STEP_MINUTES} minutes ({REMINDER_STEP_MINUTES}-min steps, e.g. 8:00 /
+            8:15 / 8:30), because reminders are checked every {REMINDER_STEP_MINUTES} minutes — so a
+            time like 8:07 rounds to 8:00.
           </p>
           <div className="flex flex-col gap-2 pt-1">
             {(['breakfast', 'lunch', 'dinner'] as const).map((label) => (

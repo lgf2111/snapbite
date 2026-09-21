@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run",
-    "deploy": "wrangler pages deploy dist --project-name=snapbite --branch=main --commit-dirty=true"
+    "build:prod": "VITE_WORKER_URL=https://snapbite-worker.lgf2111.workers.dev pnpm build",
+    "deploy": "pnpm build:prod && node -e \"const fs=require('fs');const dir='dist/assets';const hit=fs.readdirSync(dir).some(f=>f.endsWith('.js')&&fs.readFileSync(dir+'/'+f,'utf8').includes('snapbite-worker.lgf2111.workers.dev'));if(!hit){console.error('\\nABORT: built bundle has no worker URL baked in (would deploy in mock/demo mode). Set VITE_WORKER_URL.');process.exit(1)}console.log('worker URL baked in ✓')\" && wrangler pages deploy dist --project-name=snapbite --branch=main --commit-dirty=true"
   },
   "dependencies": {
     "@snapbite/core": "workspace:*",

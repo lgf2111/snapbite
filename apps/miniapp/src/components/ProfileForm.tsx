@@ -185,31 +185,32 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
         <Segmented value={sex} onChange={setSex} options={SEXES} />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="birthDate">Date of birth</Label>
-          <Input
-            id="birthDate"
-            type="date"
-            min="1900-01-01"
-            max={new Date().toISOString().slice(0, 10)}
-            value={birthDate}
-            onChange={(e) => setBirthDate(e.target.value)}
-          />
-          <span className="text-muted-foreground text-xs">
-            {birthDateValid ? `Age ${derivedAge} · stays up to date` : 'Used to compute your age'}
-          </span>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="weight">Weight ({imperial ? 'lb' : 'kg'})</Label>
-          <NumberField
-            id="weight"
-            min={1}
-            fallback={imperial ? 165 : 75}
-            value={imperial ? Math.round(kgToLb(weightKg)) : Math.round(weightKg)}
-            onCommit={(v) => setWeightKg(imperial ? lbToKg(v) : v)}
-          />
-        </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="birthDate">Date of birth</Label>
+        <Input
+          id="birthDate"
+          type="date"
+          min="1900-01-01"
+          max={new Date().toISOString().slice(0, 10)}
+          value={birthDate}
+          onChange={(e) => setBirthDate(e.target.value)}
+          className="w-full"
+        />
+        <span className="text-muted-foreground text-xs">
+          {birthDateValid ? `Age ${derivedAge} · stays up to date` : 'Used to compute your age'}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="weight">Weight ({imperial ? 'lb' : 'kg'})</Label>
+        <NumberField
+          id="weight"
+          min={1}
+          fallback={imperial ? 165 : 75}
+          value={imperial ? Math.round(kgToLb(weightKg)) : Math.round(weightKg)}
+          onCommit={(v) => setWeightKg(imperial ? lbToKg(v) : v)}
+          className="w-28"
+        />
       </div>
 
       <div className="flex flex-col gap-1.5">
