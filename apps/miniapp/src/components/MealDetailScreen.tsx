@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { MealDetail } from '@/lib/api';
-import type { Backend } from '@/lib/backend';
+import type { Backend, RecentMeal } from '@/lib/backend';
 import { hapticImpact } from '@/lib/telegram';
 import { useBackButton, useMainButton } from '@/lib/useTelegramButtons';
 import { cn } from '@/lib/utils';
@@ -35,6 +35,8 @@ type ToastKind = 'success' | 'error' | 'info';
 interface MealDetailScreenProps {
   backend: Backend;
   mealId: string;
+  /** The meal summary from Home, used to render instantly (no loading flash). */
+  initialMeal?: RecentMeal | null;
   onBack: () => void;
   onChanged: () => void;
   onToast?: (kind: ToastKind, message: string) => void;
@@ -92,18 +94,58 @@ function mealFoodToDraft(mf: MealResult['foods'][number]): DraftFood {
   };
 }
 
+/** Builds a provisional MealDetail from a Home summary so the screen can render
+ * instantly (name + totals + photo) while the full per-food detail loads. */
+function recentToDetail(m: RecentMeal): MealDetail {
+  return {
+    id: m.id,
+    loggedAt: m.when,
+    createdAt: m.when,
+    notes: m.label,
+    confidence: null,
+    telegramFileId: m.previewUrl ? 'preview' : null,
+    aiProvider: m.aiProvider,
+    foods: [
+      {
+        id: 'summary',
+        name: m.label,
+        estimatedWeightG: null,
+        portion: null,
+        quantity: 1,
+        confidence: null,
+        energyKcal: m.energyKcal,
+        proteinG: m.proteinG,
+        carbsG: m.carbsG,
+        fatG: m.fatG,
+        nutritionSource: 'ai_estimate',
+      },
+    ],
+    total: {
+      energyKcal: m.energyKcal ?? 0,
+      proteinG: m.proteinG ?? 0,
+      carbsG: m.carbsG ?? 0,
+      fatG: m.fatG ?? 0,
+      source: 'ai_estimate',
+    },
+  };
+}
+
 export function MealDetailScreen({
   backend,
   mealId,
+  initialMeal,
   onBack,
   onChanged,
   onToast,
   initialAiInstruction,
 }: MealDetailScreenProps) {
-  const [detail, setDetail] = useState<MealDetail | null>(null);
-  const [foods, setFoods] = useState<DraftFood[]>([]);
+  // Seed instantly from a cached full detail if present, else from the Home
+  // summary, so there's no "Loading…" flash when opening a meal.
+  const seed = getCached<MealDetail>(`meal:${mealId}`) ?? (initialMeal ? recentToDetail(initialMeal) : null);
+  const [detail, setDetail] = useState<MealDetail | null>(seed);
+  const [foods, setFoods] = useState<DraftFood[]>(seed ? seed.foods.map(detailFoodToDraft) : []);
   // Serialized snapshot of the foods as loaded, to detect unsaved edits.
-  const [baseline, setBaseline] = useState('');
+  const [baseline, setBaseline] = useState(seed ? JSON.stringify(seed.foods.map(detailFoodToDraft)) : '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'saving' | 'deleting' | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);

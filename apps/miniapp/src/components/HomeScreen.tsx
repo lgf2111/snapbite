@@ -1,6 +1,6 @@
 import { type DailyTargets, PROVIDER_PRESETS } from '@snapbite/core';
 import { Camera, Plus, Sparkles, Target } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -29,18 +29,18 @@ const PROVIDER_LABEL: Record<string, string> = {
 interface HomeScreenProps {
   backend: Backend;
   targets: DailyTargets | null;
-  onOpenMeal: (id: string) => void;
-  onOpenMealWithAi: (id: string) => void;
+  /** Selected day (YYYY-MM-DD), controlled by App so it survives meal open/close. */
+  date: string;
+  onDateChange: (date: string) => void;
+  /** Daily vs weekly view, controlled by App. */
+  view: 'daily' | 'weekly';
+  onViewChange: (view: 'daily' | 'weekly') => void;
+  /** Bumped by App after an edit/delete to trigger a revalidation (no remount). */
+  refreshSignal: number;
+  onOpenMeal: (meal: RecentMeal) => void;
+  onOpenMealWithAi: (meal: RecentMeal) => void;
   onSetGoal: () => void;
   onToast?: (kind: ToastKind, message: string) => void;
-}
-
-/** Local YYYY-MM-DD for "today". */
-function todayKey(): string {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -53,13 +53,16 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 export function HomeScreen({
   backend,
   targets,
+  date,
+  onDateChange,
+  view,
+  onViewChange,
+  refreshSignal,
   onOpenMeal,
   onOpenMealWithAi,
   onSetGoal,
   onToast,
 }: HomeScreenProps) {
-  const [date, setDate] = useState(todayKey());
-  const [view, setView] = useState<'daily' | 'weekly'>('daily');
   const [addOpen, setAddOpen] = useState(false);
 
   // Week definition preference (rolling vs calendar Sun/Mon) from Settings.
@@ -90,6 +93,15 @@ export function HomeScreen({
     refreshMeals();
     refreshDates();
   }, [refreshMeals, refreshDates]);
+
+  // App bumps refreshSignal after an edit/delete; revalidate without remounting
+  // (so the selected day/view is preserved). Skip the initial mount.
+  const firstSignal = useRef(refreshSignal);
+  useEffect(() => {
+    if (firstSignal.current === refreshSignal) return;
+    firstSignal.current = refreshSignal;
+    refresh();
+  }, [refreshSignal, refresh]);
 
   const weekly = view === 'weekly';
   // Weekly targets scale the daily target by the number of days in the range.
@@ -138,7 +150,7 @@ export function HomeScreen({
           <button
             key={v}
             type="button"
-            onClick={() => setView(v)}
+            onClick={() => onViewChange(v)}
             className={cn(
               'flex-1 rounded px-3 py-1.5 text-sm font-medium capitalize transition-colors',
               view === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
@@ -149,7 +161,7 @@ export function HomeScreen({
         ))}
       </div>
 
-      <DateSelector value={date} onChange={setDate} loggedDates={loggedDates} />
+      <DateSelector value={date} onChange={onDateChange} loggedDates={loggedDates} />
 
       {weekly && (
         <p className="text-muted-foreground -mt-1 text-center text-xs">
@@ -250,7 +262,7 @@ export function HomeScreen({
                   <button
                     type="button"
                     className="min-w-0 flex-1 text-left"
-                    onClick={() => onOpenMeal(m.id)}
+                    onClick={() => onOpenMeal(m)}
                   >
                     <div className="truncate font-medium">{m.label}</div>
                     <div className="flex items-center gap-2">
@@ -268,7 +280,7 @@ export function HomeScreen({
                     aria-label="Update with AI"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onOpenMealWithAi(m.id);
+                      onOpenMealWithAi(m);
                     }}
                   >
                     <Sparkles className="text-primary size-4" />

@@ -7,8 +7,16 @@ import { Skeleton } from './components/ui/skeleton';
 import { Toaster } from './components/ui/sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import type { SettingsView } from './lib/api.js';
-import { type Backend, createBackend } from './lib/backend.js';
+import { type Backend, createBackend, type RecentMeal } from './lib/backend.js';
 import { cacheKey, getCached, revalidate } from './lib/cache.js';
+
+/** Local YYYY-MM-DD for "today" (matches HomeScreen/DateSelector). */
+function todayKey(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
 
 // Lazy-loaded so they don't bloat the initial (Home) bundle.
 const SettingsScreen = lazy(() =>
@@ -46,9 +54,14 @@ function ScreenFallback() {
 export function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [detailMeal, setDetailMeal] = useState<RecentMeal | null>(null);
   const [detailAiInstruction, setDetailAiInstruction] = useState<string | null>(null);
-  // Bump to force Home to refetch after a detail-screen edit/delete.
+  // Bumped to tell Home to revalidate after a detail-screen edit/delete.
+  // (A signal, NOT a remount key — so Home keeps its selected day/view.)
   const [homeVersion, setHomeVersion] = useState(0);
+  // Home's selected day + view live here so they survive opening/closing a meal.
+  const [homeDate, setHomeDate] = useState(todayKey());
+  const [homeView, setHomeView] = useState<'daily' | 'weekly'>('daily');
 
   // Profile/targets drive the Home rings + onboarding gate.
   const [targets, setTargets] = useState<DailyTargets | null>(null);
@@ -84,13 +97,15 @@ export function App() {
     if (hasProfile === false && !onboardingSkipped) setShowOnboarding(true);
   }, [hasProfile, onboardingSkipped]);
 
-  const openMeal = (id: string) => {
+  const openMeal = (meal: RecentMeal) => {
     setDetailAiInstruction(null);
-    setDetailId(id);
+    setDetailMeal(meal);
+    setDetailId(meal.id);
   };
-  const openMealWithAi = (id: string) => {
+  const openMealWithAi = (meal: RecentMeal) => {
     setDetailAiInstruction('');
-    setDetailId(id);
+    setDetailMeal(meal);
+    setDetailId(meal.id);
   };
 
   if (showOnboarding) {
@@ -124,7 +139,11 @@ export function App() {
           <MealDetailScreen
             backend={backend}
             mealId={detailId}
-            onBack={() => setDetailId(null)}
+            initialMeal={detailMeal}
+            onBack={() => {
+              setDetailId(null);
+              setDetailMeal(null);
+            }}
             onChanged={() => setHomeVersion((v) => v + 1)}
             onToast={toastFn}
             initialAiInstruction={detailAiInstruction}
@@ -145,9 +164,13 @@ export function App() {
         <div className="flex-1 overflow-y-auto p-4 pb-24">
           <TabsContent value="home">
             <HomeScreen
-              key={homeVersion}
               backend={backend}
               targets={targets}
+              date={homeDate}
+              onDateChange={setHomeDate}
+              view={homeView}
+              onViewChange={setHomeView}
+              refreshSignal={homeVersion}
               onOpenMeal={openMeal}
               onOpenMealWithAi={openMealWithAi}
               onSetGoal={() => setShowOnboarding(true)}
