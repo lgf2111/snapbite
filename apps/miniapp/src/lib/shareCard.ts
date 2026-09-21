@@ -2,11 +2,11 @@
  * Renders a shareable meal card to a PNG blob using the built-in Canvas 2D API
  * — no image/canvas libraries (keeps the bundle light per project principles).
  *
- * Layout (portrait, Instagram-story friendly): the meal photo fills a rounded
- * area at the top, then a light panel below shows the meal name, a calories
- * block, and three macro chips (protein / carbs / fat), with a small SnapBite
- * wordmark. Everything is drawn at a fixed resolution so the output looks crisp
- * when shared or saved.
+ * The design is SnapBite's own: a deep Telegram-blue backdrop (matching the app
+ * and logo), a full-bleed meal photo that fades smoothly into the background, a
+ * bold title, a hero calorie readout, three translucent macro pills with
+ * brand-colored dots, and a drawn SnapBite mark + wordmark so it's branded even
+ * without loading the logo file.
  */
 
 export interface MealShareCardInput {
@@ -20,23 +20,28 @@ export interface MealShareCardInput {
   fatG: number;
 }
 
-// Canvas dimensions (portrait 9:16-ish).
+// Canvas dimensions (portrait 9:16, Instagram-story friendly).
 const W = 1080;
 const H = 1920;
 
-// Palette (mirrors the app's light card look).
+// SnapBite palette — derived from the logo (deep blue) + the app's dark theme.
 const COLOR = {
-  pageBg: '#f4f1ec',
-  card: '#ffffff',
-  ink: '#141414',
-  muted: '#8a8f98',
-  brand: '#3aa0ff',
-  protein: '#f43f5e',
-  carbs: '#f59e0b',
-  fat: '#8b5cf6',
+  brand: '#1f4fd0', // logo blue
+  brandBright: '#3aa0ff', // app primary / accents
+  bgTop: '#0f1830', // deep navy (behind photo fade)
+  bgBottom: '#0a1120', // near-black navy (bottom)
+  ink: '#ffffff',
+  sub: '#aebbd4', // muted blue-grey text
+  pill: 'rgba(255,255,255,0.06)',
+  pillBorder: 'rgba(255,255,255,0.10)',
+  protein: '#fb7185',
+  carbs: '#fbbf24',
+  fat: '#a78bfa',
+  kcal: '#ff7a59',
 } as const;
 
-/** Loads an image with CORS enabled so the canvas stays exportable. */
+const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -47,7 +52,6 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Rounded-rectangle path helper. */
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -66,7 +70,7 @@ function roundRect(
   ctx.closePath();
 }
 
-/** Draws an image cover-cropped into a rounded rect (like CSS object-fit:cover). */
+/** Cover-crop an image into a rect (like CSS object-fit: cover). */
 function drawImageCover(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -74,55 +78,28 @@ function drawImageCover(
   y: number,
   w: number,
   h: number,
-  r: number,
 ): void {
   const scale = Math.max(w / img.width, h / img.height);
   const dw = img.width * scale;
   const dh = img.height * scale;
   const dx = x + (w - dw) / 2;
   const dy = y + (h - dh) / 2;
-  ctx.save();
-  roundRect(ctx, x, y, w, h, r);
-  ctx.clip();
   ctx.drawImage(img, dx, dy, dw, dh);
-  ctx.restore();
 }
 
-/** Word-wraps text to a max width, returning up to `maxLines` lines (last ellipsized). */
-function wrapText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-  maxLines: number,
-): string[] {
-  const words = text.trim().split(/\s+/);
-  const lines: string[] = [];
-  let line = '';
-  for (const word of words) {
-    const candidate = line ? `${line} ${word}` : word;
-    if (ctx.measureText(candidate).width <= maxWidth || !line) {
-      line = candidate;
-    } else {
-      lines.push(line);
-      line = word;
-      if (lines.length === maxLines - 1) break;
-    }
+/** Truncates text to a single line with an ellipsis when it exceeds maxWidth. */
+function truncateToWidth(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  const t = text.trim();
+  if (ctx.measureText(t).width <= maxWidth) return t;
+  let s = t;
+  while (s.length > 1 && ctx.measureText(`${s}…`).width > maxWidth) {
+    s = s.slice(0, -1);
   }
-  if (lines.length < maxLines) lines.push(line);
-  // Ellipsize the last line if the whole title didn't fit.
-  const used = lines.join(' ');
-  if (used.length < text.trim().length && lines.length) {
-    let last = lines[lines.length - 1] ?? '';
-    while (ctx.measureText(`${last}…`).width > maxWidth && last.length > 0) {
-      last = last.slice(0, -1);
-    }
-    lines[lines.length - 1] = `${last}…`;
-  }
-  return lines;
+  return `${s.trimEnd()}…`;
 }
 
-/** Draws a macro chip (rounded card with a colored dot, label, and value). */
-function drawMacroChip(
+/** A macro pill: translucent rounded card, colored dot, label, and value. */
+function drawMacroPill(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
@@ -132,36 +109,71 @@ function drawMacroChip(
   label: string,
   value: string,
 ): void {
-  ctx.fillStyle = COLOR.card;
-  roundRect(ctx, x, y, w, h, 28);
+  ctx.fillStyle = COLOR.pill;
+  roundRect(ctx, x, y, w, h, 30);
   ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = COLOR.pillBorder;
+  roundRect(ctx, x, y, w, h, 30);
+  ctx.stroke();
 
-  // Header row: colored dot + label.
-  const padX = 32;
-  const dotR = 12;
-  const headerY = y + 48;
+  const cx = x + w / 2;
+  // Colored dot + label centered on the top row.
   ctx.fillStyle = dotColor;
   ctx.beginPath();
-  ctx.arc(x + padX + dotR, headerY, dotR, 0, Math.PI * 2);
+  ctx.arc(x + 40, y + 52, 11, 0, Math.PI * 2);
   ctx.fill();
-
-  ctx.fillStyle = COLOR.muted;
-  ctx.font = '500 30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillStyle = COLOR.sub;
+  ctx.font = `600 30px ${FONT}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, x + padX + dotR * 2 + 16, headerY);
+  ctx.fillText(label, x + 40 + 26, y + 52);
 
-  // Value.
+  // Big value, centered.
   ctx.fillStyle = COLOR.ink;
-  ctx.font = '700 56px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.font = `800 62px ${FONT}`;
+  ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText(value, x + padX, y + h - 40);
+  ctx.fillText(value, cx, y + h - 42);
 }
 
-/**
- * Composes the meal card and returns it as a PNG blob. Works without a photo
- * (draws a branded placeholder header instead).
- */
+/** Draws the SnapBite mark (fork inside a ring/plate) at (cx,cy) with radius r. */
+function drawBrandMark(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  // Blue disc.
+  ctx.fillStyle = COLOR.brand;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // White plate ring.
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = r * 0.12;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.62, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // White fork: handle + three tines.
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineCap = 'round';
+  const forkTop = cy - r * 0.34;
+  const tineBot = cy - r * 0.02;
+  const handleBot = cy + r * 0.4;
+  // Handle.
+  ctx.lineWidth = r * 0.12;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r * 0.05);
+  ctx.lineTo(cx, handleBot);
+  ctx.stroke();
+  // Tines.
+  ctx.lineWidth = r * 0.07;
+  for (const dx of [-r * 0.16, 0, r * 0.16]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + dx, forkTop);
+    ctx.lineTo(cx + dx, tineBot);
+    ctx.stroke();
+  }
+}
+
 export async function renderMealShareCard(input: MealShareCardInput): Promise<Blob> {
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -169,110 +181,125 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D not supported');
 
-  // Background.
-  ctx.fillStyle = COLOR.pageBg;
+  // --- Background: deep navy gradient --------------------------------------
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, COLOR.bgTop);
+  bg.addColorStop(1, COLOR.bgBottom);
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  // --- Photo header ---------------------------------------------------------
-  const photoH = 1040;
+  // --- Photo (full-bleed top) that fades into the background ---------------
+  const photoH = 1120;
   if (input.photoUrl) {
     try {
       const img = await loadImage(input.photoUrl);
-      drawImageCover(ctx, img, 0, 0, W, photoH, 0);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, W, photoH);
+      ctx.clip();
+      drawImageCover(ctx, img, 0, 0, W, photoH);
+      ctx.restore();
     } catch {
-      drawPlaceholderHeader(ctx, photoH);
+      drawPlaceholderPhoto(ctx, photoH);
     }
   } else {
-    drawPlaceholderHeader(ctx, photoH);
+    drawPlaceholderPhoto(ctx, photoH);
   }
 
-  // Small SnapBite wordmark over the photo (top-left).
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  roundRect(ctx, 40, 40, 220, 66, 33);
-  ctx.fill();
+  // Fade the bottom of the photo into the navy background (no hard seam).
+  const fadeH = 340;
+  const fade = ctx.createLinearGradient(0, photoH - fadeH, 0, photoH);
+  fade.addColorStop(0, 'rgba(15,24,48,0)');
+  fade.addColorStop(1, COLOR.bgTop);
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, photoH - fadeH, W, fadeH);
+  // A slim top scrim so the wordmark stays legible over bright photos.
+  const topScrim = ctx.createLinearGradient(0, 0, 0, 220);
+  topScrim.addColorStop(0, 'rgba(0,0,0,0.35)');
+  topScrim.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = topScrim;
+  ctx.fillRect(0, 0, W, 220);
+
+  // --- Brand lockup (top-left): mark + wordmark ----------------------------
+  drawBrandMark(ctx, 78, 88, 44);
   ctx.fillStyle = '#ffffff';
-  ctx.font = '700 34px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.font = `800 44px ${FONT}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText('SnapBite', 66, 40 + 34);
+  ctx.fillText('SnapBite', 138, 90);
 
-  // --- Content panel --------------------------------------------------------
-  const panelX = 48;
-  const panelY = photoH - 60;
-  const panelW = W - panelX * 2;
-  const panelH = H - panelY - 48;
-  ctx.fillStyle = COLOR.pageBg;
-  // (panel shares the page bg; we just lay out content on it)
+  const pad = 72;
+  const contentW = W - pad * 2;
 
-  // Title.
+  // --- Title (single line, truncated if long) ------------------------------
   ctx.fillStyle = COLOR.ink;
-  ctx.font = '800 66px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.font = `800 64px ${FONT}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  const titleLines = wrapText(ctx, input.title || 'Meal', panelW, 3);
-  let ty = panelY + 96;
-  const titleLineH = 80;
-  for (const l of titleLines) {
-    ctx.fillText(l, panelX, ty);
-    ty += titleLineH;
-  }
+  const titleY = photoH + 40;
+  ctx.fillText(truncateToWidth(ctx, input.title || 'Meal', contentW), pad, titleY);
 
-  // Calories block (white rounded card).
-  const calY = ty + 24;
-  const calH = 220;
-  ctx.fillStyle = COLOR.card;
-  roundRect(ctx, panelX, calY, panelW, calH, 36);
-  ctx.fill();
+  // --- Hero calories -------------------------------------------------------
+  // Two clearly separated rows so nothing overlaps:
+  //   row 1: flame chip + "CALORIES" label
+  //   row 2: big number + "cal" unit (with a comfortable gap)
+  const kcal = Math.round(input.calories);
 
-  // Little flame badge.
-  ctx.fillStyle = '#ffe3e0';
+  // Row 1 — header.
+  const headerY = titleY + 92; // vertical center of the flame chip / label
+  const chipR = 44;
+  const chipCx = pad + chipR;
+  ctx.fillStyle = 'rgba(255,122,89,0.16)';
   ctx.beginPath();
-  ctx.arc(panelX + 74, calY + calH / 2, 44, 0, Math.PI * 2);
+  ctx.arc(chipCx, headerY, chipR, 0, Math.PI * 2);
   ctx.fill();
-  ctx.font = '52px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.font = `52px ${FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('🔥', panelX + 74, calY + calH / 2 + 4);
+  ctx.fillText('🔥', chipCx, headerY + 2);
 
   ctx.textAlign = 'left';
-  ctx.fillStyle = COLOR.muted;
-  ctx.font = '600 30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('CALORIES', panelX + 150, calY + 80);
-  ctx.fillStyle = COLOR.ink;
-  ctx.font = '800 96px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.textBaseline = 'alphabetic';
-  const kcal = Math.round(input.calories);
-  ctx.fillText(String(kcal), panelX + 150, calY + 180);
-  const kcalW = ctx.measureText(String(kcal)).width;
-  ctx.fillStyle = COLOR.muted;
-  ctx.font = '500 40px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.fillText('cal', panelX + 150 + kcalW + 18, calY + 180);
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = COLOR.sub;
+  ctx.font = `700 34px ${FONT}`;
+  ctx.fillText('CALORIES', chipCx + chipR + 28, headerY);
 
-  // Macro chips row.
-  const chipY = calY + calH + 28;
-  const gap = 24;
-  const chipW = (panelW - gap * 2) / 3;
-  const chipH = 200;
-  drawMacroChip(ctx, panelX, chipY, chipW, chipH, COLOR.protein, 'Protein', `${Math.round(input.proteinG)} g`);
-  drawMacroChip(ctx, panelX + chipW + gap, chipY, chipW, chipH, COLOR.carbs, 'Carbs', `${Math.round(input.carbsG)} g`);
-  drawMacroChip(
+  // Row 2 — big number + unit, on their own baseline well below the header.
+  const numBaseline = headerY + chipR + 118;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = COLOR.ink;
+  ctx.font = `800 138px ${FONT}`;
+  ctx.fillText(String(kcal), pad, numBaseline);
+  const numW = ctx.measureText(String(kcal)).width;
+  ctx.fillStyle = COLOR.kcal;
+  ctx.font = `700 50px ${FONT}`;
+  ctx.fillText('cal', pad + numW + 40, numBaseline);
+
+  // --- Macro pills row -----------------------------------------------------
+  const pillY = numBaseline + 70;
+  const gap = 26;
+  const pillW = (contentW - gap * 2) / 3;
+  const pillH = 190;
+  drawMacroPill(ctx, pad, pillY, pillW, pillH, COLOR.protein, 'Protein', `${Math.round(input.proteinG)}g`);
+  drawMacroPill(ctx, pad + pillW + gap, pillY, pillW, pillH, COLOR.carbs, 'Carbs', `${Math.round(input.carbsG)}g`);
+  drawMacroPill(
     ctx,
-    panelX + (chipW + gap) * 2,
-    chipY,
-    chipW,
-    chipH,
+    pad + (pillW + gap) * 2,
+    pillY,
+    pillW,
+    pillH,
     COLOR.fat,
-    'Fats',
-    `${Math.round(input.fatG)} g`,
+    'Fat',
+    `${Math.round(input.fatG)}g`,
   );
 
-  // Footer wordmark.
-  ctx.fillStyle = COLOR.muted;
-  ctx.font = '500 30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  // --- Footer --------------------------------------------------------------
+  ctx.fillStyle = COLOR.sub;
+  ctx.font = `600 30px ${FONT}`;
   ctx.textAlign = 'center';
-  ctx.fillText('Logged with SnapBite', W / 2, H - 40);
-
-  void panelH; // panel height reserved for layout clarity
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Snap a photo · log your meal · SnapBite', W / 2, H - 56);
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
@@ -282,16 +309,12 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   });
 }
 
-/** A branded gradient header used when there's no photo. */
-function drawPlaceholderHeader(ctx: CanvasRenderingContext2D, h: number): void {
+/** Branded header used when there's no photo: blue gradient + the mark. */
+function drawPlaceholderPhoto(ctx: CanvasRenderingContext2D, h: number): void {
   const grad = ctx.createLinearGradient(0, 0, W, h);
-  grad.addColorStop(0, '#2b6fb0');
-  grad.addColorStop(1, '#3aa0ff');
+  grad.addColorStop(0, COLOR.brand);
+  grad.addColorStop(1, COLOR.brandBright);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, h);
-  ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  ctx.font = '120px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('🍽️', W / 2, h / 2);
+  drawBrandMark(ctx, W / 2, h / 2 - 30, 150);
 }
