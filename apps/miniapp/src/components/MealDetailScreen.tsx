@@ -6,11 +6,11 @@ import {
   resolveFoodNutrition,
   sourceLabel,
 } from '@snapbite/core';
-import { Download, RotateCcw, Share2, Sparkles, Trash2, X } from 'lucide-react';
+import { RotateCcw, Share2, Sparkles, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { downloadBlob, shareOrSaveImage } from '@/lib/share';
+import { shareOrSaveImage } from '@/lib/share';
 import { renderMealShareCard } from '@/lib/shareCard';
 import {
   Dialog,
@@ -108,7 +108,7 @@ export function MealDetailScreen({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
-  const [cardBusy, setCardBusy] = useState<'share' | 'save' | null>(null);
+  const [cardBusy, setCardBusy] = useState<'share' | null>(null);
 
   useEffect(() => {
     backend
@@ -261,20 +261,6 @@ export function MealDetailScreen({
     }
   }
 
-  async function handleSaveCard() {
-    if (cardBusy) return;
-    setCardBusy('save');
-    try {
-      const blob = await buildCardBlob();
-      downloadBlob(blob, 'snapbite-meal.png');
-      onToast?.('success', 'Image saved');
-    } catch (e) {
-      onToast?.('error', e instanceof Error ? e.message : 'Could not create image');
-    } finally {
-      setCardBusy(null);
-    }
-  }
-
   /** Discard unsaved edits: revert to the loaded meal, or leave if clean. */
   function discardAndBack() {
     if (dirty) setConfirmDiscard(true);
@@ -330,27 +316,16 @@ export function MealDetailScreen({
             />
           )}
 
-          {/* Share / save a composed image of this meal (photo + macros). */}
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              className="flex-1 gap-2"
-              disabled={cardBusy !== null}
-              onClick={() => void handleShareCard()}
-            >
-              <Share2 className="size-4" />
-              {cardBusy === 'share' ? 'Preparing…' : 'Share'}
-            </Button>
-            <Button
-              variant="secondary"
-              className="flex-1 gap-2"
-              disabled={cardBusy !== null}
-              onClick={() => void handleSaveCard()}
-            >
-              <Download className="size-4" />
-              {cardBusy === 'save' ? 'Saving…' : 'Save image'}
-            </Button>
-          </div>
+          {/* Share a composed image of this meal (native sheet incl. Save). */}
+          <Button
+            variant="secondary"
+            className="w-full gap-2"
+            disabled={cardBusy !== null}
+            onClick={() => void handleShareCard()}
+          >
+            <Share2 className="size-4" />
+            {cardBusy === 'share' ? 'Preparing…' : 'Share meal card'}
+          </Button>
 
           <Card>
             <CardContent className="flex flex-col gap-4">

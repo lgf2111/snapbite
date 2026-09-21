@@ -94,8 +94,10 @@ function drawImageCover(
  */
 function cleanTitle(raw: string | undefined): string {
   let t = (raw ?? '').trim();
+  // Strip common AI lead-ins, e.g. "Identified as ...", "Identified ...",
+  // "Detected ...", "This is ...", "A photo of ...", "Looks like ...".
   t = t.replace(
-    /^(identified as|this (?:is|appears to be)|appears to be|looks like|a photo of|photo of|image of|the meal is|meal:)\s+/i,
+    /^(identified(?:\s+as)?|detected|recognized(?:\s+as)?|this (?:is|appears to be)|appears to be|looks like|a (?:photo|picture|plate) of|photo of|image of|the meal is|meal:)\s+/i,
     '',
   );
   t = t.trim().replace(/^["'“”]+|["'“”]+$/g, '');
@@ -238,8 +240,12 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   if (!ctx) throw new Error('Canvas 2D not supported');
 
   // --- Background: deep navy gradient --------------------------------------
+  // Hold a constant bgTop through the upper ~65% (where the photo dissolves)
+  // so the dissolve's end color matches the page bg exactly — no seam — then
+  // ease to a slightly darker bottom.
   const bg = ctx.createLinearGradient(0, 0, 0, H);
   bg.addColorStop(0, COLOR.bgTop);
+  bg.addColorStop(0.65, COLOR.bgTop);
   bg.addColorStop(1, COLOR.bgBottom);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
@@ -266,22 +272,21 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
     drawPlaceholderPhoto(ctx, photoDraw);
   }
 
-  // Dissolve the photo into the background: paint the SAME background gradient
-  // on top of the lower photo with an alpha ramp (0 -> 1). Because it's the
-  // exact bg gradient, wherever it reaches full opacity it matches the pixels
-  // just below the photo perfectly — so there's no visible band.
-  const fadeTop = photoH - 560;
-  const steps = 48;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const y = fadeTop + (photoDraw - fadeTop) * t;
-    const bandH = (photoDraw - fadeTop) / steps + 2;
-    // Ease-in so the top of the fade is very gentle.
-    ctx.globalAlpha = t * t;
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, y, W, bandH);
-  }
-  ctx.globalAlpha = 1;
+  // Dissolve the photo into the background with a SINGLE smooth gradient (no
+  // stepping — stepping produced visible horizontal banding). We fade to the
+  // solid background color at the photo's bottom; because the page background
+  // is essentially this same navy there, the transition is seamless.
+  const fadeTop = photoH - 620;
+  const dissolve = ctx.createLinearGradient(0, fadeTop, 0, photoDraw);
+  dissolve.addColorStop(0, 'rgba(15,24,48,0)');
+  dissolve.addColorStop(0.6, 'rgba(13,20,40,0.55)');
+  dissolve.addColorStop(1, COLOR.bgTop);
+  ctx.fillStyle = dissolve;
+  ctx.fillRect(0, fadeTop, W, photoDraw - fadeTop);
+  // Cover any sliver below the photo down to where content begins with the
+  // solid bg color, so there's no seam between the fade and the page bg.
+  ctx.fillStyle = COLOR.bgTop;
+  ctx.fillRect(0, photoDraw, W, 40);
 
   // A slim top scrim so the wordmark stays legible over bright photos.
   const topScrim = ctx.createLinearGradient(0, 0, 0, 240);
