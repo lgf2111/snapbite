@@ -888,4 +888,47 @@ describe('/setup conversational onboarding', () => {
     expect(t).toContain('male'); // re-asked the sex step, not "send a photo first"
     expect(t).not.toContain('photo to log it first');
   });
+
+  it('prefills from an existing profile and shows current values with a keep hint', async () => {
+    const tgId = 9204;
+    const { app, sent } = appWithCapture();
+    // Seed a saved profile first.
+    const { createSettingsDb, mergePreferences } = await import('../db/settings.js');
+    const { createDb, upsertUser } = await import('../db/users.js');
+    const user = await upsertUser(createDb(env.DB), { id: tgId });
+    await mergePreferences(createSettingsDb(env.DB), user.id, {
+      profile: {
+        sex: 'male',
+        birthDate: '1990-03-10',
+        heightCm: 178,
+        weightKg: 80,
+        activity: 'moderate',
+        goal: 'maintain',
+        units: 'metric',
+        mode: 'simple',
+      },
+    });
+
+    await app.request('/webhook', post({ message: { text: '/setup', ...chat(tgId) } }), env);
+    const first = lastText(sent).toLowerCase();
+    expect(first).toContain('update your profile'); // acknowledges existing data
+    expect(first).toContain('currently'); // shows current sex
+    expect(first).toContain('male');
+    expect(first).toContain('keep');
+
+    // "keep" through every step leaves the profile intact and completes.
+    for (const _ of ['sex', 'birthday', 'height', 'weight', 'activity', 'goal']) {
+      await app.request('/webhook', post({ message: { text: 'keep', ...chat(tgId) } }), env);
+    }
+    expect(lastText(sent).toLowerCase()).toContain('daily targets');
+
+    const { getSettings, parsePreferences } = await import('../db/settings.js');
+    const prefs = parsePreferences(
+      (await getSettings(createSettingsDb(env.DB), user.id))?.preferencesJson,
+    );
+    const profile = prefs.profile as { birthDate?: string; heightCm?: number } | undefined;
+    expect(profile?.birthDate).toBe('1990-03-10'); // unchanged
+    expect(profile?.heightCm).toBe(178); // unchanged
+    expect(prefs.onboarding).toBeUndefined();
+  });
 });

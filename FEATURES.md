@@ -44,6 +44,8 @@ shown as an **estimate** and is always **editable**.
 - **Set up by chat** — send `/setup` to the bot and answer a few questions (sex, date of birth,
   height, weight, activity, goal) to get your targets without opening the Mini App. `/cancel` stops
   anytime.
+- **Edit, don't retype** — if you already have a profile saved, `/setup` shows your current value at
+  each step and you can reply `keep` to leave it as-is, so you only change what you want.
 - **Age stays current** — you give your date of birth (not a fixed age), so your age — and the
   targets derived from it — update automatically as birthdays pass. Older profiles that stored a
   plain age keep working unchanged.

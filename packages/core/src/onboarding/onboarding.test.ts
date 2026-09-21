@@ -14,7 +14,76 @@ describe('startOnboarding', () => {
     const { state, prompt } = startOnboarding();
     expect(state.step).toBe('sex');
     expect(state.partial).toEqual({});
+    expect(state.editing).toBeFalsy();
     expect(prompt.toLowerCase()).toContain('male');
+  });
+
+  it('seeds from an existing profile and offers to keep the current value', () => {
+    const existing = buildProfile({
+      sex: 'female',
+      birthDate: '1994-06-15',
+      heightCm: 165,
+      weightKg: 60,
+      activity: 'light',
+      goal: 'maintain',
+    });
+    expect(existing).not.toBeNull();
+    const { state, prompt } = startOnboarding(existing);
+    expect(state.editing).toBe(true);
+    expect(state.partial.sex).toBe('female');
+    expect(state.partial.birthDate).toBe('1994-06-15');
+    // The sex prompt shows the current value + a keep hint.
+    expect(prompt.toLowerCase()).toContain('currently');
+    expect(prompt.toLowerCase()).toContain('keep');
+    expect(prompt.toLowerCase()).toContain('female');
+  });
+});
+
+describe('keep — reuse the seeded value while editing', () => {
+  const existing = buildProfile({
+    sex: 'female',
+    birthDate: '1994-06-15',
+    heightCm: 165,
+    weightKg: 60,
+    activity: 'light',
+    goal: 'maintain',
+  })!;
+
+  it('keeps the current value on "keep" and advances', () => {
+    const { state } = startOnboarding(existing);
+    const r = applyAnswer(state, 'keep');
+    expect(r).toMatchObject({ ok: true, done: false });
+    if (r.ok && !r.done) {
+      expect(r.state.partial.sex).toBe('female'); // unchanged
+      expect(r.state.step).toBe('birthday');
+      expect(r.state.editing).toBe(true);
+      expect(r.nextPrompt.toLowerCase()).toContain('1994-06-15'); // current value shown
+    }
+  });
+
+  it('lets the user change one value and keep the rest through to a profile', () => {
+    let state = startOnboarding(existing).state;
+    // keep sex, keep birthday, change height, keep weight, keep activity, then goal.
+    const answers = ['keep', 'keep', '170cm', 'keep', 'keep'];
+    for (const a of answers) {
+      const r = applyAnswer(state, a);
+      expect(r.ok).toBe(true);
+      if (r.ok && !r.done) state = r.state;
+    }
+    const final = applyAnswer(state, 'keep'); // keep goal (maintain)
+    expect(final).toMatchObject({ ok: true, done: true });
+    if (final.ok && final.done) {
+      expect(final.profile.sex).toBe('female');
+      expect(final.profile.birthDate).toBe('1994-06-15');
+      expect(Math.round(final.profile.heightCm)).toBe(170); // changed
+      expect(Math.round(final.profile.weightKg)).toBe(60); // kept
+      expect(final.profile.goal).toBe('maintain'); // kept
+    }
+  });
+
+  it('ignores "keep" on a fresh flow (no seeded value) and re-prompts', () => {
+    const r = applyAnswer(startOnboarding().state, 'keep');
+    expect(r.ok).toBe(false);
   });
 });
 

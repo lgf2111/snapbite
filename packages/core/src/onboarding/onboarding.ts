@@ -46,6 +46,19 @@ export interface OnboardingPartial {
 export interface OnboardingState {
   step: OnboardingStep;
   partial: OnboardingPartial;
+  /**
+   * True when the flow was seeded from an existing saved profile. Prompts then
+   * show the current value and accept a "keep" answer to leave it unchanged.
+   */
+  editing?: boolean;
+}
+
+/** Answers that mean "leave the current (seeded) value as-is". */
+const KEEP_ANSWERS = new Set(['keep', 'skip', 'same', '-', '=']);
+
+/** Whether a raw answer requests keeping the existing value. */
+function isKeep(text: string): boolean {
+  return KEEP_ANSWERS.has(text.trim().toLowerCase());
 }
 
 /** A parse result: ok with the value, or an error message to re-prompt with. */
@@ -59,32 +72,95 @@ const ACTIVITY_OPTIONS: { key: ActivityLevel; label: string }[] = [
   { key: 'very_active', label: 'Very active (hard training/physical job)' },
 ];
 
-/** The prompt text shown to the user for a given step. */
-export function promptFor(step: OnboardingStep): string {
+/** A human-readable "currently: X" line for a step, given the seeded partial. */
+function currentValueLabel(step: OnboardingStep, partial: OnboardingPartial): string | null {
   switch (step) {
     case 'sex':
-      return "Let's set up your goal. First — what's your sex? Reply *male* or *female*.";
+      return partial.sex ? partial.sex : null;
     case 'birthday':
-      return "What's your date of birth? Send it as `YYYY-MM-DD` (e.g. 1998-04-25). I'll keep your age up to date automatically.";
+      return partial.birthDate ?? null;
     case 'height':
-      return "What's your height? e.g. `175cm` or `5'9`.";
+      return partial.heightCm != null ? `${Math.round(partial.heightCm)}cm` : null;
     case 'weight':
-      return "What's your weight? e.g. `70kg` or `155lb`.";
-    case 'activity':
-      return [
-        'How active are you? Reply with a number:',
-        ...ACTIVITY_OPTIONS.map((o, i) => `${i + 1}. ${o.label}`),
-      ].join('\n');
+      return partial.weightKg != null ? `${Math.round(partial.weightKg)}kg` : null;
+    case 'activity': {
+      if (!partial.activity) return null;
+      const opt = ACTIVITY_OPTIONS.find((o) => o.key === partial.activity);
+      return opt ? opt.label : partial.activity;
+    }
     case 'goal':
-      return [
-        "What's your goal? Reply with a number:",
-        ...GOAL_STAGES.map((g, i) => `${i + 1}. ${GOAL_LABELS[g]}`),
-      ].join('\n');
+      return partial.goal ? GOAL_LABELS[partial.goal] : null;
   }
 }
 
-/** The first prompt + fresh state when a user starts onboarding. */
-export function startOnboarding(): { state: OnboardingState; prompt: string } {
+/**
+ * The prompt text shown to the user for a given step. When a `partial` with an
+ * existing value for this step is passed, the current value and a "reply *keep*
+ * to leave it" hint are appended so users editing a saved profile can skip.
+ */
+export function promptFor(step: OnboardingStep, partial?: OnboardingPartial): string {
+  const base = ((): string => {
+    switch (step) {
+      case 'sex':
+        return "Let's set up your goal. First — what's your sex? Reply *male* or *female*.";
+      case 'birthday':
+        return "What's your date of birth? Send it as `YYYY-MM-DD` (e.g. 1998-04-25). I'll keep your age up to date automatically.";
+      case 'height':
+        return "What's your height? e.g. `175cm` or `5'9`.";
+      case 'weight':
+        return "What's your weight? e.g. `70kg` or `155lb`.";
+      case 'activity':
+        return [
+          'How active are you? Reply with a number:',
+          ...ACTIVITY_OPTIONS.map((o, i) => `${i + 1}. ${o.label}`),
+        ].join('\n');
+      case 'goal':
+        return [
+          "What's your goal? Reply with a number:",
+          ...GOAL_STAGES.map((g, i) => `${i + 1}. ${GOAL_LABELS[g]}`),
+        ].join('\n');
+    }
+  })();
+
+  const current = partial ? currentValueLabel(step, partial) : null;
+  if (current) {
+    return `${base}\n\n(Currently: *${current}* — reply *keep* to leave it.)`;
+  }
+  return base;
+}
+
+/**
+ * Builds an onboarding partial from an existing saved profile so the flow can
+ * pre-fill and let the user keep values. Height/weight are kept in metric
+ * (canonical); parsers accept metric answers and "keep".
+ */
+function partialFromProfile(profile: UserProfile): OnboardingPartial {
+  return {
+    sex: profile.sex,
+    birthDate: profile.birthDate,
+    heightCm: profile.heightCm,
+    weightKg: profile.weightKg,
+    activity: profile.activity,
+    goal: profile.goal,
+  };
+}
+
+/**
+ * The first prompt + fresh state when a user starts onboarding. When an
+ * `existing` profile is passed (re-running `/setup`), the flow is seeded with
+ * those values so the user can keep or change each one.
+ */
+export function startOnboarding(existing?: UserProfile | null): {
+  state: OnboardingState;
+  prompt: string;
+} {
+  if (existing) {
+    const partial = partialFromProfile(existing);
+    return {
+      state: { step: 'sex', partial, editing: true },
+      prompt: promptFor('sex', partial),
+    };
+  }
   return { state: { step: 'sex', partial: {} }, prompt: promptFor('sex') };
 }
 
@@ -198,38 +274,48 @@ export function applyAnswer(
   | { ok: true; done: true; profile: UserProfile } {
   const partial: OnboardingPartial = { ...state.partial };
 
+  // "keep" reuses the seeded value for this step — only valid if one exists.
+  const keep = isKeep(text);
+  const has = (v: unknown): boolean => v != null;
+
   switch (state.step) {
     case 'sex': {
+      if (keep && has(partial.sex)) break;
       const r = parseSex(text);
       if (!r.ok) return r;
       partial.sex = r.value;
       break;
     }
     case 'birthday': {
+      if (keep && has(partial.birthDate)) break;
       const r = parseBirthday(text);
       if (!r.ok) return r;
       partial.birthDate = r.value;
       break;
     }
     case 'height': {
+      if (keep && has(partial.heightCm)) break;
       const r = parseHeight(text);
       if (!r.ok) return r;
       partial.heightCm = r.value;
       break;
     }
     case 'weight': {
+      if (keep && has(partial.weightKg)) break;
       const r = parseWeight(text);
       if (!r.ok) return r;
       partial.weightKg = r.value;
       break;
     }
     case 'activity': {
+      if (keep && has(partial.activity)) break;
       const r = parseActivity(text);
       if (!r.ok) return r;
       partial.activity = r.value;
       break;
     }
     case 'goal': {
+      if (keep && has(partial.goal)) break;
       const r = parseGoal(text);
       if (!r.ok) return r;
       partial.goal = r.value;
@@ -240,11 +326,12 @@ export function applyAnswer(
   const idx = ONBOARDING_STEPS.indexOf(state.step);
   const nextStep = ONBOARDING_STEPS[idx + 1];
   if (nextStep) {
+    const nextState: OnboardingState = { step: nextStep, partial, editing: state.editing };
     return {
       ok: true,
       done: false,
-      state: { step: nextStep, partial },
-      nextPrompt: promptFor(nextStep),
+      state: nextState,
+      nextPrompt: promptFor(nextStep, state.editing ? partial : undefined),
     };
   }
 

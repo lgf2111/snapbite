@@ -19,7 +19,7 @@ import {
   resolveMeal,
   startOnboarding,
   type TelegramUpdate,
-  type UserProfile,
+  UserProfile,
 } from '@snapbite/core';
 import { type Context, Hono } from 'hono';
 import { describeError, logError, recentErrors } from '../db/errors.js';
@@ -423,11 +423,28 @@ async function handleSetupStart(
   const userDb = createDb(c.env.DB);
   const user = await upsertUser(userDb, { id: parsed.fromId as number });
   const settingsDb = createSettingsDb(c.env.DB);
-  const { state, prompt } = startOnboarding();
+
+  // Seed from an existing saved profile so the user can keep/change each value.
+  const existing = parseStoredProfile((await getSettings(settingsDb, user.id))?.preferencesJson);
+  const { state, prompt } = startOnboarding(existing);
   await setOnboardingState(settingsDb, user.id, state);
+
+  const intro = existing
+    ? "Let's update your profile. I'll show your current values — reply *keep* to leave one as-is."
+    : null;
   await bot.sendMessage(parsed.chatId, {
-    text: `${prompt}\n\n(You can stop anytime with /cancel.)`,
+    text: [intro, prompt, '(You can stop anytime with /cancel.)']
+      .filter(Boolean)
+      .join('\n\n'),
   });
+}
+
+/** Parses + validates the profile stored in preferences_json, or null. */
+function parseStoredProfile(preferencesJson: string | null | undefined): UserProfile | null {
+  const raw = parsePreferences(preferencesJson).profile;
+  if (raw == null) return null;
+  const parsed = UserProfile.safeParse(raw);
+  return parsed.success ? parsed.data : null;
 }
 
 /** `/cancel` — abandon an in-progress setup. No-op message if none active. */
@@ -477,8 +494,9 @@ async function handleOnboardingAnswer(
   const result = applyAnswer(state, parsed.text);
 
   if (!result.ok) {
-    // Bad answer — show the error and re-ask the same step.
-    await bot.sendMessage(parsed.chatId, { text: `${result.error}\n\n${promptFor(state.step)}` });
+    // Bad answer — show the error and re-ask the same step (with keep hint when editing).
+    const reprompt = promptFor(state.step, state.editing ? state.partial : undefined);
+    await bot.sendMessage(parsed.chatId, { text: `${result.error}\n\n${reprompt}` });
     return;
   }
 
