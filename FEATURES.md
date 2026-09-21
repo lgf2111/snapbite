@@ -41,6 +41,8 @@ shown as an **estimate** and is always **editable**.
 
 - **Personalized daily targets** — set your profile and goal to get daily calorie and macro targets,
   computed deterministically (no AI).
+- **Set up by chat** — send `/setup` to the bot and answer a few questions (sex, age, height, weight,
+  activity, goal) to get your targets without opening the Mini App. `/cancel` stops anytime.
 - **Home day view** — pick any day on a calendar and see that day's totals against your targets as
   progress rings, plus every meal logged that day (swipe to delete, tap to edit).
 

@@ -26,6 +26,7 @@ const repoRoot = join(here, '..', '..', '..');
 /** The public command menu (what users see under `/`). */
 const COMMANDS = [
   { command: 'start', description: 'Get started with SnapBite' },
+  { command: 'setup', description: 'Set your goal & targets by chat' },
   { command: 'settings', description: 'Add or update your AI key' },
   { command: 'feedback', description: 'Report a problem or send an idea' },
   { command: 'help', description: 'How SnapBite works' },

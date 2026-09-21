@@ -1,18 +1,25 @@
 import {
+  applyAnswer,
   type BotReply,
   broadcastMessage,
+  computeTargets,
   createProvider,
   CURRENT_CHANGELOG,
   decryptSecret,
   FEEDBACK_MAX_LEN,
   FEEDBACK_PROMPT,
   FEEDBACK_THANKS,
+  GOAL_LABELS,
+  type OnboardingState,
   type ParsedCommand,
   parseUpdate,
   photoLoggedReply,
+  promptFor,
   replyForCommand,
   resolveMeal,
+  startOnboarding,
   type TelegramUpdate,
+  type UserProfile,
 } from '@snapbite/core';
 import { type Context, Hono } from 'hono';
 import { describeError, logError, recentErrors } from '../db/errors.js';
@@ -26,7 +33,15 @@ import {
   saveMeal,
   updateMeal,
 } from '../db/meals.js';
-import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
+import {
+  clearOnboardingState,
+  createSettingsDb,
+  getOnboardingState,
+  getSettings,
+  mergePreferences,
+  parsePreferences,
+  setOnboardingState,
+} from '../db/settings.js';
 import { createDb, listBroadcastTargets, setBroadcastRef, upsertUser } from '../db/users.js';
 import { type AppBindings, parseAdminId } from '../env.js';
 import { adminNotify } from '../adminNotify.js';
@@ -151,12 +166,29 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
       await handleBroadcastCommand(c, bot, parsed);
       return c.json({ ok: true });
     }
+    // Conversational profile setup by chat.
+    if (parsed.command === 'setup' && parsed.fromId != null) {
+      await handleSetupStart(c, bot, parsed);
+      return c.json({ ok: true });
+    }
+    if (parsed.command === 'cancel' && parsed.fromId != null) {
+      await handleSetupCancel(c, bot, parsed);
+      return c.json({ ok: true });
+    }
 
-    // Plain text (not a slash command) after logging = "revise my meal with AI".
-    // Slash commands (/start, /help, /settings, unknown /foo) still fall through
-    // to the generic replyForCommand nudge below.
+    // Plain text (no slash command). If the user is mid-onboarding, this is
+    // their answer — handle it BEFORE the meal-revise flow (which also claims
+    // plain text). Otherwise it's a "revise my last meal with AI" instruction.
     if (parsed.command === null && parsed.text.trim() && parsed.fromId != null) {
-      await handleTextRevise(c, bot, providerFactory, parsed);
+      const userDb = createDb(c.env.DB);
+      const user = await upsertUser(userDb, { id: parsed.fromId });
+      const settingsDb = createSettingsDb(c.env.DB);
+      const onboarding = await getOnboardingState(settingsDb, user.id);
+      if (onboarding) {
+        await handleOnboardingAnswer(c, bot, parsed, user.id, onboarding);
+      } else {
+        await handleTextRevise(c, bot, providerFactory, parsed);
+      }
       return c.json({ ok: true });
     }
 
@@ -377,6 +409,105 @@ async function handleErrorsCommand(
   });
   await bot.sendMessage(parsed.chatId, {
     text: `⚠️ Latest errors (${rows.length}):\n\n${lines.join('\n\n')}`,
+  });
+}
+
+// --- conversational profile setup (/setup) ---------------------------------
+
+/** `/setup` — begin (or restart) conversational profile onboarding by chat. */
+async function handleSetupStart(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const userDb = createDb(c.env.DB);
+  const user = await upsertUser(userDb, { id: parsed.fromId as number });
+  const settingsDb = createSettingsDb(c.env.DB);
+  const { state, prompt } = startOnboarding();
+  await setOnboardingState(settingsDb, user.id, state);
+  await bot.sendMessage(parsed.chatId, {
+    text: `${prompt}\n\n(You can stop anytime with /cancel.)`,
+  });
+}
+
+/** `/cancel` — abandon an in-progress setup. No-op message if none active. */
+async function handleSetupCancel(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const userDb = createDb(c.env.DB);
+  const user = await upsertUser(userDb, { id: parsed.fromId as number });
+  const settingsDb = createSettingsDb(c.env.DB);
+  await clearOnboardingState(settingsDb, user.id);
+  await bot.sendMessage(parsed.chatId, {
+    text: 'No problem — setup cancelled. Send /setup anytime to try again.',
+  });
+}
+
+/** A short human summary of computed daily targets. */
+function targetsSummary(profile: UserProfile): string {
+  const t = computeTargets(profile);
+  return [
+    `🎯 Your daily targets (${GOAL_LABELS[profile.goal]}):`,
+    `🔥 ${t.energyKcal} kcal`,
+    `🥩 Protein ${t.proteinG} g`,
+    `🍚 Carbs ${t.carbsG} g`,
+    `🧈 Fat ${t.fatG} g`,
+    '',
+    'These are estimates — tweak them anytime in SnapBite → Settings.',
+  ].join('\n');
+}
+
+/**
+ * Handles a plain-text answer while the user is mid-onboarding. Re-prompts on a
+ * bad answer, advances on a good one, and on the final step validates + saves
+ * the profile, shows targets, clears the state, and nudges to add an AI key if
+ * none is stored yet.
+ */
+async function handleOnboardingAnswer(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+  userId: string,
+  state: OnboardingState,
+): Promise<void> {
+  const settingsDb = createSettingsDb(c.env.DB);
+  const miniAppUrl = c.env.MINI_APP_URL ?? '';
+  const result = applyAnswer(state, parsed.text);
+
+  if (!result.ok) {
+    // Bad answer — show the error and re-ask the same step.
+    await bot.sendMessage(parsed.chatId, { text: `${result.error}\n\n${promptFor(state.step)}` });
+    return;
+  }
+
+  if (!result.done) {
+    // Advance to the next step.
+    await setOnboardingState(settingsDb, userId, result.state);
+    await bot.sendMessage(parsed.chatId, { text: result.nextPrompt });
+    return;
+  }
+
+  // Complete — persist the profile, show targets, clear onboarding.
+  await mergePreferences(settingsDb, userId, { profile: result.profile });
+  await clearOnboardingState(settingsDb, userId);
+
+  const settings = await getSettings(settingsDb, userId);
+  const hasKey = Boolean(settings?.apiKeyCiphertext && settings?.apiKeyIv);
+
+  const lines = ['✅ All set!', '', targetsSummary(result.profile)];
+  if (!hasKey) {
+    lines.push(
+      '',
+      'One more thing: to log meals from photos, add your AI key in SnapBite → Settings. (You can still add meals by hand without one.)',
+    );
+  }
+  await bot.sendMessage(parsed.chatId, {
+    text: lines.join('\n'),
+    ...(miniAppUrl
+      ? { replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]] } }
+      : {}),
   });
 }
 

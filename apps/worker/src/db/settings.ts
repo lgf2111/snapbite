@@ -1,3 +1,4 @@
+import type { OnboardingState } from '@snapbite/core';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { settings, type SettingsRow, users } from './schema.js';
@@ -70,6 +71,8 @@ export interface Preferences {
   customProvider?: CustomProviderConfig;
   /** Opt-in meal reminders (see §15). */
   reminders?: ReminderConfig;
+  /** In-progress conversational onboarding via the bot (`/setup`). */
+  onboarding?: OnboardingState;
   updatedAt?: number;
 }
 
@@ -135,4 +138,40 @@ export async function savePreferences(
       target: settings.userId,
       set: { preferencesJson, updatedAt: now },
     });
+}
+
+/**
+ * Merges a patch into `preferences_json`, preserving untouched fields. Used by
+ * webhook flows (no HTTP layer) — mirrors the settings route's mergePreferences.
+ */
+export async function mergePreferences(
+  db: SettingsDb,
+  userId: string,
+  patch: Partial<Preferences>,
+): Promise<void> {
+  const current = parsePreferences((await getSettings(db, userId))?.preferencesJson);
+  await savePreferences(db, userId, JSON.stringify({ ...current, ...patch, updatedAt: Date.now() }));
+}
+
+/** Reads the user's in-progress onboarding state, or undefined. */
+export async function getOnboardingState(
+  db: SettingsDb,
+  userId: string,
+): Promise<OnboardingState | undefined> {
+  const row = await getSettings(db, userId);
+  return parsePreferences(row?.preferencesJson).onboarding;
+}
+
+/** Persists the user's onboarding state (start/advance). */
+export async function setOnboardingState(
+  db: SettingsDb,
+  userId: string,
+  state: OnboardingState,
+): Promise<void> {
+  await mergePreferences(db, userId, { onboarding: state });
+}
+
+/** Clears onboarding state (completed or cancelled). */
+export async function clearOnboardingState(db: SettingsDb, userId: string): Promise<void> {
+  await mergePreferences(db, userId, { onboarding: undefined });
 }

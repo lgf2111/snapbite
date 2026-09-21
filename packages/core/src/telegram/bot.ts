@@ -119,11 +119,11 @@ export function replyForCommand(
   switch (parsed.command) {
     case 'start':
       return withButton(
-        "Welcome to SnapBite. Just send me a photo of your meal and I'll log it — calories, protein, carbs, and fat, always editable. Open the app to review your history, search, and trends.\n\nFirst time? Open SnapBite → Settings and add your AI key.",
+        "Welcome to SnapBite. Just send me a photo of your meal and I'll log it — calories, protein, carbs, and fat, always editable. Open the app to review your history, search, and trends.\n\nFirst time? Send /setup to set your goal by chat, then open SnapBite → Settings to add your AI key.",
       );
     case 'help':
       return withButton(
-        'SnapBite logs meals from photos.\n\n• Send a photo straight to this chat — I analyze it and log it\n• Open the app to review or correct any entry\n• Browse history, search, and see your trends there\n\nUse /settings to add or update your AI key.\nHit a problem? Send /feedback <your message> and it goes straight to the maintainer.',
+        'SnapBite logs meals from photos.\n\n• Send a photo straight to this chat — I analyze it and log it\n• Open the app to review or correct any entry\n• Browse history, search, and see your trends there\n\nSend /setup to set your goal + targets right here in chat.\nUse /settings to add or update your AI key.\nHit a problem? Send /feedback <your message> and it goes straight to the maintainer.',
       );
     case 'settings':
       return withButton('Open SnapBite and go to Settings to add or update your AI key.');

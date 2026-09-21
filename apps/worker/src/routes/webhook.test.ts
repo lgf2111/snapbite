@@ -815,3 +815,73 @@ describe('overload retry by message text (not just status 503)', () => {
     expect(lastText(sent)).toContain('Logged');
   });
 });
+
+describe('/setup conversational onboarding', () => {
+  const chat = (id: number) => ({ chat: { id }, from: { id } });
+
+  it('walks through all steps and saves a profile + shows targets', async () => {
+    const tgId = 9200;
+    const { app, sent } = appWithCapture();
+
+    // Start.
+    await app.request('/webhook', post({ message: { text: '/setup', ...chat(tgId) } }), env);
+    expect(lastText(sent).toLowerCase()).toContain('male');
+
+    // Answer each step in order: sex, age, height, weight, activity, goal.
+    const answers = ['male', '28', '180cm', '75kg', '3', '2'];
+    for (const a of answers) {
+      await app.request('/webhook', post({ message: { text: a, ...chat(tgId) } }), env);
+    }
+
+    // Final message shows targets.
+    expect(lastText(sent).toLowerCase()).toContain('daily targets');
+    expect(lastText(sent)).toContain('kcal');
+
+    // The profile is persisted in preferences_json.
+    const { createSettingsDb, getSettings, parsePreferences } = await import('../db/settings.js');
+    const { createDb, upsertUser } = await import('../db/users.js');
+    const user = await upsertUser(createDb(env.DB), { id: tgId });
+    const prefs = parsePreferences(
+      (await getSettings(createSettingsDb(env.DB), user.id))?.preferencesJson,
+    );
+    expect((prefs.profile as { sex?: string } | undefined)?.sex).toBe('male');
+    expect((prefs.profile as { age?: number } | undefined)?.age).toBe(28);
+    // Onboarding state is cleared on completion.
+    expect(prefs.onboarding).toBeUndefined();
+  });
+
+  it('re-prompts on a bad answer without advancing', async () => {
+    const tgId = 9201;
+    const { app, sent } = appWithCapture();
+    await app.request('/webhook', post({ message: { text: '/setup', ...chat(tgId) } }), env);
+    // Bad sex answer.
+    await app.request('/webhook', post({ message: { text: 'banana', ...chat(tgId) } }), env);
+    const t = lastText(sent).toLowerCase();
+    expect(t).toContain('male'); // re-asks the sex step
+  });
+
+  it('/cancel clears an in-progress setup', async () => {
+    const tgId = 9202;
+    const { app, sent } = appWithCapture();
+    await app.request('/webhook', post({ message: { text: '/setup', ...chat(tgId) } }), env);
+    await app.request('/webhook', post({ message: { text: '/cancel', ...chat(tgId) } }), env);
+    expect(lastText(sent).toLowerCase()).toContain('cancel');
+
+    const { createSettingsDb, getOnboardingState } = await import('../db/settings.js');
+    const { createDb, upsertUser } = await import('../db/users.js');
+    const user = await upsertUser(createDb(env.DB), { id: tgId });
+    expect(await getOnboardingState(createSettingsDb(env.DB), user.id)).toBeUndefined();
+  });
+
+  it('routes plain text to onboarding (not meal-revise) while active', async () => {
+    const tgId = 9203;
+    const { app, sent } = appWithCapture();
+    await app.request('/webhook', post({ message: { text: '/setup', ...chat(tgId) } }), env);
+    // "add a coke" would be a revise instruction normally; during onboarding it's
+    // treated as an answer to the sex step (invalid → re-prompt), NOT a revise.
+    await app.request('/webhook', post({ message: { text: 'add a coke', ...chat(tgId) } }), env);
+    const t = lastText(sent).toLowerCase();
+    expect(t).toContain('male'); // re-asked the sex step, not "send a photo first"
+    expect(t).not.toContain('photo to log it first');
+  });
+});
