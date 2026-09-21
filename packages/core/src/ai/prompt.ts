@@ -17,6 +17,7 @@ export const SYSTEM_PROMPT = `You are a food recognition assistant. Look at the 
 Respond with a single valid JSON object and nothing else — no markdown, no code fences, no commentary. The JSON must match this shape exactly:
 
 {
+  "title": "Chicken rice",
   "foods": [
     {
       "name": "short food name",
@@ -34,6 +35,7 @@ Respond with a single valid JSON object and nothing else — no markdown, no cod
 }
 
 Rules:
+- "title" is a SHORT, natural meal name of 2–4 words that a person would use, e.g. "Chicken rice", "Egg & toast", "Blueberry oats". NOT a description or a list — keep it under ~24 characters, no "Identified as", no sentence.
 - Every field is required for each food. Never leave "name" empty or omit "estimatedWeightG".
 - "estimatedWeightG" is the realistic total weight in grams of that food as visible (a number > 0).
 - "aiNutrition" is your best rough estimate of that food's nutrition PER 100 GRAMS (not per portion): energyKcal, proteinG, carbsG, fatG, all numbers >= 0.
@@ -68,6 +70,7 @@ export const REVISE_SYSTEM_PROMPT = `You are a food logging assistant. You are g
 Respond with a single valid JSON object and nothing else — no markdown, no code fences, no commentary. It must match this shape exactly:
 
 {
+  "title": "Chicken rice",
   "foods": [
     {
       "name": "short food name",
@@ -84,6 +87,7 @@ Respond with a single valid JSON object and nothing else — no markdown, no cod
 }
 
 Rules:
+- "title" is a SHORT, natural meal name of 2–4 words (under ~24 chars) — update it if the change alters what the meal is.
 - Start from the provided meal and change only what the instruction asks. Keep foods and their values that the instruction does not mention.
 - To add a food, append it with realistic estimates for every field. To remove one, drop it. To change a portion/quantity, adjust "estimatedWeightG"/"quantity" accordingly.
 - Every field is required for each remaining food; never leave "name" empty or omit "estimatedWeightG".

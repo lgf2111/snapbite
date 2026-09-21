@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { MealDetail } from '@/lib/api';
-import type { Backend, RecentMeal } from '@/lib/backend';
+import { type Backend, type RecentMeal, shortMealTitle } from '@/lib/backend';
 import { hapticImpact } from '@/lib/telegram';
 import { useBackButton, useMainButton } from '@/lib/useTelegramButtons';
 import { cn } from '@/lib/utils';
@@ -101,7 +101,8 @@ function recentToDetail(m: RecentMeal): MealDetail {
     id: m.id,
     loggedAt: m.when,
     createdAt: m.when,
-    notes: m.label,
+    title: m.label,
+    notes: null,
     confidence: null,
     telegramFileId: m.previewUrl ? 'preview' : null,
     aiProvider: m.aiProvider,
@@ -187,7 +188,7 @@ export function MealDetailScreen({
   useEffect(() => {
     if (!detail) return;
     let active = true;
-    const label = detail.notes?.trim() || detail.foods.map((f) => f.name).join(', ');
+    const label = shortMealTitle(detail.title, detail.foods.map((f) => f.name));
     const kcal = Math.round(detail.total?.energyKcal ?? 0);
     backend
       .listFavorites()
@@ -297,6 +298,7 @@ export function MealDetailScreen({
       total: resolved.total,
       confidence: detail.confidence ?? 0.5,
       needsConfirmation: false,
+      ...(detail.title ? { title: detail.title } : {}),
       ...(detail.notes ? { notes: detail.notes } : {}),
     };
     try {
@@ -325,7 +327,7 @@ export function MealDetailScreen({
 
   /** Builds the share-card image from the current (possibly edited) meal. */
   async function buildCardBlob(): Promise<Blob> {
-    const title = detail?.notes?.trim() || kept.map((f) => f.name).join(', ') || 'Meal';
+    const title = shortMealTitle(detail?.title, kept.map((f) => f.name));
     return renderMealShareCard({
       photoUrl: detail?.telegramFileId ? backend.photoUrl(mealId) : null,
       title,
@@ -338,7 +340,7 @@ export function MealDetailScreen({
 
   /** The default favorite name for the current meal. */
   function defaultFavLabel(): string {
-    return detail?.notes?.trim() || kept.map((f) => f.name).join(', ') || 'Saved meal';
+    return shortMealTitle(detail?.title, kept.map((f) => f.name));
   }
 
   /** Star tapped: if already saved, unsave; otherwise open the rename dialog. */
@@ -356,14 +358,16 @@ export function MealDetailScreen({
   async function confirmSaveFavorite() {
     if (!detail || kept.length === 0 || savingFav) return;
     setSavingFav(true);
+    const label = favLabel.trim() || defaultFavLabel();
     const meal: MealResult = {
       foods: resolved.foods,
       total: resolved.total,
       confidence: detail.confidence ?? 0.5,
       needsConfirmation: false,
+      // Persist the chosen name as the meal's title so it shows nicely later.
+      title: label,
       ...(detail.notes ? { notes: detail.notes } : {}),
     };
-    const label = favLabel.trim() || defaultFavLabel();
     try {
       const id = await backend.addFavorite(meal, label);
       setSavedFavId(id);

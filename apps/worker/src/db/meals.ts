@@ -36,6 +36,7 @@ export async function saveMeal(db: MealsDb, input: SaveMealInput): Promise<strin
       id: mealId,
       userId: input.userId,
       telegramFileId: input.telegramFileId ?? null,
+      title: m.title ?? null,
       notes: m.notes ?? null,
       confidence: m.confidence,
       aiProvider: input.aiProvider ?? null,
@@ -143,6 +144,7 @@ export async function findMealByMessageId(
 export interface MealSummary {
   id: string;
   loggedAt: number;
+  title: string | null;
   notes: string | null;
   confidence: number | null;
   energyKcal: number | null;
@@ -173,6 +175,7 @@ export async function listMeals(db: MealsDb, userId: string, limit = 50): Promis
     summaries.push({
       id: meal.id,
       loggedAt: meal.loggedAt,
+      title: meal.title ?? null,
       notes: meal.notes,
       confidence: meal.confidence,
       energyKcal: nut[0]?.energyKcal ?? null,
@@ -205,7 +208,7 @@ export async function updateMeal(
   const statements = [
     db
       .update(meals)
-      .set({ notes: meal.notes ?? null, confidence: meal.confidence })
+      .set({ title: meal.title ?? null, notes: meal.notes ?? null, confidence: meal.confidence })
       .where(eq(meals.id, mealId)),
     db.delete(foodItems).where(eq(foodItems.mealId, mealId)),
     db.delete(nutrition).where(eq(nutrition.mealId, mealId)),
@@ -267,6 +270,7 @@ export interface MealDetail {
   id: string;
   loggedAt: number;
   createdAt: number;
+  title: string | null;
   notes: string | null;
   confidence: number | null;
   telegramFileId: string | null;
@@ -319,6 +323,7 @@ export async function getMealDetail(
     id: meal.id,
     loggedAt: meal.loggedAt,
     createdAt: meal.createdAt,
+    title: meal.title ?? null,
     notes: meal.notes,
     confidence: meal.confidence,
     telegramFileId: meal.telegramFileId,

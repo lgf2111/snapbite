@@ -408,6 +408,7 @@ function savedToDetail(s: SavedMeal): MealDetail {
     id: s.id,
     loggedAt: new Date(s.savedAt).getTime(),
     createdAt: new Date(s.savedAt).getTime(),
+    title: s.meal.title ?? null,
     notes: s.meal.notes ?? null,
     confidence: s.meal.confidence,
     telegramFileId: null,
@@ -429,10 +430,23 @@ function savedToDetail(s: SavedMeal): MealDetail {
   };
 }
 
+/**
+ * A short, shareable meal name: prefer the AI's `title`, else the first couple
+ * of food names, kept concise. Never returns a long descriptive string.
+ */
+export function shortMealTitle(title: string | null | undefined, foodNames: string[]): string {
+  const t = (title ?? '').trim();
+  if (t) return t;
+  const names = foodNames.filter(Boolean);
+  if (names.length === 0) return 'Meal';
+  if (names.length <= 2) return names.join(' & ');
+  return `${names[0]} & ${names.length - 1} more`;
+}
+
 function toRecent(m: MealSummary, photoUrl?: (id: string) => string): RecentMeal {
   return {
     id: m.id,
-    label: m.foods.join(', ') || 'Meal',
+    label: shortMealTitle(m.title, m.foods),
     energyKcal: m.energyKcal,
     proteinG: m.proteinG,
     carbsG: m.carbsG,
@@ -446,7 +460,10 @@ function toRecent(m: MealSummary, photoUrl?: (id: string) => string): RecentMeal
 function fromSaved(m: SavedMeal): RecentMeal {
   return {
     id: m.id,
-    label: m.meal.foods.map((f) => f.food.name).join(', ') || 'Meal',
+    label: shortMealTitle(
+      m.meal.title,
+      m.meal.foods.map((f) => f.food.name),
+    ),
     energyKcal: m.meal.total.energyKcal,
     proteinG: m.meal.total.proteinG,
     carbsG: m.meal.total.carbsG,

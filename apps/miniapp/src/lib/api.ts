@@ -20,6 +20,7 @@ const AI_TIMEOUT_MS = 60_000;
 export interface MealSummary {
   id: string;
   loggedAt: number;
+  title: string | null;
   notes: string | null;
   confidence: number | null;
   energyKcal: number | null;
@@ -51,6 +52,7 @@ export interface MealDetail {
   id: string;
   loggedAt: number;
   createdAt: number;
+  title: string | null;
   notes: string | null;
   confidence: number | null;
   telegramFileId: string | null;

@@ -117,6 +117,7 @@ export function resolveMeal(analysis: AIFoodAnalysis): MealResult {
     total,
     confidence: analysis.confidence,
     needsConfirmation: analysis.needsConfirmation,
+    ...(analysis.title !== undefined ? { title: analysis.title } : {}),
     ...(analysis.notes !== undefined ? { notes: analysis.notes } : {}),
   };
 }

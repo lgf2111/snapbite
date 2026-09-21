@@ -21,6 +21,8 @@ export const MealResult = z.object({
   total: NutritionValue,
   confidence: Confidence,
   needsConfirmation: z.boolean(),
+  /** Short, shareable meal name (2–4 words), e.g. "Chicken rice". */
+  title: z.string().optional(),
   notes: z.string().optional(),
 });
 export type MealResult = z.infer<typeof MealResult>;
@@ -80,11 +82,16 @@ export function buildManualMeal(foods: ManualFoodInput[], notes?: string): MealR
     { energyKcal: 0, proteinG: 0, carbsG: 0, fatG: 0 },
   );
 
+  // The entered food name(s) make a fine short title for a manual meal.
+  const title =
+    clean.length === 1 ? clean[0]!.name : `${clean[0]!.name} & ${clean.length - 1} more`;
+
   return {
     foods: mealFoods,
     total: { ...sum, source: clean.length > 1 ? 'mixed' : 'manual' },
     confidence: 1,
     needsConfirmation: false,
+    title,
     ...(notes && notes.trim() ? { notes: notes.trim() } : {}),
   };
 }

@@ -34,28 +34,35 @@ export function useCachedData<T>(
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
-  const run = useCallback(
-    (k: string) => {
-      const cached = getCached<T>(k);
-      setData(cached);
-      setLoading(cached === undefined);
-      setError(null);
-      revalidate<T>(k, () => fetcherRef.current())
-        .then((fresh) => {
-          setData(fresh);
-          setLoading(false);
-        })
-        .catch((e: unknown) => {
-          // Keep showing cached data on a failed revalidation; only surface an
-          // error when we had nothing cached to show.
-          setLoading(false);
-          if (getCached<T>(k) === undefined) {
-            setError(e instanceof Error ? e.message : 'Failed to load');
-          }
-        });
-    },
-    [],
-  );
+  // Track the last value we've shown so a background refresh (e.g. after a
+  // mutation invalidates the cache) can keep showing it instead of flashing a
+  // skeleton.
+  const lastShown = useRef<T | undefined>(data);
+  lastShown.current = data;
+
+  const run = useCallback((k: string, keepStale: boolean) => {
+    const cached = getCached<T>(k);
+    // On a background refresh (same key, e.g. after a mutation) keep showing the
+    // current data so there's no skeleton flash. On a cold load for a new key,
+    // only fall back to cache (never to another key's stale data).
+    const shown = cached ?? (keepStale ? lastShown.current : undefined);
+    setData(shown);
+    setLoading(shown === undefined);
+    setError(null);
+    revalidate<T>(k, () => fetcherRef.current())
+      .then((fresh) => {
+        setData(fresh);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        // Keep showing what we had on a failed revalidation; only surface an
+        // error when we had nothing to show.
+        setLoading(false);
+        if (shown === undefined) {
+          setError(e instanceof Error ? e.message : 'Failed to load');
+        }
+      });
+  }, []);
 
   useEffect(() => {
     if (!key) {
@@ -71,11 +78,11 @@ export function useCachedData<T>(
       setLoading(false);
       return;
     }
-    run(key);
+    run(key, false);
   }, [key, run]);
 
   const refresh = useCallback(() => {
-    if (key) run(key);
+    if (key) run(key, true);
   }, [key, run]);
 
   return { data, loading, error, refresh };

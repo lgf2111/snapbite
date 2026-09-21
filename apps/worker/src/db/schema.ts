@@ -42,6 +42,8 @@ export const meals = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     telegramFileId: text('telegram_file_id'),
+    /** Short, shareable meal name (2–4 words) for the UI + share card. */
+    title: text('title'),
     notes: text('notes'),
     confidence: real('confidence'),
     /** AI provider that analyzed this meal (e.g. 'gemini', 'openai'); null for manual/older meals. */
