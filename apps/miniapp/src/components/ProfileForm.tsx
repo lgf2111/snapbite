@@ -194,7 +194,9 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
           max={new Date().toISOString().slice(0, 10)}
           value={birthDate}
           onChange={(e) => setBirthDate(e.target.value)}
-          className="w-full"
+          // Hug the value instead of stretching full-width (which left a big
+          // empty gap on iOS); `dob-input` centers the native date text.
+          className="dob-input w-40"
         />
         <span className="text-muted-foreground text-xs">
           {birthDateValid ? `Age ${derivedAge} · stays up to date` : 'Used to compute your age'}

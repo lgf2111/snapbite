@@ -67,3 +67,19 @@ body {
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
+
+/*
+ * Date-of-birth input (ProfileForm). Native `type="date"` on iOS/WebKit
+ * left-aligns its value and leaves dead space; center it and let the picker
+ * indicator sit flush so the field reads like the other compact inputs.
+ */
+.dob-input {
+  text-align: center;
+}
+.dob-input::-webkit-date-and-time-value {
+  text-align: center;
+  margin: 0;
+}
+.dob-input::-webkit-calendar-picker-indicator {
+  margin-left: auto;
+}
