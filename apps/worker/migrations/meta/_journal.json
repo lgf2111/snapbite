@@ -57,6 +57,13 @@
       "when": 1789753348304,
       "tag": "0007_yummy_thunderball",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789982057012,
+      "tag": "0008_sturdy_sway",
+      "breakpoints": true
     }
   ]
 }

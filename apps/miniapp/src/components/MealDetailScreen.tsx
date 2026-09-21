@@ -6,7 +6,7 @@ import {
   resolveFoodNutrition,
   sourceLabel,
 } from '@snapbite/core';
-import { RotateCcw, Share2, Sparkles, Trash2, X } from 'lucide-react';
+import { RotateCcw, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -111,6 +111,7 @@ export function MealDetailScreen({
   const [cardBusy, setCardBusy] = useState(false); // generating the preview
   const [sharing, setSharing] = useState(false); // sharing from the preview
   const [cardPreview, setCardPreview] = useState<{ blob: Blob; url: string } | null>(null);
+  const [savingFav, setSavingFav] = useState(false);
 
   useEffect(() => {
     backend
@@ -256,6 +257,28 @@ export function MealDetailScreen({
     });
   }
 
+  /** Saves the current meal (with any edits) as a reusable favorite. */
+  async function saveAsFavorite() {
+    if (!detail || kept.length === 0 || savingFav) return;
+    setSavingFav(true);
+    const meal: MealResult = {
+      foods: resolved.foods,
+      total: resolved.total,
+      confidence: detail.confidence ?? 0.5,
+      needsConfirmation: false,
+      ...(detail.notes ? { notes: detail.notes } : {}),
+    };
+    const label = detail.notes?.trim() || kept.map((f) => f.name).join(', ') || 'Saved meal';
+    try {
+      await backend.addFavorite(meal, label);
+      onToast?.('success', 'Saved to your meals');
+    } catch (e) {
+      onToast?.('error', e instanceof Error ? e.message : 'Could not save meal');
+    } finally {
+      setSavingFav(false);
+    }
+  }
+
   /** Generates the card and opens a preview so the user can see it first. */
   async function openCardPreview() {
     if (cardBusy) return;
@@ -354,16 +377,27 @@ export function MealDetailScreen({
             />
           )}
 
-          {/* Preview the composed image, then share from the preview dialog. */}
-          <Button
-            variant="secondary"
-            className="w-full gap-2"
-            disabled={cardBusy}
-            onClick={() => void openCardPreview()}
-          >
-            <Share2 className="size-4" />
-            {cardBusy ? 'Preparing…' : 'Share meal card'}
-          </Button>
+          {/* Save as a reusable favorite + share a composed image. */}
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              className="flex-1 gap-2"
+              disabled={savingFav}
+              onClick={() => void saveAsFavorite()}
+            >
+              <Star className="size-4" />
+              {savingFav ? 'Saving…' : 'Save meal'}
+            </Button>
+            <Button
+              variant="secondary"
+              className="flex-1 gap-2"
+              disabled={cardBusy}
+              onClick={() => void openCardPreview()}
+            >
+              <Share2 className="size-4" />
+              {cardBusy ? 'Preparing…' : 'Share'}
+            </Button>
+          </div>
 
           <Card>
             <CardContent className="flex flex-col gap-4">

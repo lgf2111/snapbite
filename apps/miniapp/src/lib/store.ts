@@ -104,3 +104,54 @@ export function clearProfile(): void {
     // non-fatal
   }
 }
+
+// --- saved meals ("favorites"), local mode ---------------------------------
+
+/** A locally saved favorite (browser-dev / local mode). */
+export interface LocalFavorite {
+  id: string;
+  label: string;
+  createdAt: number;
+  meal: MealResult;
+}
+
+const FAVORITES_KEY = 'snapbite.favorites.v1';
+
+/** Reads locally stored favorites (newest first). */
+export function loadFavorites(): LocalFavorite[] {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as LocalFavorite[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFavorites(all: LocalFavorite[]): void {
+  try {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(all));
+  } catch {
+    // non-fatal
+  }
+}
+
+/** Saves a favorite locally; returns its id. */
+export function saveFavoriteLocal(meal: MealResult, label: string): string {
+  const entry: LocalFavorite = {
+    id: crypto.randomUUID(),
+    label,
+    createdAt: Date.now(),
+    meal,
+  };
+  const all = loadFavorites();
+  all.unshift(entry);
+  writeFavorites(all);
+  return entry.id;
+}
+
+/** Deletes a local favorite by id. */
+export function deleteFavoriteLocal(id: string): void {
+  writeFavorites(loadFavorites().filter((f) => f.id !== id));
+}

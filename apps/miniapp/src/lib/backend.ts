@@ -2,6 +2,7 @@ import { computeTargets, type DailyTargets, type MealResult, type UserProfile } 
 import {
   ApiClient,
   type CustomProviderInput,
+  type Favorite,
   type MealDetail,
   type MealSummary,
   type SettingsView,
@@ -11,9 +12,12 @@ import { readConfig } from './config.js';
 import {
   clearMeals,
   clearProfile,
+  deleteFavoriteLocal,
   deleteSavedMeal,
+  loadFavorites,
   loadMeals,
   loadProfile,
+  saveFavoriteLocal,
   saveMeal as saveMealLocal,
   type SavedMeal,
   saveProfileLocal,
@@ -58,6 +62,12 @@ export interface Backend {
   /** Distinct days (YYYY-MM-DD) that have meals, for the calendar. */
   mealDates(): Promise<string[]>;
   detail(id: string): Promise<MealDetail>;
+  /** Saved meals ("favorites") the user can re-log with one tap. */
+  listFavorites(): Promise<Favorite[]>;
+  /** Saves a meal as a favorite; returns its id. */
+  addFavorite(meal: MealResult, label?: string): Promise<string>;
+  /** Deletes a saved favorite. */
+  removeFavorite(id: string): Promise<void>;
   getSettings(): Promise<SettingsView>;
   saveApiKey(
     apiKey: string,
@@ -142,6 +152,17 @@ export function createBackend(): Backend {
       },
       detail(id) {
         return api.getMeal(id);
+      },
+      async listFavorites() {
+        const { favorites } = await api.listFavorites();
+        return favorites;
+      },
+      async addFavorite(meal, label) {
+        const { id } = await api.addFavorite(meal, label);
+        return id;
+      },
+      async removeFavorite(id) {
+        await api.removeFavorite(id);
       },
       getSettings() {
         return api.getSettings();
@@ -231,6 +252,22 @@ export function createBackend(): Backend {
       const saved = loadMeals().find((m) => m.id === id);
       if (!saved) throw new Error('Meal not found');
       return savedToDetail(saved);
+    },
+    async listFavorites() {
+      return loadFavorites().map((f) => ({
+        id: f.id,
+        label: f.label,
+        energyKcal: f.meal.total.energyKcal,
+        createdAt: f.createdAt,
+        meal: f.meal,
+      }));
+    },
+    async addFavorite(meal, label) {
+      const derived = meal.foods.map((f) => f.food.name).join(', ') || 'Saved meal';
+      return saveFavoriteLocal(meal, (label?.trim() || derived).slice(0, 120));
+    },
+    async removeFavorite(id) {
+      deleteFavoriteLocal(id);
     },
     // Local (no-backend) mode uses the mock processor, which needs no key.
     async getSettings() {

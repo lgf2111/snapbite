@@ -138,8 +138,35 @@ export const feedback = sqliteTable(
   }),
 );
 
+/**
+ * User-saved meal templates ("favorites"). Stores the full MealResult as JSON
+ * so a favorite is a standalone, reusable template that survives even if the
+ * original logged meal is deleted. Reusing one just copies the JSON into a new
+ * meal (no AI call, no key needed).
+ */
+export const savedMeals = sqliteTable(
+  'saved_meals',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Display name for the saved meal (defaults from the meal's foods). */
+    label: text('label').notNull(),
+    /** The full MealResult, serialized (validated against the core schema on save). */
+    mealJson: text('meal_json').notNull(),
+    /** Denormalized total kcal for a cheap list preview without parsing JSON. */
+    energyKcal: real('energy_kcal'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => ({
+    userIdx: index('saved_meals_user_idx').on(t.userId, t.createdAt),
+  }),
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type SettingsRow = typeof settings.$inferSelect;
+export type SavedMealRow = typeof savedMeals.$inferSelect;
 export type MealRow = typeof meals.$inferSelect;
 export type FoodItemRow = typeof foodItems.$inferSelect;
 export type NutritionRow = typeof nutrition.$inferSelect;

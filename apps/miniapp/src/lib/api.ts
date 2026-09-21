@@ -38,6 +38,15 @@ export interface DayGroup {
   mealIds: string[];
 }
 
+/** A saved-meal template ("favorite") the user can re-log with one tap. */
+export interface Favorite {
+  id: string;
+  label: string;
+  energyKcal: number | null;
+  createdAt: number;
+  meal: MealResult;
+}
+
 export interface MealDetail {
   id: string;
   loggedAt: number;
@@ -243,6 +252,26 @@ export class ApiClient {
 
   getMeal(id: string): Promise<MealDetail> {
     return this.#request<MealDetail>(`/api/meals/${encodeURIComponent(id)}`);
+  }
+
+  /** Lists the user's saved meals (favorites), newest first. */
+  listFavorites(): Promise<{ favorites: Favorite[] }> {
+    return this.#request<{ favorites: Favorite[] }>('/api/favorites');
+  }
+
+  /** Saves a meal as a reusable favorite. */
+  addFavorite(meal: MealResult, label?: string): Promise<{ id: string; label: string }> {
+    return this.#request<{ id: string; label: string }>('/api/favorites', {
+      method: 'POST',
+      body: JSON.stringify({ meal, ...(label ? { label } : {}) }),
+    });
+  }
+
+  /** Deletes a saved favorite. */
+  removeFavorite(id: string): Promise<{ ok: boolean }> {
+    return this.#request<{ ok: boolean }>(`/api/favorites/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
   }
 
   /**
