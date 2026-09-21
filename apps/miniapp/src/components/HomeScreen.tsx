@@ -103,6 +103,29 @@ export function HomeScreen({
     refresh();
   }, [refreshSignal, refresh]);
 
+  // Track which meal ids we've already shown for the CURRENT list key, so a
+  // meal that appears later (after logging) animates in — but the initial batch
+  // (and a day/view switch) does not animate everything.
+  const seenIds = useRef<{ key: string; ids: Set<string> }>({ key: mealsKey, ids: new Set() });
+  const newIds = useMemo(() => {
+    const list = mealsData ?? [];
+    const store = seenIds.current;
+    if (store.key !== mealsKey) {
+      // New day/view: treat everything as already-seen (no mass animation).
+      store.key = mealsKey;
+      store.ids = new Set(list.map((m) => m.id));
+      return new Set<string>();
+    }
+    const fresh = new Set<string>();
+    for (const m of list) {
+      if (!store.ids.has(m.id)) {
+        fresh.add(m.id);
+        store.ids.add(m.id);
+      }
+    }
+    return fresh;
+  }, [mealsData, mealsKey]);
+
   const weekly = view === 'weekly';
   // Weekly targets scale the daily target by the number of days in the range.
   const viewTargets = useMemo(() => {
@@ -253,7 +276,11 @@ export function HomeScreen({
       {meals && meals.length > 0 && (
         <div className="flex flex-col">
           {meals.map((m) => (
-            <SwipeableRow key={m.id} onDelete={() => void handleDelete(m.id)}>
+            <SwipeableRow
+              key={m.id}
+              animateIn={newIds.has(m.id)}
+              onDelete={() => void handleDelete(m.id)}
+            >
               <Card className="bg-background">
                 <CardContent className="flex items-center gap-3">
                   {m.previewUrl && (

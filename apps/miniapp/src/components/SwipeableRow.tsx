@@ -1,11 +1,13 @@
 import { Trash2 } from 'lucide-react';
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useSwipeable } from 'react-swipeable';
 import { cn } from '@/lib/utils';
 
 interface SwipeableRowProps {
   children: ReactNode;
   onDelete: () => void;
+  /** When true, the row animates in (expand + fade) on mount. */
+  animateIn?: boolean;
 }
 
 /** How far the row slides open to reveal the delete action. */
@@ -30,10 +32,19 @@ const COLLAPSE_MS = 260;
  * extends slightly under it (OVERLAP), so when the card slides left the two
  * shapes tuck together cleanly instead of showing a rounded-corner notch.
  */
-export function SwipeableRow({ children, onDelete }: SwipeableRowProps) {
+export function SwipeableRow({ children, onDelete, animateIn = false }: SwipeableRowProps) {
   const [open, setOpen] = useState(false);
   const [removing, setRemoving] = useState(false);
+  // Starts true when this row should animate in; flipped off after mount so it
+  // expands from collapsed → full (the reverse of the delete collapse).
+  const [entering, setEntering] = useState(animateIn);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!animateIn) return;
+    const id = requestAnimationFrame(() => setEntering(false));
+    return () => cancelAnimationFrame(id);
+  }, [animateIn]);
 
   const handlers = useSwipeable({
     onSwipedLeft: () => setOpen(true),
@@ -66,7 +77,10 @@ export function SwipeableRow({ children, onDelete }: SwipeableRowProps) {
       className={cn('relative mb-2 overflow-hidden', removing && 'pointer-events-none')}
       style={{
         transition: `max-height ${COLLAPSE_MS}ms ease, opacity ${COLLAPSE_MS}ms ease, margin ${COLLAPSE_MS}ms ease`,
-        ...(removing ? { maxHeight: 0, opacity: 0, marginTop: 0, marginBottom: 0 } : {}),
+        // Collapsed state for both removing (out) and entering (in, pre-frame).
+        ...(removing || entering
+          ? { maxHeight: 0, opacity: 0, marginTop: 0, marginBottom: 0 }
+          : { maxHeight: 500 }),
       }}
     >
       {/* Delete action behind the card. Overlaps under the card's right edge so
