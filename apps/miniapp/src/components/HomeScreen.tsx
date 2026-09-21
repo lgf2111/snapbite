@@ -251,7 +251,7 @@ export function HomeScreen({
       )}
 
       {meals && meals.length > 0 && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col">
           {meals.map((m) => (
             <SwipeableRow key={m.id} onDelete={() => void handleDelete(m.id)}>
               <Card className="bg-background">
