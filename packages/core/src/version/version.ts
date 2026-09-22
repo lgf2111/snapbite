@@ -19,6 +19,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.20.0',
+    date: '2026-09-16',
+    notes: [
+      '🛑 Final notice: this old bot is being shut down TODAY and will stop working',
+      '👉 Continue on our new bot — open it and press Start: https://t.me/SnapBiteAI_bot',
+      'All your meals, targets, settings and AI key are already there — nothing to re-enter',
+      'Thanks for being an early user — see you on @SnapBiteAI_bot! 💙',
+    ],
+  },
+  {
     version: '0.19.0',
     date: '2026-09-16',
     notes: [
