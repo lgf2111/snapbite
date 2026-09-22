@@ -44,10 +44,10 @@ export function mimeTypeForPath(path: string): MealImage['mimeType'] {
   return mime;
 }
 
-export const HELP_TEXT = `foodlog — analyze a meal photo end-to-end
+export const HELP_TEXT = `snapbite — analyze a meal photo end-to-end
 
 Usage:
-  foodlog <image-path> [--real] [--hint "text"]
+  snapbite <image-path> [--real] [--hint "text"]
 
 Options:
   --real          Call the real DeepSeek API (requires DEEPSEEK_API_KEY).
@@ -56,5 +56,5 @@ Options:
   -h, --help      Show this help.
 
 Examples:
-  foodlog lunch.jpg
-  foodlog lunch.jpg --real --hint "chicken teriyaki bowl"`;
+  snapbite lunch.jpg
+  snapbite lunch.jpg --real --hint "chicken teriyaki bowl"`;

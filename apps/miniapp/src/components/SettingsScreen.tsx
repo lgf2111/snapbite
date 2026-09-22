@@ -333,7 +333,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   }
 
   async function handleExport() {
-    const fileName = `foodlog-export-${new Date().toISOString().slice(0, 10)}.json`;
+    const fileName = `snapbite-export-${new Date().toISOString().slice(0, 10)}.json`;
     const url = backend.exportUrl();
 
     // Worker mode: the export has a public, auth-carrying HTTPS URL. Blob

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "FoodLog Telegram Mini App: review, edit, search, and analyze logged meals.",
+  "description": "SnapBite Telegram Mini App: review, edit, search, and analyze logged meals.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.typecheck.json && vite build",

@@ -2,7 +2,7 @@
   "name": "@snapbite/core",
   "version": "0.0.0",
   "private": true,
-  "description": "Transport-agnostic domain core for FoodLog: schemas, AI provider interface, nutrition resolver.",
+  "description": "Transport-agnostic domain core for SnapBite: schemas, AI provider interface, nutrition resolver.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

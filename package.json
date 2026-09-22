@@ -1,8 +1,8 @@
 {
-  "name": "food-log",
+  "name": "snapbite",
   "version": "0.0.0",
   "private": true,
-  "description": "FoodLog — Telegram-native, AI-assisted food/nutrition logging",
+  "description": "SnapBite — Telegram-native, AI-assisted food/nutrition logging",
   "type": "module",
   "engines": {
     "node": ">=20"

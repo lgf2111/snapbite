@@ -160,7 +160,7 @@ export class ApiError extends Error {
 }
 
 /**
- * Thin client for the FoodLog Worker API. Attaches the signed Telegram initData
+ * Thin client for the SnapBite Worker API. Attaches the signed Telegram initData
  * on every request so the Worker can authenticate.
  */
 export class ApiClient {

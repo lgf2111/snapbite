@@ -16,7 +16,7 @@ export function accountRoutes() {
     const db = createAccountDb(c.env.DB);
     const data = await exportUser(db, c.get('userId'));
     if (!data) return c.json({ error: 'Not found' }, 404);
-    const filename = `foodlog-export-${new Date().toISOString().slice(0, 10)}.json`;
+    const filename = `snapbite-export-${new Date().toISOString().slice(0, 10)}.json`;
     return c.body(JSON.stringify(data, null, 2), 200, {
       'content-type': 'application/json; charset=utf-8',
       'content-disposition': `attachment; filename="${filename}"`,

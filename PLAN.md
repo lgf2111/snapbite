@@ -276,7 +276,7 @@ worker tests MUST implement BOTH `analyzeMeal` AND `reviseMeal`.
 
 ### Miniapp production build (also runs tsc)
 ```
-cd apps/miniapp && export VITE_WORKER_URL=https://foodlog-worker.lgf2111.workers.dev && pnpm build
+cd apps/miniapp && export VITE_WORKER_URL=https://snapbite-worker.lgf2111.workers.dev && pnpm build
 ```
 
 ### Deploy
@@ -305,9 +305,11 @@ Do NOT run long-lived dev servers via automation (they block). If you need one, 
 - Bot: `@SnapBiteAI_bot` — webhook → the worker; Menu Button + Configure Mini App both set to
   `https://snapbite.leeguanfeng.com`; avatar = `apps/miniapp/public/icon.png`.
 
-RETIRED (kept temporarily as backup — safe to delete once migration is confirmed stable):
-- Old worker `foodlog-worker`, old Pages `foodlog` (`foodlog-7f5.pages.dev`), old bot `@foodlog2111_bot`.
-- Old D1 `foodlog-db`, id `f0312e67-2fef-47a6-a9ca-59cb9c21a79b` — **keep as data backup** for now.
+RETIRED (decommissioned after a final "shutting down today" broadcast — v0.20.0):
+- Old worker `foodlog-worker`, old Pages `foodlog` (`foodlog-7f5.pages.dev`), old bot `@foodlog2111_bot`
+  — **deleted**. (`wrangler.old.toml`, the temporary old-worker deploy config, has been removed.)
+- Old D1 `foodlog-db`, id `f0312e67-2fef-47a6-a9ca-59cb9c21a79b` — **kept as a data backup**; delete
+  after a couple of stable weeks with `wrangler d1 delete foodlog-db`.
 
 Migration notes:
 - Data copied old→new via `d1 export --no-schema` then filtered out `d1_migrations` + `sqlite_sequence`

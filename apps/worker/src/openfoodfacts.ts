@@ -52,7 +52,7 @@ export async function lookupBarcode(
     const url = `${OFF_BASE}/${encodeURIComponent(barcode)}.json?fields=${OFF_FIELDS}`;
     const res = await fetchImpl(url, {
       signal: ac.signal,
-      headers: { 'user-agent': 'FoodLog/1.0 (+telegram bot; contact via /feedback)' },
+      headers: { 'user-agent': 'SnapBite/1.0 (+telegram bot; contact via /feedback)' },
     });
     if (!res.ok) return null;
     const body = (await res.json()) as {

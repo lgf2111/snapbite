@@ -5,7 +5,7 @@
   "description": "Local CLI harness: analyze a meal photo end-to-end (mock by default, real DeepSeek with --real).",
   "type": "module",
   "bin": {
-    "foodlog": "./dist/index.js"
+    "snapbite": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc -b",
