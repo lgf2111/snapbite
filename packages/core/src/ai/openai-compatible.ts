@@ -189,15 +189,126 @@ function extractContent(raw: string, providerId: string): string {
 function parseAnalysis(content: string): AIFoodAnalysis {
   let json: unknown;
   try {
-    json = JSON.parse(content);
+    json = JSON.parse(stripCodeFences(content));
   } catch (cause) {
     throw new AIProviderError('parse', 'Model output was not valid JSON', { cause });
   }
-  const result = AIFoodAnalysis.safeParse(json);
+  // Repair the common, harmless quirks vision models produce (numbers as
+  // strings, an empty/echoed barcode, confidence as a percent, a missing
+  // quantity, unusable foods) BEFORE validating, so formatting noise doesn't
+  // reject an otherwise-good meal. The strict schema is still the final gate.
+  const result = AIFoodAnalysis.safeParse(coerceAnalysis(json));
   if (!result.success) {
-    throw new AIProviderError('parse', 'Model output did not match the expected schema', {
-      cause: result.error,
-    });
+    // Include a short summary of which fields failed so it's diagnosable.
+    const summary = result.error.issues
+      .slice(0, 6)
+      .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+      .join('; ');
+    throw new AIProviderError(
+      'parse',
+      `Model output did not match the expected schema — ${summary}`,
+      { cause: result.error },
+    );
   }
   return result.data;
+}
+
+/** Strips ```json … ``` fences some models wrap JSON in despite instructions. */
+function stripCodeFences(s: string): string {
+  const t = s.trim();
+  if (t.startsWith('```')) {
+    return t
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '')
+      .trim();
+  }
+  return t;
+}
+
+/** A finite number from a number or numeric string, else undefined. */
+function num(v: unknown): number | undefined {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v.replace(/[^0-9.\-]/g, ''));
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+/** Clamps a confidence-ish value into [0,1] (accepts 0–100 percentages). */
+function coerceConfidence(v: unknown): number {
+  const n = num(v);
+  if (n === undefined) return 0.6; // reasonable default when the model omits it
+  const scaled = n > 1 ? n / 100 : n; // "85" → 0.85
+  return Math.max(0, Math.min(1, scaled));
+}
+
+/** Coerces optional per-100g nutrition; drops it unless all four are numbers. */
+function coerceNutrition(v: unknown): Record<string, number> | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const o = v as Record<string, unknown>;
+  const energyKcal = num(o.energyKcal);
+  const proteinG = num(o.proteinG);
+  const carbsG = num(o.carbsG);
+  const fatG = num(o.fatG);
+  if ([energyKcal, proteinG, carbsG, fatG].some((x) => x === undefined)) return undefined;
+  return {
+    energyKcal: Math.max(0, energyKcal as number),
+    proteinG: Math.max(0, proteinG as number),
+    carbsG: Math.max(0, carbsG as number),
+    fatG: Math.max(0, fatG as number),
+  };
+}
+
+/**
+ * Normalizes a raw model object into the shape {@link AIFoodAnalysis} expects,
+ * repairing common quirks and dropping foods that can't be salvaged. Never
+ * throws — a malformed input just yields a best-effort object that validation
+ * will accept or reject.
+ */
+function coerceAnalysis(input: unknown): unknown {
+  if (!input || typeof input !== 'object') return input;
+  const o = input as Record<string, unknown>;
+
+  const rawFoods = Array.isArray(o.foods) ? o.foods : [];
+  const foods = rawFoods
+    .map((f) => {
+      if (!f || typeof f !== 'object') return null;
+      const food = f as Record<string, unknown>;
+      const name = typeof food.name === 'string' ? food.name.trim() : '';
+      const weight = num(food.estimatedWeightG);
+      // A food needs at least a name and a positive weight to be usable.
+      if (!name || weight === undefined || weight <= 0) return null;
+
+      const out: Record<string, unknown> = {
+        name,
+        estimatedWeightG: weight,
+        confidence: coerceConfidence(food.confidence),
+      };
+      const qty = num(food.quantity);
+      out.quantity = qty !== undefined && qty > 0 ? qty : 1;
+      if (typeof food.portion === 'string' && food.portion.trim()) out.portion = food.portion.trim();
+
+      const aiN = coerceNutrition(food.aiNutrition);
+      if (aiN) out.aiNutrition = aiN;
+      const manualN = coerceNutrition(food.manualNutrition);
+      if (manualN) out.manualNutrition = manualN;
+
+      // Only keep a barcode that's the expected 6–14 digits; drop empties/junk.
+      if (typeof food.barcode === 'string') {
+        const digits = food.barcode.replace(/\D/g, '');
+        if (digits.length >= 6 && digits.length <= 14) out.barcode = digits;
+      }
+      return out;
+    })
+    .filter((f): f is Record<string, unknown> => f !== null);
+
+  const result: Record<string, unknown> = {
+    foods,
+    confidence: coerceConfidence(o.confidence),
+    needsConfirmation: typeof o.needsConfirmation === 'boolean' ? o.needsConfirmation : foods.length === 0,
+  };
+  if (typeof o.title === 'string' && o.title.trim()) result.title = o.title.trim();
+  if (typeof o.notes === 'string' && o.notes.trim()) result.notes = o.notes.trim();
+  return result;
 }

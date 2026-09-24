@@ -152,4 +152,86 @@ describe('DeepSeekProvider', () => {
   it('requires an API key', () => {
     expect(() => new DeepSeekProvider({ apiKey: '' })).toThrow(AIProviderError);
   });
+
+  // --- tolerance for common vision-model quirks (coercion before validation) ---
+
+  it('coerces numeric strings, percent confidence, and missing quantity', async () => {
+    const quirky = {
+      foods: [
+        {
+          name: 'Grilled chicken',
+          estimatedWeightG: '180', // string
+          confidence: 90, // percent, not 0..1
+          // quantity omitted
+          aiNutrition: { energyKcal: '165', proteinG: '31', carbsG: '0', fatG: '3.6' },
+        },
+      ],
+      confidence: '0.8',
+      needsConfirmation: false,
+    };
+    const provider = new DeepSeekProvider({
+      apiKey: 'sk-test',
+      fetch: okFetch(envelope(JSON.stringify(quirky))),
+    });
+    const result = await provider.analyzeMeal(IMAGE);
+    expect(result.foods[0]?.estimatedWeightG).toBe(180);
+    expect(result.foods[0]?.quantity).toBe(1);
+    expect(result.foods[0]?.confidence).toBeCloseTo(0.9, 5);
+    expect(result.foods[0]?.aiNutrition?.energyKcal).toBe(165);
+  });
+
+  it('drops an empty/invalid barcode instead of rejecting the meal', async () => {
+    const withBadBarcode = {
+      foods: [{ name: 'Snack', estimatedWeightG: 50, confidence: 0.7, barcode: '' }],
+      confidence: 0.7,
+      needsConfirmation: false,
+    };
+    const provider = new DeepSeekProvider({
+      apiKey: 'sk-test',
+      fetch: okFetch(envelope(JSON.stringify(withBadBarcode))),
+    });
+    const result = await provider.analyzeMeal(IMAGE);
+    expect(result.foods).toHaveLength(1);
+    expect(result.foods[0]?.barcode).toBeUndefined();
+  });
+
+  it('strips ```json code fences the model may wrap output in', async () => {
+    const fenced = `\`\`\`json\n${JSON.stringify(validAnalysis)}\n\`\`\``;
+    const provider = new DeepSeekProvider({
+      apiKey: 'sk-test',
+      fetch: okFetch(envelope(fenced)),
+    });
+    const result = await provider.analyzeMeal(IMAGE);
+    expect(result.foods[0]?.name).toBe('Rice');
+  });
+
+  it('skips a food missing a usable weight but keeps the good ones', async () => {
+    const mixed = {
+      foods: [
+        { name: 'No weight', confidence: 0.5 }, // dropped (no weight)
+        { name: 'Rice', estimatedWeightG: 200, confidence: 0.8 }, // kept
+      ],
+      confidence: 0.7,
+      needsConfirmation: false,
+    };
+    const provider = new DeepSeekProvider({
+      apiKey: 'sk-test',
+      fetch: okFetch(envelope(JSON.stringify(mixed))),
+    });
+    const result = await provider.analyzeMeal(IMAGE);
+    expect(result.foods).toHaveLength(1);
+    expect(result.foods[0]?.name).toBe('Rice');
+  });
+
+  it('includes which fields failed in the parse error message', async () => {
+    const provider = new DeepSeekProvider({
+      apiKey: 'sk-test',
+      // No salvageable foods -> still rejected, but with a helpful message.
+      fetch: okFetch(envelope(JSON.stringify({ foods: [], confidence: 0.5, needsConfirmation: true }))),
+    });
+    await expect(provider.analyzeMeal(IMAGE)).rejects.toMatchObject({
+      kind: 'parse',
+      message: expect.stringContaining('foods'),
+    });
+  });
 });
