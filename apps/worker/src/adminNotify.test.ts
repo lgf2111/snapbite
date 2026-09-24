@@ -77,4 +77,29 @@ describe('adminNotify', () => {
       adminNotify(env({ ADMIN_TELEGRAM_ID: '999000' }), bot, 'error', 'boom'),
     ).resolves.toBeUndefined();
   });
+
+  it('falls back to a DM when posting to the group fails', async () => {
+    // First send (to the group) throws; the DM (to the admin) should succeed.
+    const calls: number[] = [];
+    let first = true;
+    const bot = {
+      async sendMessage(chatId: number, _reply: BotReply) {
+        calls.push(chatId);
+        if (first) {
+          first = false;
+          throw new Error('bot is not a member of the group');
+        }
+        return { messageId: 1 };
+      },
+    };
+    await adminNotify(
+      env({ ADMIN_GROUP_CHAT_ID: '-100123', ERRORS_THREAD_ID: '2', ADMIN_TELEGRAM_ID: '999000' }),
+      bot,
+      'error',
+      'boom',
+    );
+    // Attempted the group first, then fell back to DMing the admin.
+    expect(calls[0]).toBe(-100123);
+    expect(calls[1]).toBe(999000);
+  });
 });

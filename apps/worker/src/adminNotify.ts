@@ -26,15 +26,34 @@ export async function adminNotify(
   try {
     if (groupId != null) {
       const threadId = threadForKind(env, kind);
-      await bot.sendMessage(groupId, { text, ...(threadId != null ? { threadId } : {}) });
-      return;
+      try {
+        await bot.sendMessage(groupId, { text, ...(threadId != null ? { threadId } : {}) });
+        return;
+      } catch (err) {
+        // Posting to the group/topic failed (bot not a member/admin, topic
+        // deleted, stale id, …). Surface it in logs (visible via `wrangler
+        // tail`) instead of silently dropping it, then fall back to a DM so the
+        // owner still gets the alert.
+        // eslint-disable-next-line no-console
+        console.error('[adminNotify] group post failed', {
+          groupId,
+          threadId,
+          kind,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
     const adminId = parseAdminId(env.ADMIN_TELEGRAM_ID);
     if (adminId != null) {
       await bot.sendMessage(adminId, { text });
     }
-  } catch {
-    /* alerting must never break the request */
+  } catch (err) {
+    // Alerting must never break the request — but do leave a breadcrumb.
+    // eslint-disable-next-line no-console
+    console.error('[adminNotify] failed to deliver alert', {
+      kind,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
