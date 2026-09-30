@@ -227,6 +227,42 @@ describe('DeepSeekProvider', () => {
     expect(result.foods[0]?.name).toBe('Rice');
   });
 
+  it('retries once with a corrective nudge when the first output is unparseable', async () => {
+    // First call returns junk (unparseable); the retry returns a valid analysis.
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call += 1;
+      const content = call === 1 ? 'totally not json' : JSON.stringify(validAnalysis);
+      return { ok: true, status: 200, text: async () => envelope(content) };
+    });
+    const provider = new DeepSeekProvider({ apiKey: 'sk-test', fetch: fetchMock });
+
+    const result = await provider.analyzeMeal(IMAGE);
+    expect(result.foods[0]?.name).toBe('Rice');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // The retry appended a corrective user message.
+    const retryBody = JSON.parse(
+      (fetchMock as unknown as { mock: { calls: [string, { body: string }][] } }).mock.calls[1][1].body,
+    );
+    const lastMsg = retryBody.messages[retryBody.messages.length - 1];
+    expect(lastMsg.role).toBe('user');
+    expect(String(lastMsg.content).toLowerCase()).toContain('valid json');
+  });
+
+  it('does NOT retry on an HTTP error (only on parse/empty)', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 401, text: async () => 'nope' }));
+    const provider = new DeepSeekProvider({ apiKey: 'sk-test', fetch: fetchMock });
+    await expect(provider.analyzeMeal(IMAGE)).rejects.toMatchObject({ kind: 'http', status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws the parse error if BOTH attempts fail', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, text: async () => envelope('nope') }));
+    const provider = new DeepSeekProvider({ apiKey: 'sk-test', fetch: fetchMock });
+    await expect(provider.analyzeMeal(IMAGE)).rejects.toMatchObject({ kind: 'parse' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('includes which fields failed in the parse error message', async () => {
     const provider = new DeepSeekProvider({
       apiKey: 'sk-test',

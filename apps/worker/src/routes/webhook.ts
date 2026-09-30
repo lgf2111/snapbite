@@ -123,7 +123,15 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
         const e = err as { message?: string; kind?: string; status?: number; cause?: unknown };
         // Persist to D1 (best-effort; also mirrors to console for `wrangler tail`).
         const desc = describeError(err);
-        const detail = (typeof e.cause === 'string' ? e.cause : undefined) ?? desc.detail ?? null;
+        // Prefer a string cause (provider body); else a Zod issue list when the
+        // cause is a validation error (so schema failures are diagnosable); else
+        // the stack. The failing-field summary is already in desc.message.
+        const causeIssues =
+          e.cause && typeof e.cause === 'object' && Array.isArray((e.cause as { issues?: unknown }).issues)
+            ? JSON.stringify((e.cause as { issues: unknown[] }).issues).slice(0, 800)
+            : undefined;
+        const detail =
+          (typeof e.cause === 'string' ? e.cause : undefined) ?? causeIssues ?? desc.detail ?? null;
         await logError(c.env.DB, {
           telegramUserId: parsed.fromId,
           source: 'webhook',
