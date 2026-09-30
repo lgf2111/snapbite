@@ -48,11 +48,25 @@ export function saveWeekPrefs(prefs: WeekPrefs): void {
 
 // --- date helpers (all in the device's LOCAL time) --------------------------
 
-/** Local YYYY-MM-DD for a Date. */
-function dayKey(d: Date): string {
+/**
+ * Local `YYYY-MM-DD` for a Date. The canonical day-key formatter — everything
+ * that needs a local calendar-day key (Home, DateSelector, the meals cache)
+ * uses this (or its `*FromMs`/`today` wrappers) so the format never diverges.
+ */
+export function dayKey(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Local `YYYY-MM-DD` for an epoch-ms timestamp. */
+export function dayKeyFromMs(ms: number): string {
+  return dayKey(new Date(ms));
+}
+
+/** Local `YYYY-MM-DD` for the current day. */
+export function todayKey(): string {
+  return dayKey(new Date());
 }
 
 /** Parses a YYYY-MM-DD key into a local Date at midnight. */

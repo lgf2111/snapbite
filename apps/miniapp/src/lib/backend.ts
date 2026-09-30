@@ -10,6 +10,7 @@ import {
 } from './api.js';
 import { cacheKey, clearCache, invalidate, setCached } from './cache.js';
 import { readConfig } from './config.js';
+import { dayKeyFromMs } from './weekPrefs.js';
 import {
   clearMeals,
   clearProfile,
@@ -352,13 +353,9 @@ export function createBackend(): Backend {
   };
 }
 
-/** YYYY-MM-DD for a timestamp in the device's LOCAL time (matches Home/DateSelector). */
-function localDayKey(ms: number): string {
-  const d = new Date(ms);
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-}
+// Local calendar-day key (device time). Shared with Home/DateSelector/weekPrefs
+// via the single formatter in weekPrefs.ts so the format can't diverge.
+const localDayKey = dayKeyFromMs;
 
 /** The mock SettingsView returned by local/demo mode. */
 function localMockSettings(): SettingsView {
