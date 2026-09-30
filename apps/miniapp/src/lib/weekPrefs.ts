@@ -46,6 +46,33 @@ export function saveWeekPrefs(prefs: WeekPrefs): void {
   }
 }
 
+/**
+ * How the weekly view aggregates the range: `total` sums the 7 days, `average`
+ * divides by the number of days for a per-day figure. Client-only (rendering),
+ * so it lives in localStorage like the other week prefs.
+ */
+export type WeekViewMode = 'total' | 'average';
+
+const WEEK_VIEW_MODE_KEY = 'snapbite.weekViewMode.v1';
+
+/** Reads the stored weekly aggregation mode, defaulting to `total`. */
+export function loadWeekViewMode(): WeekViewMode {
+  try {
+    return localStorage.getItem(WEEK_VIEW_MODE_KEY) === 'average' ? 'average' : 'total';
+  } catch {
+    return 'total';
+  }
+}
+
+/** Persists the weekly aggregation mode. */
+export function saveWeekViewMode(mode: WeekViewMode): void {
+  try {
+    localStorage.setItem(WEEK_VIEW_MODE_KEY, mode);
+  } catch {
+    // storage unavailable — non-fatal
+  }
+}
+
 // --- date helpers (all in the device's LOCAL time) --------------------------
 
 /**

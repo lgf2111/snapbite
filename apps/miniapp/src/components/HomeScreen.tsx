@@ -6,7 +6,13 @@ import { cacheKey } from '@/lib/cache';
 import { hapticNotify } from '@/lib/telegram';
 import { useCachedData } from '@/lib/useCachedData';
 import { cn } from '@/lib/utils';
-import { loadWeekPrefs, weekRange } from '@/lib/weekPrefs';
+import {
+  type WeekViewMode,
+  loadWeekPrefs,
+  loadWeekViewMode,
+  saveWeekViewMode,
+  weekRange,
+} from '@/lib/weekPrefs';
 import { type DailyTargets, PROVIDER_PRESETS } from '@snapbite/core';
 import { Camera, Plus, RefreshCw, Sparkles, Target } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -69,6 +75,13 @@ export function HomeScreen({
   // Week definition preference (rolling vs calendar Sun/Mon) from Settings.
   const weekPrefs = useMemo(() => loadWeekPrefs(), []);
   const range = useMemo(() => weekRange(date, weekPrefs), [date, weekPrefs]);
+
+  // Weekly aggregation: show the range total, or a per-day average. Persisted.
+  const [weekViewMode, setWeekViewMode] = useState<WeekViewMode>(() => loadWeekViewMode());
+  const setWeekMode = useCallback((mode: WeekViewMode) => {
+    setWeekViewMode(mode);
+    saveWeekViewMode(mode);
+  }, []);
 
   // Meals for the current view, served instantly from cache then revalidated.
   const mealsKey =
@@ -142,10 +155,12 @@ export function HomeScreen({
   }, [mealsData, mealsKey]);
 
   const weekly = view === 'weekly';
-  // Weekly targets scale the daily target by the number of days in the range.
+  const weeklyAverage = weekly && weekViewMode === 'average';
+  // In weekly view the targets scale by the number of days (total), or stay the
+  // daily target (average). Daily view always uses the plain daily target.
   const viewTargets = useMemo(() => {
     if (!targets) return null;
-    if (!weekly) return targets;
+    if (!weekly || weeklyAverage) return targets;
     const d = range.days;
     return {
       energyKcal: targets.energyKcal * d,
@@ -153,7 +168,7 @@ export function HomeScreen({
       carbsG: targets.carbsG * d,
       fatG: targets.fatG * d,
     };
-  }, [targets, weekly, range.days]);
+  }, [targets, weekly, weeklyAverage, range.days]);
 
   async function handleDelete(id: string) {
     try {
@@ -166,11 +181,15 @@ export function HomeScreen({
     }
   }
 
+  // Divisor: 1 for a day/weekly-total, or the number of days for weekly-average.
+  const div = weeklyAverage ? range.days : 1;
+  const sum = (pick: (m: RecentMeal) => number | null) =>
+    round1((meals?.reduce((s, m) => s + (pick(m) ?? 0), 0) ?? 0) / div);
   const consumed = {
-    energyKcal: round1(meals?.reduce((s, m) => s + (m.energyKcal ?? 0), 0) ?? 0),
-    proteinG: round1(meals?.reduce((s, m) => s + (m.proteinG ?? 0), 0) ?? 0),
-    carbsG: round1(meals?.reduce((s, m) => s + (m.carbsG ?? 0), 0) ?? 0),
-    fatG: round1(meals?.reduce((s, m) => s + (m.fatG ?? 0), 0) ?? 0),
+    energyKcal: sum((m) => m.energyKcal),
+    proteinG: sum((m) => m.proteinG),
+    carbsG: sum((m) => m.carbsG),
+    fatG: sum((m) => m.fatG),
   };
 
   return (
@@ -218,9 +237,34 @@ export function HomeScreen({
       <DateSelector value={date} onChange={onDateChange} loggedDates={loggedDates} />
 
       {weekly && (
-        <p className="text-muted-foreground -mt-1 text-center text-xs">
-          Week total · {range.label}
-        </p>
+        <div className="-mt-1 flex flex-col items-center gap-2">
+          <p className="text-muted-foreground text-center text-xs">
+            {weeklyAverage ? 'Daily average' : 'Week total'} · {range.label}
+          </p>
+          <div className="bg-muted flex gap-1 rounded-md p-0.5 text-xs">
+            {(
+              [
+                ['total', 'Total'],
+                ['average', 'Daily avg'],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={weekViewMode === mode}
+                onClick={() => setWeekMode(mode)}
+                className={cn(
+                  'rounded px-2.5 py-1 font-medium transition-colors',
+                  weekViewMode === mode
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {viewTargets ? (
