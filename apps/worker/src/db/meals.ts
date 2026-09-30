@@ -76,19 +76,6 @@ export async function saveMeal(db: MealsDb, input: SaveMealInput): Promise<strin
   return mealId;
 }
 
-/** Records the bot confirmation's chat + message id on a meal (for later edits). */
-export async function setMealTelegramRef(
-  db: MealsDb,
-  mealId: string,
-  chatId: number,
-  messageId: number,
-): Promise<void> {
-  await db
-    .update(meals)
-    .set({ telegramChatId: chatId, telegramMessageId: messageId })
-    .where(eq(meals.id, mealId));
-}
-
 /** A meal's Telegram confirmation reference, used to edit it in place. */
 export interface MealTelegramRef {
   id: string;
