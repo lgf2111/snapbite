@@ -121,8 +121,39 @@ export class OpenAICompatibleProvider implements AIProvider {
     return this.#complete(messages, opts.signal);
   }
 
-  /** Posts a JSON-mode chat completion and validates the result. */
+  /**
+   * Posts a JSON-mode chat completion and validates the result. If the model's
+   * output can't be parsed/validated (a `parse` or `empty` error — NOT an HTTP
+   * or network failure), retry ONCE with a corrective nudge that echoes the bad
+   * output and asks for valid JSON. This reuses the same call (no new cost path)
+   * and recovers the common "almost-valid JSON" case without failing the user.
+   */
   async #complete(messages: ChatMessage[], signal?: AbortSignal): Promise<AIFoodAnalysis> {
+    try {
+      const raw = await this.#post(messages, signal);
+      return parseAnalysis(extractContent(raw, this.id));
+    } catch (err) {
+      // Only self-correct formatting problems; propagate HTTP/network/quota as-is.
+      if (!(err instanceof AIProviderError) || (err.kind !== 'parse' && err.kind !== 'empty')) {
+        throw err;
+      }
+      const repaired: ChatMessage[] = [
+        ...messages,
+        {
+          role: 'user',
+          content:
+            'Your previous reply could not be parsed. Reply again with ONLY a single valid JSON ' +
+            'object matching the exact shape described above — no markdown, no code fences, no ' +
+            'commentary, and every required field present.',
+        },
+      ];
+      const raw = await this.#post(repaired, signal);
+      return parseAnalysis(extractContent(raw, this.id));
+    }
+  }
+
+  /** One HTTP round-trip to the chat-completions endpoint; returns the raw body text. */
+  async #post(messages: ChatMessage[], signal?: AbortSignal): Promise<string> {
     const body = JSON.stringify({
       model: this.#model,
       response_format: { type: 'json_object' },
@@ -152,9 +183,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       });
     }
 
-    const raw = await safeText(response);
-    const content = extractContent(raw, this.id);
-    return parseAnalysis(content);
+    return safeText(response);
   }
 }
 
