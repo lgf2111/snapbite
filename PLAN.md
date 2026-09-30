@@ -305,9 +305,12 @@ Do NOT run long-lived dev servers via automation (they block). If you need one, 
 - Bot: `@SnapBiteAI_bot` — webhook → the worker; Menu Button + Configure Mini App both set to
   `https://snapbite.leeguanfeng.com`; avatar = `apps/miniapp/public/icon.png`.
 
-RETIRED (decommissioned after a final "shutting down today" broadcast — v0.20.0):
-- Old worker `foodlog-worker`, old Pages `foodlog` (`foodlog-7f5.pages.dev`), old bot `@foodlog2111_bot`
-  — **deleted**. (`wrangler.old.toml`, the temporary old-worker deploy config, has been removed.)
+RETIRED (after a final "shutting down today" broadcast — v0.20.0):
+- Old worker `foodlog-worker` — **DELETED** (confirmed: its URL now 404s). `wrangler.old.toml`, the
+  temporary old-worker deploy config, has also been removed.
+- Old Pages `foodlog` (`foodlog-7f5.pages.dev`) and old bot `@foodlog2111_bot` — **still to delete**
+  (Pages dashboard + BotFather; both optional). With the worker gone the old bot can no longer
+  respond regardless of its webhook.
 - Old D1 `foodlog-db`, id `f0312e67-2fef-47a6-a9ca-59cb9c21a79b` — **kept as a data backup**; delete
   after a couple of stable weeks with `wrangler d1 delete foodlog-db`.
 
