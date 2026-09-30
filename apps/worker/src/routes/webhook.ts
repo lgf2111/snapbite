@@ -24,6 +24,7 @@ import {
 import { type Context, Hono } from 'hono';
 import { adminNotify } from '../adminNotify.js';
 import { describeError, logError, recentErrors } from '../db/errors.js';
+import { type Favorite, createFavoritesDb, listFavorites } from '../db/favorites.js';
 import { recentFeedback, storeFeedback } from '../db/feedback.js';
 import {
   type MealTelegramRef,
@@ -169,6 +170,10 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
     }
     if (parsed.command === 'ping') {
       await handlePingCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
+    if (parsed.command === 'saved' && parsed.fromId != null) {
+      await handleSavedCommand(c, bot, parsed);
       return c.json({ ok: true });
     }
     if (parsed.command === 'errors') {
@@ -394,6 +399,96 @@ async function handleFeedbackCommand(
       text: 'Sorry — could not save that just now. Please try again in a moment.',
     });
   }
+}
+
+/**
+ * `/saved` — list the user's saved meals ("favorites"), and `/saved <n>` re-logs
+ * saved meal #n straight from chat (no photo, no AI call). The saved meal stores
+ * a full MealResult, so re-logging is just another `saveMeal` with those values.
+ */
+async function handleSavedCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const miniAppUrl = c.env.MINI_APP_URL ?? '';
+  const userDb = createDb(c.env.DB);
+  const user = await upsertUser(userDb, { id: parsed.fromId as number });
+  const favDb = createFavoritesDb(c.env.DB);
+  const favorites = await listFavorites(favDb, user.id);
+
+  if (favorites.length === 0) {
+    await bot.sendMessage(parsed.chatId, {
+      text: "You don't have any saved meals yet. In SnapBite, open a meal and tap ⭐ to save it — then re-log it here anytime with /saved.",
+      ...(miniAppUrl
+        ? {
+            replyMarkup: {
+              inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]],
+            },
+          }
+        : {}),
+    });
+    return;
+  }
+
+  const arg = parsed.args.trim();
+  if (arg === '') {
+    // No argument: show the numbered list with a re-log hint.
+    await bot.sendMessage(parsed.chatId, { text: savedListText(favorites) });
+    return;
+  }
+
+  // `/saved <n>` — re-log that saved meal.
+  const n = Number.parseInt(arg, 10);
+  if (!Number.isInteger(n) || n < 1 || n > favorites.length) {
+    await bot.sendMessage(parsed.chatId, {
+      text: `That's not one of your saved meals. Reply with a number from 1 to ${favorites.length}, or send /saved to see the list.`,
+    });
+    return;
+  }
+
+  const fav = favorites[n - 1];
+  if (!fav) {
+    await bot.sendMessage(parsed.chatId, { text: savedListText(favorites) });
+    return;
+  }
+
+  const meal = fav.meal;
+  const mealsDb = createMealsDb(c.env.DB);
+  const reply = photoLoggedReply(
+    meal.foods.map((f) => f.food.name),
+    {
+      energyKcal: meal.total.energyKcal,
+      proteinG: meal.total.proteinG,
+      carbsG: meal.total.carbsG,
+      fatG: meal.total.fatG,
+    },
+    { miniAppUrl },
+  );
+  const confirmMessageId = (await bot.sendMessage(parsed.chatId, reply)).messageId;
+  await saveMeal(mealsDb, {
+    userId: user.id,
+    meal,
+    // Re-logged from a saved template — no photo, no AI provider.
+    aiProvider: null,
+    telegramChatId: parsed.chatId,
+    telegramMessageId: confirmMessageId,
+  });
+}
+
+/** A numbered list of saved meals with a re-log hint. */
+function savedListText(favorites: Favorite[]): string {
+  const lines = favorites.map((f, i) => {
+    const kcal = f.energyKcal != null ? ` · ~${Math.round(f.energyKcal)} kcal` : '';
+    return `${i + 1}. ${f.label}${kcal}`;
+  });
+  return [
+    '⭐ Your saved meals:',
+    '',
+    ...lines,
+    '',
+    'Reply with /saved <number> to log one again (e.g. /saved 1).',
+  ].join('\n');
 }
 
 /**

@@ -535,6 +535,107 @@ describe('/ping command (admin-gated self-test)', () => {
   });
 });
 
+describe('/saved command', () => {
+  /** A minimal valid MealResult body for the favorites API. */
+  function favMeal(name: string, kcal: number) {
+    return {
+      foods: [
+        {
+          food: { name, estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
+          nutrition: { energyKcal: kcal, proteinG: 5, carbsG: 10, fatG: 3, source: 'table' },
+        },
+      ],
+      total: { energyKcal: kcal, proteinG: 5, carbsG: 10, fatG: 3, source: 'table' },
+      confidence: 0.9,
+      needsConfirmation: false,
+    };
+  }
+
+  async function saveFavorite(tgId: number, name: string, kcal: number, label?: string) {
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
+    await createApp().request(
+      '/api/favorites',
+      {
+        method: 'POST',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ meal: favMeal(name, kcal), label }),
+      },
+      env,
+    );
+  }
+
+  it('nudges when the user has no saved meals', async () => {
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/saved', chat: { id: 9600 }, from: { id: 9600 } } }),
+      env,
+    );
+    expect(lastText(sent).toLowerCase()).toContain("don't have any saved meals");
+  });
+
+  it('lists saved meals with numbers and a re-log hint', async () => {
+    const tgId = 9601;
+    await saveFavorite(tgId, 'Chicken rice', 540, 'My chicken rice');
+
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/saved', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    const text = lastText(sent);
+    expect(text).toContain('1. My chicken rice');
+    expect(text.toLowerCase()).toContain('/saved <number>');
+  });
+
+  it('re-logs a saved meal by number and confirms', async () => {
+    const tgId = 9602;
+    await saveFavorite(tgId, 'Laksa', 620, 'Weekend laksa');
+
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/saved 1', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    const text = lastText(sent);
+    expect(text.toLowerCase()).toContain('logged');
+    expect(text).toContain('Laksa');
+
+    // The re-logged meal is now readable via the authed meals API.
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
+    const list = (await (
+      await createApp().request('/api/meals', { headers: { [INIT_DATA_HEADER]: initData } }, env)
+    ).json()) as { meals: Array<{ foods: string[] }> };
+    expect(list.meals.length).toBe(1);
+    expect(list.meals[0]?.foods).toContain('Laksa');
+  });
+
+  it('rejects an out-of-range number', async () => {
+    const tgId = 9603;
+    await saveFavorite(tgId, 'Toast', 200);
+
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/saved 5', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(lastText(sent).toLowerCase()).toContain('not one of your saved meals');
+  });
+});
+
 describe('webhook photo failure logging', () => {
   it('writes an error_logs row and DMs the admin on a photo failure', async () => {
     const tgId = 4500;
