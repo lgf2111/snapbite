@@ -86,7 +86,7 @@ describe('HomeScreen', () => {
     const backend = stubBackend();
     render(<HomeScreen {...props(backend)} />);
 
-    expect(screen.getByText(/set your goal to see daily targets/i)).toBeInTheDocument();
+    expect(screen.getByText(/set a goal for daily targets/i)).toBeInTheDocument();
     // Let the background meals fetch settle so no state update escapes the test.
     await waitFor(() => expect(screen.getByText('No meals this day')).toBeInTheDocument());
   });
@@ -96,7 +96,7 @@ describe('HomeScreen', () => {
     render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
 
     await waitFor(() => expect(screen.getByText('No meals this day')).toBeInTheDocument());
-    expect(screen.queryByText(/set your goal to see daily targets/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/set a goal for daily targets/i)).not.toBeInTheDocument();
   });
 
   it('fires onOpenMeal when a meal row is tapped', async () => {
