@@ -1,4 +1,5 @@
 import { desc } from 'drizzle-orm';
+import { FEEDBACK_MAX_LEN } from '@snapbite/core';
 import { drizzle } from 'drizzle-orm/d1';
 import { feedback, type FeedbackRow } from './schema.js';
 
@@ -8,8 +9,9 @@ export function createFeedbackDb(d1: D1Database) {
 
 export type FeedbackDb = ReturnType<typeof createFeedbackDb>;
 
-/** Max stored feedback length (matches the API cap). */
-export const FEEDBACK_MAX_LEN = 2000;
+// Single source of truth for the feedback length cap: re-export core's, so the
+// bot, API, and stored value all share one constant.
+export { FEEDBACK_MAX_LEN };
 
 export interface FeedbackInput {
   telegramUserId?: number | null;

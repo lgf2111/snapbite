@@ -9,14 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import type { SettingsView } from './lib/api.js';
 import { type Backend, createBackend, type RecentMeal } from './lib/backend.js';
 import { cacheKey, getCached, revalidate } from './lib/cache.js';
-
-/** Local YYYY-MM-DD for "today" (matches HomeScreen/DateSelector). */
-function todayKey(): string {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-}
+import { todayKey } from './lib/weekPrefs.js';
 
 // Lazy-loaded so they don't bloat the initial (Home) bundle.
 const SettingsScreen = lazy(() =>
