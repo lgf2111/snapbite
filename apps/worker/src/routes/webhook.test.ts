@@ -636,6 +636,105 @@ describe('/saved command', () => {
   });
 });
 
+describe('per-user photo rate limit', () => {
+  const PHOTO_RATE_MAX = 40; // mirrors webhook.ts
+
+  function mealBody(kcal = 100) {
+    return {
+      foods: [
+        {
+          food: { name: 'snack', estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
+          nutrition: { energyKcal: kcal, proteinG: 5, carbsG: 10, fatG: 3, source: 'table' },
+        },
+      ],
+      total: { energyKcal: kcal, proteinG: 5, carbsG: 10, fatG: 3, source: 'table' },
+      confidence: 0.9,
+      needsConfirmation: false,
+    };
+  }
+
+  async function auth(tgId: number): Promise<Record<string, string>> {
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
+    return { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
+  }
+
+  it('blocks a photo once the hourly cap is reached (and does not analyze)', async () => {
+    const tgId = 9700;
+    const headers = await auth(tgId);
+    // Save a key so the photo path reaches the rate-limit check (not the key prompt).
+    await createApp().request(
+      '/api/settings',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'k', aiProvider: 'gemini' }) },
+      env,
+    );
+    // Seed exactly the cap's worth of meals in the current hour.
+    for (let i = 0; i < PHOTO_RATE_MAX; i++) {
+      await createApp().request(
+        '/api/meals',
+        { method: 'POST', headers, body: JSON.stringify({ meal: mealBody() }) },
+        env,
+      );
+    }
+
+    // Provider throws if ever called — proves the guard short-circuits before AI.
+    const analyzed = { called: false };
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({
+      botClientFactory: () => mockBot(sent),
+      providerFactory: () => ({
+        id: 'primary',
+        analyzeMeal: async () => {
+          analyzed.called = true;
+          throw new Error('should not analyze when rate-limited');
+        },
+        reviseMeal: async () => {
+          throw new Error('n/a');
+        },
+      }),
+    });
+    await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(lastText(sent).toLowerCase()).toContain('logged a lot of photos');
+    expect(analyzed.called).toBe(false);
+  });
+
+  it('allows a photo when under the cap', async () => {
+    const tgId = 9701;
+    const headers = await auth(tgId);
+    await createApp().request(
+      '/api/settings',
+      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'k', aiProvider: 'gemini' }) },
+      env,
+    );
+    // Only a couple of meals — well under the cap.
+    for (let i = 0; i < 3; i++) {
+      await createApp().request(
+        '/api/meals',
+        { method: 'POST', headers, body: JSON.stringify({ meal: mealBody() }) },
+        env,
+      );
+    }
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    // Not rate-limited: it proceeds to analyze + log (mock provider), so the
+    // final message is the logged result, not the limit notice.
+    expect(lastText(sent).toLowerCase()).not.toContain('logged a lot of photos');
+    expect(lastText(sent).toLowerCase()).toContain('logged');
+  });
+});
+
 describe('webhook photo failure logging', () => {
   it('writes an error_logs row and DMs the admin on a photo failure', async () => {
     const tgId = 4500;
