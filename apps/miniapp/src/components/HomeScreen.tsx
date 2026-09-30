@@ -311,9 +311,10 @@ export function HomeScreen({
         <Card>
           <CardContent className="flex flex-col items-center gap-2 text-center">
             <Target className="text-primary size-8" />
-            <p className="font-medium">Set your goal to see daily targets</p>
+            <p className="font-medium">Optional: set a goal for daily targets</p>
             <p className="text-muted-foreground text-sm">
-              Add your details and goal to track calories, protein, carbs, and fat left for the day.
+              Logging already works — your meals show below. Add your details and goal whenever you
+              want progress rings for calories, protein, carbs, and fat.
             </p>
             <Button className="mt-1" onClick={onSetGoal}>
               Set your goal

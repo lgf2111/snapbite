@@ -140,7 +140,7 @@ export function OnboardingScreen({ backend, onDone, onSkip, onToast }: Onboardin
         <h1 className="text-2xl font-semibold">Welcome to SnapBite</h1>
         <p className="text-muted-foreground text-sm">
           Tell us a bit about yourself to get daily calorie and macro targets. You can change these
-          any time in Settings, or skip for now.
+          any time in Settings — or skip and just start logging (targets simply won't show yet).
         </p>
       </div>
 
@@ -152,7 +152,7 @@ export function OnboardingScreen({ backend, onDone, onSkip, onToast }: Onboardin
       />
 
       <Button variant="ghost" className="text-muted-foreground" disabled={saving} onClick={onSkip}>
-        Skip for now
+        Skip for now — I'll just start logging
       </Button>
     </div>
   );
