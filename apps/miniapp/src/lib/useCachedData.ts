@@ -25,10 +25,7 @@ export interface CachedResult<T> {
  *
  * `key` may be null to skip fetching (e.g. while inputs aren't ready).
  */
-export function useCachedData<T>(
-  key: string | null,
-  fetcher: () => Promise<T>,
-): CachedResult<T> {
+export function useCachedData<T>(key: string | null, fetcher: () => Promise<T>): CachedResult<T> {
   const [data, setData] = useState<T | undefined>(() => (key ? getCached<T>(key) : undefined));
   const [loading, setLoading] = useState<boolean>(() =>
     key ? getCached<T>(key) === undefined : false,

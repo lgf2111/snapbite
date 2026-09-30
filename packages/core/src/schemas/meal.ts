@@ -84,7 +84,7 @@ export function buildManualMeal(foods: ManualFoodInput[], notes?: string): MealR
 
   // The entered food name(s) make a fine short title for a manual meal.
   const title =
-    clean.length === 1 ? clean[0]!.name : `${clean[0]!.name} & ${clean.length - 1} more`;
+    clean.length === 1 ? clean[0]?.name : `${clean[0]?.name} & ${clean.length - 1} more`;
 
   return {
     foods: mealFoods,
@@ -92,6 +92,6 @@ export function buildManualMeal(foods: ManualFoodInput[], notes?: string): MealR
     confidence: 1,
     needsConfirmation: false,
     title,
-    ...(notes && notes.trim() ? { notes: notes.trim() } : {}),
+    ...(notes?.trim() ? { notes: notes.trim() } : {}),
   };
 }

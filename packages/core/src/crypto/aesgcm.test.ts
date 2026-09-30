@@ -29,7 +29,7 @@ describe('AES-GCM secret encryption', () => {
   it('fails to decrypt tampered ciphertext (GCM auth tag)', async () => {
     const enc = await encryptSecret('sk-secret', KEY);
     const bytes = atob(enc.ciphertext).split('');
-    bytes[0] = String.fromCharCode(bytes[0]!.charCodeAt(0) ^ 0xff);
+    bytes[0] = String.fromCharCode(bytes[0]?.charCodeAt(0) ^ 0xff);
     const tampered = { ...enc, ciphertext: btoa(bytes.join('')) };
     await expect(decryptSecret(tampered, KEY)).rejects.toBeTruthy();
   });

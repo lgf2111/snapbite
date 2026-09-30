@@ -1,5 +1,5 @@
-import { signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
+import { signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { createSettingsDb, getSettings } from '../db/settings.js';
@@ -65,7 +65,11 @@ describe('PUT /api/settings', () => {
       {
         method: 'PUT',
         headers,
-        body: JSON.stringify({ apiKey: 'k-1234', aiProvider: 'gemini', aiModel: 'gemini-2.5-flash' }),
+        body: JSON.stringify({
+          apiKey: 'k-1234',
+          aiProvider: 'gemini',
+          aiModel: 'gemini-2.5-flash',
+        }),
       },
       env,
     );
@@ -333,7 +337,10 @@ describe('PUT /api/settings/reminders', () => {
       env,
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; reminders: { times: Record<string, string> } };
+    const body = (await res.json()) as {
+      ok: boolean;
+      reminders: { times: Record<string, string> };
+    };
     expect(body.ok).toBe(true);
     // Valid time kept, malformed one dropped.
     expect(body.reminders.times.breakfast).toBe('07:30');

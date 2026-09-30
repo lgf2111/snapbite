@@ -4,7 +4,12 @@
  * where the underlying telegram.ts helpers already guard everything.
  */
 import { useEffect, useRef, useState } from 'react';
-import { hideBackButton, type MainButtonConfig, showBackButton, showMainButton } from './telegram.js';
+import {
+  type MainButtonConfig,
+  hideBackButton,
+  showBackButton,
+  showMainButton,
+} from './telegram.js';
 
 /**
  * Shows the native BackButton while `active` is true, calling `onBack` when it
@@ -35,6 +40,10 @@ export function useMainButton(active: boolean, config: MainButtonConfig): boolea
   const cfg = useRef(config);
   cfg.current = config;
 
+  // Deliberately depends on the specific config FIELDS (via the cfg ref), not
+  // the whole `config` object, which changes identity every render and would
+  // thrash the native button.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional field-level deps via ref
   useEffect(() => {
     if (!active) {
       setUsingNative(false);
@@ -48,8 +57,7 @@ export function useMainButton(active: boolean, config: MainButtonConfig): boolea
     });
     setUsingNative(cleanup !== null);
     return cleanup ?? undefined;
-    // Re-run when the visible label or enabled/loading state changes so the
-    // native button stays in sync with the screen.
+    // Re-run only when the label/enabled/loading change.
   }, [active, config.text, config.enabled, config.loading]);
 
   return usingNative;

@@ -1,13 +1,13 @@
 import type { DailyTargets } from '@snapbite/core';
 import { Home, Settings as SettingsIcon } from 'lucide-react';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { HomeScreen } from './components/HomeScreen.js';
 import { Skeleton } from './components/ui/skeleton';
 import { Toaster } from './components/ui/sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import type { SettingsView } from './lib/api.js';
-import { type Backend, createBackend, type RecentMeal } from './lib/backend.js';
+import { type Backend, type RecentMeal, createBackend } from './lib/backend.js';
 import { cacheKey, getCached, revalidate } from './lib/cache.js';
 import { todayKey } from './lib/weekPrefs.js';
 

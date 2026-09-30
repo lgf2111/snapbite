@@ -1,9 +1,14 @@
-import { type DailyTargets, PROVIDER_PRESETS, type ProviderId, type UserProfile } from '@snapbite/core';
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Backend } from '@/lib/backend';
+import {
+  type DailyTargets,
+  PROVIDER_PRESETS,
+  type ProviderId,
+  type UserProfile,
+} from '@snapbite/core';
+import { useState } from 'react';
 import { ProfileForm } from './ProfileForm.js';
 
 type ToastKind = 'success' | 'error' | 'info';
@@ -139,7 +144,12 @@ export function OnboardingScreen({ backend, onDone, onSkip, onToast }: Onboardin
         </p>
       </div>
 
-      <ProfileForm initial={null} submitLabel="Set my goal" saving={saving} onSubmit={saveProfile} />
+      <ProfileForm
+        initial={null}
+        submitLabel="Set my goal"
+        saving={saving}
+        onSubmit={saveProfile}
+      />
 
       <Button variant="ghost" className="text-muted-foreground" disabled={saving} onClick={onSkip}>
         Skip for now

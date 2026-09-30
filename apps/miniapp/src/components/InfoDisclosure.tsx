@@ -1,6 +1,6 @@
+import { cn } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
 
 interface InfoDisclosureProps {
   /** The clickable summary label. */

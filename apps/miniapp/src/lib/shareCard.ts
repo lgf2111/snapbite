@@ -160,9 +160,8 @@ function wrapToLines(
   const words = text.trim().split(/\s+/);
   const lines: string[] = [];
   let line = '';
-  let i = 0;
-  for (; i < words.length; i++) {
-    const word = words[i]!;
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i] ?? '';
     const candidate = line ? `${line} ${word}` : word;
     if (ctx.measureText(candidate).width <= maxWidth || !line) {
       line = candidate;
@@ -419,8 +418,26 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   ctx.fillText('kcal', pad + numW + 18, numBaseline);
 
   // --- Macro pills row (bottom-anchored) -----------------------------------
-  drawMacroPill(ctx, pad, pillY, pillW, pillH, COLOR.protein, 'Protein', `${Math.round(input.proteinG)}g`);
-  drawMacroPill(ctx, pad + pillW + gap, pillY, pillW, pillH, COLOR.carbs, 'Carbs', `${Math.round(input.carbsG)}g`);
+  drawMacroPill(
+    ctx,
+    pad,
+    pillY,
+    pillW,
+    pillH,
+    COLOR.protein,
+    'Protein',
+    `${Math.round(input.proteinG)}g`,
+  );
+  drawMacroPill(
+    ctx,
+    pad + pillW + gap,
+    pillY,
+    pillW,
+    pillH,
+    COLOR.carbs,
+    'Carbs',
+    `${Math.round(input.carbsG)}g`,
+  );
   drawMacroPill(
     ctx,
     pad + (pillW + gap) * 2,

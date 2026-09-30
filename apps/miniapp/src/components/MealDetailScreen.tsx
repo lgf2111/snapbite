@@ -1,18 +1,5 @@
-import {
-  aggregate,
-  type FoodItem,
-  type MealResult,
-  PROVIDER_PRESETS,
-  resolveFoodNutrition,
-  sourceLabel,
-} from '@snapbite/core';
-import { RotateCcw, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { getCached, setCached } from '@/lib/cache';
-import { shareOrSaveImage } from '@/lib/share';
-import { renderMealShareCard } from '@/lib/shareCard';
 import {
   Dialog,
   DialogContent,
@@ -24,9 +11,22 @@ import {
 import { Input } from '@/components/ui/input';
 import type { MealDetail } from '@/lib/api';
 import { type Backend, type RecentMeal, shortMealTitle } from '@/lib/backend';
+import { getCached, setCached } from '@/lib/cache';
+import { shareOrSaveImage } from '@/lib/share';
+import { renderMealShareCard } from '@/lib/shareCard';
 import { hapticImpact } from '@/lib/telegram';
 import { useBackButton, useMainButton } from '@/lib/useTelegramButtons';
 import { cn } from '@/lib/utils';
+import {
+  type FoodItem,
+  type MealResult,
+  PROVIDER_PRESETS,
+  aggregate,
+  resolveFoodNutrition,
+  sourceLabel,
+} from '@snapbite/core';
+import { RotateCcw, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { MacroLegend, MacroLine } from './MacroLine.js';
 import { ReviseWithAiDialog } from './UpdateWithAi.js';
 
@@ -142,11 +142,14 @@ export function MealDetailScreen({
 }: MealDetailScreenProps) {
   // Seed instantly from a cached full detail if present, else from the Home
   // summary, so there's no "Loading…" flash when opening a meal.
-  const seed = getCached<MealDetail>(`meal:${mealId}`) ?? (initialMeal ? recentToDetail(initialMeal) : null);
+  const seed =
+    getCached<MealDetail>(`meal:${mealId}`) ?? (initialMeal ? recentToDetail(initialMeal) : null);
   const [detail, setDetail] = useState<MealDetail | null>(seed);
   const [foods, setFoods] = useState<DraftFood[]>(seed ? seed.foods.map(detailFoodToDraft) : []);
   // Serialized snapshot of the foods as loaded, to detect unsaved edits.
-  const [baseline, setBaseline] = useState(seed ? JSON.stringify(seed.foods.map(detailFoodToDraft)) : '');
+  const [baseline, setBaseline] = useState(
+    seed ? JSON.stringify(seed.foods.map(detailFoodToDraft)) : '',
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'saving' | 'deleting' | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -188,7 +191,10 @@ export function MealDetailScreen({
   useEffect(() => {
     if (!detail) return;
     let active = true;
-    const label = shortMealTitle(detail.title, detail.foods.map((f) => f.name));
+    const label = shortMealTitle(
+      detail.title,
+      detail.foods.map((f) => f.name),
+    );
     const kcal = Math.round(detail.total?.energyKcal ?? 0);
     backend
       .listFavorites()
@@ -248,8 +254,7 @@ export function MealDetailScreen({
     setFoods((prev) =>
       prev.map((f, idx) => {
         if (idx !== i) return f;
-        const current =
-          f.manualNutrition ??
+        const current = f.manualNutrition ??
           resolveFoodNutrition(f) ?? { energyKcal: 0, proteinG: 0, carbsG: 0, fatG: 0 };
         return {
           ...f,
@@ -327,7 +332,10 @@ export function MealDetailScreen({
 
   /** Builds the share-card image from the current (possibly edited) meal. */
   async function buildCardBlob(): Promise<Blob> {
-    const title = shortMealTitle(detail?.title, kept.map((f) => f.name));
+    const title = shortMealTitle(
+      detail?.title,
+      kept.map((f) => f.name),
+    );
     return renderMealShareCard({
       photoUrl: detail?.telegramFileId ? backend.photoUrl(mealId) : null,
       title,
@@ -340,7 +348,10 @@ export function MealDetailScreen({
 
   /** The default favorite name for the current meal. */
   function defaultFavLabel(): string {
-    return shortMealTitle(detail?.title, kept.map((f) => f.name));
+    return shortMealTitle(
+      detail?.title,
+      kept.map((f) => f.name),
+    );
   }
 
   /** Star tapped: if already saved, unsave; otherwise open the rename dialog. */
@@ -484,7 +495,9 @@ export function MealDetailScreen({
         <>
           <p className="text-muted-foreground text-sm">
             {new Date(detail.loggedAt).toLocaleString()}
-            {detail.aiProvider ? ` · analyzed by ${PROVIDER_LABEL[detail.aiProvider] ?? detail.aiProvider}` : ''}
+            {detail.aiProvider
+              ? ` · analyzed by ${PROVIDER_LABEL[detail.aiProvider] ?? detail.aiProvider}`
+              : ''}
           </p>
           {detail.telegramFileId && backend.photoUrl(mealId) && (
             <img
@@ -503,9 +516,7 @@ export function MealDetailScreen({
               aria-pressed={savedFavId !== null}
               onClick={onToggleFavorite}
             >
-              <Star
-                className={cn('size-4', savedFavId !== null && 'fill-current text-primary')}
-              />
+              <Star className={cn('size-4', savedFavId !== null && 'fill-current text-primary')} />
               {savedFavId !== null ? 'Saved' : 'Save meal'}
             </Button>
             <Button
@@ -522,8 +533,7 @@ export function MealDetailScreen({
           <Card>
             <CardContent className="flex flex-col gap-4">
               {foods.map((food, i) => {
-                const nutrition =
-                  resolvedByFood.get(food) ??
+                const nutrition = resolvedByFood.get(food) ??
                   resolveFoodNutrition(food) ?? {
                     energyKcal: 0,
                     proteinG: 0,
@@ -533,6 +543,9 @@ export function MealDetailScreen({
                 const removing = Boolean(food.pendingRemove);
                 return (
                   <div
+                    // Draft foods have no stable id (built from editable name/macros)
+                    // and the list is edited in place, so the index is the stable key.
+                    // biome-ignore lint/suspicious/noArrayIndexKey: no stable id on draft foods
                     key={i}
                     className={cn(
                       'flex flex-col gap-2 border-b pb-3 last:border-b-0 last:pb-0',
@@ -568,12 +581,14 @@ export function MealDetailScreen({
                       )}
                     </div>
                     {removing ? (
-                      <p className="text-muted-foreground text-xs">Will be removed when you save.</p>
+                      <p className="text-muted-foreground text-xs">
+                        Will be removed when you save.
+                      </p>
                     ) : (
                       <div className="flex flex-wrap items-center gap-2">
                         {macroFields.map(({ key, icon, suffix }) => (
-                          <label key={key} className="flex items-center gap-1 text-xs" title={key}>
-                            <span>{icon}</span>
+                          <div key={key} className="flex items-center gap-1 text-xs" title={key}>
+                            <span aria-hidden="true">{icon}</span>
                             <Input
                               aria-label={`Food ${i + 1} ${key}`}
                               type="number"
@@ -583,7 +598,7 @@ export function MealDetailScreen({
                               className="h-8 w-16 px-2"
                             />
                             <span className="text-muted-foreground">{suffix}</span>
-                          </label>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -716,7 +731,11 @@ export function MealDetailScreen({
                 <Button variant="secondary" onClick={closeCardPreview} disabled={sharing}>
                   Cancel
                 </Button>
-                <Button className="gap-2" onClick={() => void shareFromPreview()} disabled={sharing}>
+                <Button
+                  className="gap-2"
+                  onClick={() => void shareFromPreview()}
+                  disabled={sharing}
+                >
                   <Share2 className="size-4" />
                   {sharing ? 'Sharing…' : 'Share'}
                 </Button>

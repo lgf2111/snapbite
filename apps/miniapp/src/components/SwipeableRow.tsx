@@ -1,7 +1,7 @@
+import { cn } from '@/lib/utils';
 import { Trash2 } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useSwipeable } from 'react-swipeable';
-import { cn } from '@/lib/utils';
 
 interface SwipeableRowProps {
   children: ReactNode;

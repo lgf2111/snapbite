@@ -93,7 +93,7 @@ export function invalidate(prefix: string): void {
     const toRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith(full)) toRemove.push(k);
+      if (k?.startsWith(full)) toRemove.push(k);
     }
     for (const k of toRemove) localStorage.removeItem(k);
   } catch {
@@ -108,7 +108,7 @@ export function clearCache(): void {
     const toRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith(STORE_PREFIX)) toRemove.push(k);
+      if (k?.startsWith(STORE_PREFIX)) toRemove.push(k);
     }
     for (const k of toRemove) localStorage.removeItem(k);
   } catch {

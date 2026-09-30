@@ -1,7 +1,7 @@
 import type { OnboardingState } from '@snapbite/core';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { settings, type SettingsRow, users } from './schema.js';
+import { type SettingsRow, settings, users } from './schema.js';
 
 export function createSettingsDb(d1: D1Database) {
   return drizzle(d1, { schema: { settings, users } });
@@ -150,7 +150,11 @@ export async function mergePreferences(
   patch: Partial<Preferences>,
 ): Promise<void> {
   const current = parsePreferences((await getSettings(db, userId))?.preferencesJson);
-  await savePreferences(db, userId, JSON.stringify({ ...current, ...patch, updatedAt: Date.now() }));
+  await savePreferences(
+    db,
+    userId,
+    JSON.stringify({ ...current, ...patch, updatedAt: Date.now() }),
+  );
 }
 
 /** Reads the user's in-progress onboarding state, or undefined. */

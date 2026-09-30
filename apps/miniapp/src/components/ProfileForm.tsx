@@ -1,25 +1,25 @@
-import {
-  type ActivityLevel,
-  ageFromBirthDate,
-  computeTargets,
-  feetInchesToCm,
-  type Goal,
-  GOAL_LABELS,
-  GOAL_STAGES,
-  inchesToFeetInches,
-  kgToLb,
-  lbToKg,
-  type Sex,
-  type Units,
-  type UserProfile,
-} from '@snapbite/core';
-import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Collapsible } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Collapsible } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import {
+  type ActivityLevel,
+  GOAL_LABELS,
+  GOAL_STAGES,
+  type Goal,
+  type Sex,
+  type Units,
+  type UserProfile,
+  ageFromBirthDate,
+  computeTargets,
+  feetInchesToCm,
+  inchesToFeetInches,
+  kgToLb,
+  lbToKg,
+} from '@snapbite/core';
+import { useMemo, useState } from 'react';
 import { InfoDisclosure } from './InfoDisclosure.js';
 import { MacroLine } from './MacroLine.js';
 import { NumberField } from './NumberField.js';
@@ -45,8 +45,6 @@ const ACTIVITIES: Array<{ value: ActivityLevel; label: string }> = [
   { value: 'very_active', label: 'Very active' },
 ];
 
-
-
 /** A segmented single-choice control. */
 function Segmented<T extends string>({
   value,
@@ -66,9 +64,7 @@ function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           className={cn(
             'flex-1 rounded px-2 py-1.5 text-sm whitespace-nowrap transition-colors',
-            value === o.value
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground',
+            value === o.value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
           )}
         >
           {o.label}
@@ -136,9 +132,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
     const macroFilled = advanced && pOverride && cOverride && fOverride;
     // Prefer birthDate; fall back to the initial legacy age so the profile
     // stays valid while the user is still editing an incomplete date.
-    const dob = birthDateValid
-      ? { birthDate }
-      : { age: initial?.age ?? 30 };
+    const dob = birthDateValid ? { birthDate } : { age: initial?.age ?? 30 };
     return {
       sex,
       ...dob,
@@ -159,7 +153,22 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
           }
         : {}),
     };
-  }, [sex, birthDate, birthDateValid, initial?.age, heightCm, weightKg, activity, goal, units, advanced, calOverride, pOverride, cOverride, fOverride]);
+  }, [
+    sex,
+    birthDate,
+    birthDateValid,
+    initial?.age,
+    heightCm,
+    weightKg,
+    activity,
+    goal,
+    units,
+    advanced,
+    calOverride,
+    pOverride,
+    cOverride,
+    fOverride,
+  ]);
 
   const targets = useMemo(() => computeTargets(profile), [profile]);
 
@@ -326,15 +335,33 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
           <div className="grid grid-cols-3 gap-2">
             <div className="flex flex-col gap-1">
               <Label htmlFor="p">🥩 g</Label>
-              <Input id="p" type="number" min={0} value={pOverride} onChange={(e) => setPOverride(e.target.value)} />
+              <Input
+                id="p"
+                type="number"
+                min={0}
+                value={pOverride}
+                onChange={(e) => setPOverride(e.target.value)}
+              />
             </div>
             <div className="flex flex-col gap-1">
               <Label htmlFor="c">🍚 g</Label>
-              <Input id="c" type="number" min={0} value={cOverride} onChange={(e) => setCOverride(e.target.value)} />
+              <Input
+                id="c"
+                type="number"
+                min={0}
+                value={cOverride}
+                onChange={(e) => setCOverride(e.target.value)}
+              />
             </div>
             <div className="flex flex-col gap-1">
               <Label htmlFor="f">🧈 g</Label>
-              <Input id="f" type="number" min={0} value={fOverride} onChange={(e) => setFOverride(e.target.value)} />
+              <Input
+                id="f"
+                type="number"
+                min={0}
+                value={fOverride}
+                onChange={(e) => setFOverride(e.target.value)}
+              />
             </div>
           </div>
         </div>
@@ -351,9 +378,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
       </div>
 
       <InfoDisclosure title="How are these calculated?">
-        <p>
-          Estimates from your details — not medical advice. Editable in Advanced mode.
-        </p>
+        <p>Estimates from your details — not medical advice. Editable in Advanced mode.</p>
         <p>
           <strong>Calories:</strong> BMR (Mifflin–St Jeor) × activity, then adjusted for your goal
           (Lose fast −25% · Lose steady −12% · Maintain · Lean gain +10% · Gain fast +20%), floored

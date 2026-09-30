@@ -39,7 +39,8 @@ describe('DeepSeekProvider', () => {
     await provider.analyzeMeal(IMAGE, { hint: 'lunch' });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = (fetchMock as unknown as { mock: { calls: [string, any][] } }).mock.calls[0];
+    const [url, init] = (fetchMock as unknown as { mock: { calls: [string, any][] } }).mock
+      .calls[0];
 
     expect(url).toBe('https://api.deepseek.com/chat/completions');
     expect(init.method).toBe('POST');
@@ -87,7 +88,8 @@ describe('DeepSeekProvider', () => {
 
     await provider.analyzeMeal(IMAGE, { detail: 'high' });
 
-    const [url, init] = (fetchMock as unknown as { mock: { calls: [string, any][] } }).mock.calls[0];
+    const [url, init] = (fetchMock as unknown as { mock: { calls: [string, any][] } }).mock
+      .calls[0];
     expect(url).toBe('https://proxy.example.com/chat/completions');
     const parsed = JSON.parse(init.body);
     expect(parsed.model).toBe('custom-model');
@@ -143,7 +145,9 @@ describe('DeepSeekProvider', () => {
     const provider = new DeepSeekProvider({
       apiKey: 'sk-test',
       // foods empty -> schema rejects
-      fetch: okFetch(envelope(JSON.stringify({ foods: [], confidence: 0.5, needsConfirmation: true }))),
+      fetch: okFetch(
+        envelope(JSON.stringify({ foods: [], confidence: 0.5, needsConfirmation: true })),
+      ),
     });
 
     await expect(provider.analyzeMeal(IMAGE)).rejects.toBeInstanceOf(AIProviderError);
@@ -227,7 +231,9 @@ describe('DeepSeekProvider', () => {
     const provider = new DeepSeekProvider({
       apiKey: 'sk-test',
       // No salvageable foods -> still rejected, but with a helpful message.
-      fetch: okFetch(envelope(JSON.stringify({ foods: [], confidence: 0.5, needsConfirmation: true }))),
+      fetch: okFetch(
+        envelope(JSON.stringify({ foods: [], confidence: 0.5, needsConfirmation: true })),
+      ),
     });
     await expect(provider.analyzeMeal(IMAGE)).rejects.toMatchObject({
       kind: 'parse',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { APP_VERSION, broadcastMessage, CHANGELOG, CURRENT_CHANGELOG } from './version.js';
+import { APP_VERSION, CHANGELOG, CURRENT_CHANGELOG, broadcastMessage } from './version.js';
 
 describe('changelog', () => {
   it('APP_VERSION matches the newest entry', () => {

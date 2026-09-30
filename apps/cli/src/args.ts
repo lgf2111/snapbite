@@ -37,9 +37,7 @@ const MIME_BY_EXT: Record<string, MealImage['mimeType']> = {
 export function mimeTypeForPath(path: string): MealImage['mimeType'] {
   const mime = MIME_BY_EXT[extname(path).toLowerCase()];
   if (!mime) {
-    throw new Error(
-      `Unsupported image type for "${path}". Use one of: jpg, jpeg, png, gif, webp.`,
-    );
+    throw new Error(`Unsupported image type for "${path}". Use one of: jpg, jpeg, png, gif, webp.`);
   }
   return mime;
 }

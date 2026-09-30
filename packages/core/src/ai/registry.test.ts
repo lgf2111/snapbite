@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createProvider, DEFAULT_PROVIDER_ID, isProviderId, PROVIDER_PRESETS } from './registry.js';
+import { DEFAULT_PROVIDER_ID, PROVIDER_PRESETS, createProvider, isProviderId } from './registry.js';
 
 const IMAGE = { base64: 'QUJD', mimeType: 'image/jpeg' } as const;
 

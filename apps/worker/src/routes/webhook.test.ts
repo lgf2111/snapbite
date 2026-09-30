@@ -1,5 +1,5 @@
-import { type AIFoodAnalysis, type BotReply, MockAIProvider, signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
+import { type AIFoodAnalysis, type BotReply, MockAIProvider, signInitData } from '@snapbite/core';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
@@ -102,7 +102,11 @@ describe('POST /webhook', () => {
     const { app } = appWithCapture();
     const res = await app.request(
       '/webhook',
-      { method: 'POST', headers: { 'content-type': 'application/json', [SECRET_HEADER]: SECRET }, body: 'not json' },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', [SECRET_HEADER]: SECRET },
+        body: 'not json',
+      },
       env,
     );
     expect(res.status).toBe(200);
@@ -124,7 +128,10 @@ describe('POST /webhook', () => {
     const tgId = 8200;
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
     const authDate = String(Math.floor(Date.now() / 1000));
-    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
     const keyApp = createApp();
     await keyApp.request(
       '/api/settings',
@@ -140,7 +147,11 @@ describe('POST /webhook', () => {
     const res = await app.request(
       '/webhook',
       post({
-        message: { photo: [{ file_id: 'f_small' }, { file_id: 'f_large' }], chat: { id: tgId }, from: { id: tgId } },
+        message: {
+          photo: [{ file_id: 'f_small' }, { file_id: 'f_large' }],
+          chat: { id: tgId },
+          from: { id: tgId },
+        },
       }),
       env,
     );
@@ -159,18 +170,29 @@ describe('POST /webhook', () => {
     const tgId = 8300;
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
     const authDate = String(Math.floor(Date.now() / 1000));
-    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
     const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
     const setup = createApp();
     // Primary key (gemini) + a fallback (deepseek).
     await setup.request(
       '/api/settings',
-      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }) },
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }),
+      },
       env,
     );
     await setup.request(
       '/api/settings/fallback',
-      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'fallback-key', aiProvider: 'deepseek' }) },
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'fallback-key', aiProvider: 'deepseek' }),
+      },
       env,
     );
 
@@ -211,17 +233,28 @@ describe('POST /webhook', () => {
     const tgId = 8301;
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
     const authDate = String(Math.floor(Date.now() / 1000));
-    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
     const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
     const setup = createApp();
     await setup.request(
       '/api/settings',
-      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }) },
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }),
+      },
       env,
     );
     await setup.request(
       '/api/settings/fallback',
-      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'fallback-key', aiProvider: 'openai' }) },
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'fallback-key', aiProvider: 'openai' }),
+      },
       env,
     );
 
@@ -260,18 +293,29 @@ describe('POST /webhook', () => {
     const tgId = 8302;
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
     const authDate = String(Math.floor(Date.now() / 1000));
-    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
     const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
     const setup = createApp();
     await setup.request(
       '/api/settings',
-      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }) },
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }),
+      },
       env,
     );
     // Store a fallback, then disable it (key retained).
     await setup.request(
       '/api/settings/fallback',
-      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'fallback-key', aiProvider: 'openai' }) },
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'fallback-key', aiProvider: 'openai' }),
+      },
       env,
     );
     await setup.request(
@@ -312,11 +356,18 @@ describe('POST /webhook', () => {
     const tgId = 8303;
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
     const authDate = String(Math.floor(Date.now() / 1000));
-    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
     const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
     await createApp().request(
       '/api/settings',
-      { method: 'PUT', headers, body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }) },
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }),
+      },
       env,
     );
 
@@ -331,7 +382,8 @@ describe('POST /webhook', () => {
           id: 'primary',
           analyzeMeal: async (img: Parameters<MockAIProvider['analyzeMeal']>[0]) => {
             calls += 1;
-            if (calls === 1) throw Object.assign(new Error('overloaded'), { kind: 'http', status: 503 });
+            if (calls === 1)
+              throw Object.assign(new Error('overloaded'), { kind: 'http', status: 503 });
             return mock.analyzeMeal(img);
           },
           reviseMeal: async () => {
@@ -359,7 +411,13 @@ describe('/feedback command', () => {
     const { app, sent } = appWithCapture();
     const res = await app.request(
       '/webhook',
-      post({ message: { text: '/feedback the salad estimate was way off', chat: { id: 4100 }, from: { id: 4100 } } }),
+      post({
+        message: {
+          text: '/feedback the salad estimate was way off',
+          chat: { id: 4100 },
+          from: { id: 4100 },
+        },
+      }),
       env,
     );
     expect(res.status).toBe(200);
@@ -397,7 +455,10 @@ describe('/errors command (admin-gated)', () => {
     const tgId = 4300;
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
     const authDate = String(Math.floor(Date.now() / 1000));
-    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
     await createApp().request(
       '/api/settings',
       {
@@ -452,7 +513,10 @@ describe('webhook photo failure logging', () => {
     const tgId = 4500;
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
     const authDate = String(Math.floor(Date.now() / 1000));
-    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
     await createApp().request(
       '/api/settings',
       {
@@ -493,7 +557,10 @@ describe('photo edit-in-place', () => {
     const tgId = 8600;
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
     const authDate = String(Math.floor(Date.now() / 1000));
-    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
     await createApp().request(
       '/api/settings',
       {
@@ -526,7 +593,10 @@ describe('plain-text revise of the last meal', () => {
   async function setupKeyedUser(tgId: number) {
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
     const authDate = String(Math.floor(Date.now() / 1000));
-    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
     await createApp().request(
       '/api/settings',
       {
@@ -676,11 +746,14 @@ describe('/broadcast (admin-gated)', () => {
 });
 
 describe('barcode → Open Food Facts enrichment', () => {
-  it('replaces a barcoded food\'s macros with the looked-up product and tags provider', async () => {
+  it("replaces a barcoded food's macros with the looked-up product and tags provider", async () => {
     const tgId = 7500;
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
     const authDate = String(Math.floor(Date.now() / 1000));
-    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
     await createApp().request(
       '/api/settings',
       {
@@ -754,7 +827,9 @@ describe('barcode → Open Food Facts enrichment', () => {
     // × 50g serving = 200 kcal), and be tagged with the openfoodfacts provider.
     const list = (await (
       await createApp().request('/api/meals', { headers: { [INIT_DATA_HEADER]: initData } }, env)
-    ).json()) as { meals: Array<{ foods: string[]; energyKcal: number | null; aiProvider: string | null }> };
+    ).json()) as {
+      meals: Array<{ foods: string[]; energyKcal: number | null; aiProvider: string | null }>;
+    };
     const meal = list.meals[0];
     expect(meal?.foods).toContain('Test Bar');
     expect(meal?.energyKcal).toBe(200);
@@ -767,7 +842,10 @@ describe('overload retry by message text (not just status 503)', () => {
     const tgId = 8310;
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
     const authDate = String(Math.floor(Date.now() / 1000));
-    const initData = await signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
     await createApp().request(
       '/api/settings',
       {
@@ -793,7 +871,9 @@ describe('overload retry by message text (not just status 503)', () => {
               throw Object.assign(new Error('gemini returned HTTP 500'), {
                 kind: 'http',
                 status: 500,
-                cause: JSON.stringify({ error: { message: 'The model is overloaded. Please try again later.' } }),
+                cause: JSON.stringify({
+                  error: { message: 'The model is overloaded. Please try again later.' },
+                }),
               });
             }
             return mock.analyzeMeal(img);

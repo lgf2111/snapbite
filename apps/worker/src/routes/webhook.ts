@@ -1,34 +1,35 @@
 import {
-  applyAnswer,
   type BotReply,
-  broadcastMessage,
-  computeTargets,
-  createProvider,
   CURRENT_CHANGELOG,
-  decryptSecret,
   FEEDBACK_MAX_LEN,
   FEEDBACK_PROMPT,
   FEEDBACK_THANKS,
   GOAL_LABELS,
   type OnboardingState,
   type ParsedCommand,
+  type TelegramUpdate,
+  UserProfile,
+  applyAnswer,
+  broadcastMessage,
+  computeTargets,
+  createProvider,
+  decryptSecret,
   parseUpdate,
   photoLoggedReply,
   promptFor,
   replyForCommand,
   resolveMeal,
   startOnboarding,
-  type TelegramUpdate,
-  UserProfile,
 } from '@snapbite/core';
 import { type Context, Hono } from 'hono';
+import { adminNotify } from '../adminNotify.js';
 import { describeError, logError, recentErrors } from '../db/errors.js';
 import { recentFeedback, storeFeedback } from '../db/feedback.js';
 import {
+  type MealTelegramRef,
   createMealsDb,
   findMealByMessageId,
   getMealDetail,
-  type MealTelegramRef,
   recentMealsForUser,
   saveMeal,
   updateMeal,
@@ -44,11 +45,10 @@ import {
 } from '../db/settings.js';
 import { createDb, listBroadcastTargets, setBroadcastRef, upsertUser } from '../db/users.js';
 import { type AppBindings, parseAdminId } from '../env.js';
-import { adminNotify } from '../adminNotify.js';
 import { lookupBarcode } from '../openfoodfacts.js';
 import { enqueuePhotoRetry } from '../photoRetry.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
-import { detailToAnalysis, primaryProviderChoice, type ProviderFactory } from './meals.js';
+import { type ProviderFactory, detailToAnalysis, primaryProviderChoice } from './meals.js';
 
 /** The bot-client surface the webhook uses (so tests can mock just these). */
 export interface BotClient {
@@ -123,8 +123,7 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
         const e = err as { message?: string; kind?: string; status?: number; cause?: unknown };
         // Persist to D1 (best-effort; also mirrors to console for `wrangler tail`).
         const desc = describeError(err);
-        const detail =
-          (typeof e.cause === 'string' ? e.cause : undefined) ?? desc.detail ?? null;
+        const detail = (typeof e.cause === 'string' ? e.cause : undefined) ?? desc.detail ?? null;
         await logError(c.env.DB, {
           telegramUserId: parsed.fromId,
           source: 'webhook',
@@ -213,10 +212,9 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
  * always send to the admin's own chat id. Never throws.
  */
 
-
 /** Short human time (UTC) for admin listings. */
 function shortTime(ms: number): string {
-  return new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + 'Z';
+  return `${new Date(ms).toISOString().replace('T', ' ').slice(0, 16)}Z`;
 }
 
 /** Telegram's edit window — a message can only be edited within ~48h of sending. */
@@ -272,9 +270,13 @@ async function handleBroadcastCommand(
 
       let messageId: number | null = null;
       if (canEdit && bot.editMessageText && t.lastBroadcastMessageId != null) {
-        const ok = await bot.editMessageText(t.lastBroadcastChatId as number, t.lastBroadcastMessageId, {
-          text,
-        });
+        const ok = await bot.editMessageText(
+          t.lastBroadcastChatId as number,
+          t.lastBroadcastMessageId,
+          {
+            text,
+          },
+        );
         if (ok) {
           messageId = t.lastBroadcastMessageId;
           edited += 1;
@@ -338,7 +340,8 @@ async function handleFeedbackCommand(
       return;
     }
     const lines = rows.map(
-      (r) => `• ${shortTime(r.createdAt)} — user ${r.telegramUserId ?? '?'} (${r.source}):\n  ${r.message}`,
+      (r) =>
+        `• ${shortTime(r.createdAt)} — user ${r.telegramUserId ?? '?'} (${r.source}):\n  ${r.message}`,
     );
     await bot.sendMessage(parsed.chatId, {
       text: `🗒️ Latest feedback (${rows.length}):\n\n${lines.join('\n\n')}`,
@@ -433,9 +436,7 @@ async function handleSetupStart(
     ? "Let's update your profile. I'll show your current values — reply *keep* to leave one as-is."
     : null;
   await bot.sendMessage(parsed.chatId, {
-    text: [intro, prompt, '(You can stop anytime with /cancel.)']
-      .filter(Boolean)
-      .join('\n\n'),
+    text: [intro, prompt, '(You can stop anytime with /cancel.)'].filter(Boolean).join('\n\n'),
   });
 }
 
@@ -529,7 +530,11 @@ async function handleOnboardingAnswer(
   await bot.sendMessage(parsed.chatId, {
     text: lines.join('\n'),
     ...(miniAppUrl
-      ? { replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]] } }
+      ? {
+          replyMarkup: {
+            inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]],
+          },
+        }
       : {}),
   });
 }
@@ -572,7 +577,11 @@ async function handleTextRevise(
     await bot.sendMessage(chatId, {
       text: 'Send me a meal photo to log it, or open SnapBite to add your AI key and review your history.',
       ...(miniAppUrl
-        ? { replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]] } }
+        ? {
+            replyMarkup: {
+              inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]],
+            },
+          }
         : {}),
     });
     return;
@@ -595,9 +604,13 @@ async function handleTextRevise(
     const recent = await recentMealsForUser(mealsDb, user.id, Date.now() - REVISE_WINDOW_MS, 5);
     if (recent.length === 0) {
       await bot.sendMessage(chatId, {
-        text: 'Send me a meal photo to log it first — then reply with a change and I\'ll update it.',
+        text: "Send me a meal photo to log it first — then reply with a change and I'll update it.",
         ...(miniAppUrl
-          ? { replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]] } }
+          ? {
+              replyMarkup: {
+                inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]],
+              },
+            }
           : {}),
       });
       return;
@@ -715,7 +728,7 @@ function friendlyPhotoError(e: ProviderErrorLike): string {
   const raw = providerMessage(e.cause) ?? e.message ?? '';
   if (e.status === 402 || /credit|billing|insufficient|balance|payment|prepay/i.test(raw)) {
     return (
-      "Sorry — your AI provider needs billing set up (it reported a credit/billing problem). " +
+      'Sorry — your AI provider needs billing set up (it reported a credit/billing problem). ' +
       'Add credit/billing to that key, or set a working fallback provider in SnapBite → Settings.'
     );
   }
@@ -746,9 +759,7 @@ function isFailoverError(err: unknown): boolean {
   // Any other 4xx/5xx except bad-request/auth is worth trying the fallback.
   if (typeof status === 'number' && status >= 402 && status !== 403) return true;
 
-  const raw = (providerMessage((err as { cause?: unknown }).cause) ?? '') +
-    ' ' +
-    ((err as { message?: string }).message ?? '');
+  const raw = `${providerMessage((err as { cause?: unknown }).cause) ?? ''} ${(err as { message?: string }).message ?? ''}`;
   return /quota|rate limit|resource_exhausted|overloaded|high demand|unavailable|credit|billing|insufficient|balance|payment|prepay|exceeded/i.test(
     raw,
   );

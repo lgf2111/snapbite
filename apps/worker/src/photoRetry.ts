@@ -1,9 +1,15 @@
-import { type BotReply, createProvider, decryptSecret, photoLoggedReply, resolveMeal } from '@snapbite/core';
+import {
+  type BotReply,
+  createProvider,
+  decryptSecret,
+  photoLoggedReply,
+  resolveMeal,
+} from '@snapbite/core';
 import { and, asc, eq, lte } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { logError } from './db/errors.js';
 import { createMealsDb, saveMeal } from './db/meals.js';
-import { pendingPhotoRetries, type PendingPhotoRetryRow } from './db/schema.js';
+import { type PendingPhotoRetryRow, pendingPhotoRetries } from './db/schema.js';
 import { createSettingsDb, getSettings } from './db/settings.js';
 import type { Env } from './env.js';
 import { primaryProviderChoice } from './routes/meals.js';
@@ -62,7 +68,12 @@ async function deleteRetry(d1: D1Database, id: string): Promise<void> {
   await db(d1).delete(pendingPhotoRetries).where(eq(pendingPhotoRetries.id, id));
 }
 
-async function bumpRetry(d1: D1Database, id: string, attempts: number, nextAt: number): Promise<void> {
+async function bumpRetry(
+  d1: D1Database,
+  id: string,
+  attempts: number,
+  nextAt: number,
+): Promise<void> {
   await db(d1)
     .update(pendingPhotoRetries)
     .set({ attempts, nextAt })

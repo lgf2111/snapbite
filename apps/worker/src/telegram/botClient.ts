@@ -22,7 +22,9 @@ async function parseSent(res: {
       ok: boolean;
       result?: { message_id?: number };
     };
-    return { messageId: json.ok && json.result?.message_id != null ? json.result.message_id : null };
+    return {
+      messageId: json.ok && json.result?.message_id != null ? json.result.message_id : null,
+    };
   } catch {
     return { messageId: null };
   }
@@ -81,14 +83,11 @@ export class TelegramBotClient {
     };
     if (reply.replyMarkup) body.reply_markup = reply.replyMarkup;
     try {
-      const res = await this.#fetch(
-        `https://api.telegram.org/bot${this.#token}/editMessageText`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        },
-      );
+      const res = await this.#fetch(`https://api.telegram.org/bot${this.#token}/editMessageText`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
       return res.ok;
     } catch {
       return false;
@@ -143,9 +142,7 @@ export class TelegramBotClient {
   }
 
   /** Downloads a file by its file_path and returns base64 + detected mime. */
-  async downloadFile(
-    filePath: string,
-  ): Promise<{ base64: string; mimeType: string } | null> {
+  async downloadFile(filePath: string): Promise<{ base64: string; mimeType: string } | null> {
     // The file download endpoint is a plain GET; use the raw global fetch so we
     // get a real Response with arrayBuffer().
     const url = `https://api.telegram.org/file/bot${this.#token}/${filePath}`;

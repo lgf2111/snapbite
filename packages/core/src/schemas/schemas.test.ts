@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AIFoodAnalysis } from './analysis.js';
 import { FoodItem } from './food.js';
-import { buildManualMeal, MealResult } from './meal.js';
+import { MealResult, buildManualMeal } from './meal.js';
 import { NutritionSource, NutritionValue } from './nutrition.js';
 
 const validNutrition = {

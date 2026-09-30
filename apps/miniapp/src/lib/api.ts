@@ -315,7 +315,9 @@ export class ApiClient {
   }
 
   /** Stores the user's profile + goal; returns the computed targets. */
-  saveProfile(profile: UserProfile): Promise<{ ok: boolean; profile: UserProfile; targets: DailyTargets }> {
+  saveProfile(
+    profile: UserProfile,
+  ): Promise<{ ok: boolean; profile: UserProfile; targets: DailyTargets }> {
     return this.#request('/api/settings/profile', {
       method: 'PUT',
       body: JSON.stringify({ profile }),

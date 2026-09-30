@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import type { ReactNode } from 'react';
 
 interface CollapsibleProps {
   open: boolean;
@@ -22,7 +22,13 @@ export function Collapsible({ open, children, className }: CollapsibleProps) {
       )}
       aria-hidden={!open}
     >
-      <div className={cn('overflow-hidden', open ? 'opacity-100' : 'opacity-0', 'transition-opacity duration-200')}>
+      <div
+        className={cn(
+          'overflow-hidden',
+          open ? 'opacity-100' : 'opacity-0',
+          'transition-opacity duration-200',
+        )}
+      >
         {children}
       </div>
     </div>

@@ -10,14 +10,14 @@
  */
 import {
   type ActivityLevel,
-  ageFromBirthDate,
-  feetInchesToCm,
-  type Goal,
   GOAL_LABELS,
   GOAL_STAGES,
-  lbToKg,
+  type Goal,
   type Sex,
   UserProfile,
+  ageFromBirthDate,
+  feetInchesToCm,
+  lbToKg,
 } from '../profile/profile.js';
 
 /** Ordered onboarding steps. The last step, once answered, completes the flow. */
@@ -180,7 +180,7 @@ function parseBirthday(text: string): ParseResult<string> {
   if (!m) {
     return { ok: false, error: 'Please send your birth date as YYYY-MM-DD, e.g. 1998-04-25.' };
   }
-  const iso = `${m[1]}-${m[2]!.padStart(2, '0')}-${m[3]!.padStart(2, '0')}`;
+  const iso = `${m[1]}-${m[2]?.padStart(2, '0')}-${m[3]?.padStart(2, '0')}`;
   const age = ageFromBirthDate(iso);
   if (age == null) {
     return { ok: false, error: "That date doesn't look valid — try YYYY-MM-DD, e.g. 1998-04-25." };
@@ -202,7 +202,7 @@ function parseHeight(text: string): ParseResult<number> {
     const inches = ftIn[2] ? Number(ftIn[2]) : 0;
     const cm = feetInchesToCm(feet, inches);
     if (cm > 90 && cm < 250) return { ok: true, value: round1(cm) };
-    return { ok: false, error: 'That height seems off — try like `5\'9` or `175cm`.' };
+    return { ok: false, error: "That height seems off — try like `5'9` or `175cm`." };
   }
 
   // Meters: 1.75m
@@ -217,7 +217,7 @@ function parseHeight(text: string): ParseResult<number> {
   if (Number.isFinite(cmNum) && cmNum > 90 && cmNum < 250) {
     return { ok: true, value: round1(cmNum) };
   }
-  return { ok: false, error: 'Please send your height, e.g. `175cm` or `5\'9`.' };
+  return { ok: false, error: "Please send your height, e.g. `175cm` or `5'9`." };
 }
 
 /** Accepts `70kg`, `70`, `155lb`, `155 lbs`. Returns kg. */
@@ -229,7 +229,8 @@ function parseWeight(text: string): ParseResult<number> {
   }
   const isLb = /lb|lbs|pound/.test(t);
   const kg = isLb ? lbToKg(num) : num;
-  if (kg < 25 || kg > 400) return { ok: false, error: 'That weight seems off — try like `70kg` or `155lb`.' };
+  if (kg < 25 || kg > 400)
+    return { ok: false, error: 'That weight seems off — try like `70kg` or `155lb`.' };
   return { ok: true, value: round1(kg) };
 }
 
@@ -339,7 +340,10 @@ export function applyAnswer(
   const profile = buildProfile(partial);
   if (!profile) {
     // Shouldn't happen if every step validated, but guard anyway.
-    return { ok: false, error: 'Something went wrong building your profile — send /setup to restart.' };
+    return {
+      ok: false,
+      error: 'Something went wrong building your profile — send /setup to restart.',
+    };
   }
   return { ok: true, done: true, profile };
 }

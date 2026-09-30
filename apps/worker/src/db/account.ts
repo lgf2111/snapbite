@@ -108,7 +108,11 @@ export async function exportUser(db: AccountDb, userId: string): Promise<UserExp
  * nutrition. Returns false if the user didn't exist.
  */
 export async function deleteAccount(db: AccountDb, userId: string): Promise<boolean> {
-  const userRows = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+  const userRows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
   if (userRows.length === 0) return false;
   await db.delete(users).where(eq(users.id, userId));
   return true;

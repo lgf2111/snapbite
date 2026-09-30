@@ -1,14 +1,40 @@
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Collapsible } from '@/components/ui/collapsible';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
+import type { SettingsView } from '@/lib/api';
+import type { Backend } from '@/lib/backend';
+import { cacheKey, getCached, revalidate } from '@/lib/cache';
+import { downloadViaTelegram, openExportUrl } from '@/lib/telegram';
+import { cn } from '@/lib/utils';
+import {
+  type WeekMode,
+  type WeekPrefs,
+  type WeekStart,
+  loadWeekPrefs,
+  saveWeekPrefs,
+} from '@/lib/weekPrefs';
 import {
   DEFAULT_REMINDER_TIMES,
   FEEDBACK_MAX_LEN,
   PROVIDER_PRESETS,
-  profileAge,
   type ProviderId,
   REMINDER_STEP_MINUTES,
-  snapToReminderStep,
   type UserProfile,
+  profileAge,
+  snapToReminderStep,
 } from '@snapbite/core';
-import { type ProviderConfig, ProviderPicker } from './ProviderPicker.js';
 import {
   Bell,
   CalendarRange,
@@ -22,36 +48,10 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { cacheKey, getCached, revalidate } from '@/lib/cache';
-import { cn } from '@/lib/utils';
-import {
-  loadWeekPrefs,
-  saveWeekPrefs,
-  type WeekMode,
-  type WeekPrefs,
-  type WeekStart,
-} from '@/lib/weekPrefs';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Collapsible } from '@/components/ui/collapsible';
-import { Switch } from '@/components/ui/switch';
-import type { SettingsView } from '@/lib/api';
-import type { Backend } from '@/lib/backend';
-import { downloadViaTelegram, openExportUrl } from '@/lib/telegram';
 import { InfoDisclosure } from './InfoDisclosure.js';
 import { MacroLine } from './MacroLine.js';
 import { ProfileForm } from './ProfileForm.js';
+import { type ProviderConfig, ProviderPicker } from './ProviderPicker.js';
 
 interface SettingsScreenProps {
   backend: Backend;
@@ -59,16 +59,18 @@ interface SettingsScreenProps {
   onProfileSaved?: () => void;
 }
 
-const GOAL_LABEL: Record<string, string> = { lose: 'Lose weight', maintain: 'Maintain', gain: 'Gain' };
+const GOAL_LABEL: Record<string, string> = {
+  lose: 'Lose weight',
+  maintain: 'Maintain',
+  gain: 'Gain',
+};
 
 const PROVIDERS = Object.values(PROVIDER_PRESETS);
 
 /** Human label for a stored provider id (incl. 'custom'). */
 function providerLabel(id: string): string {
   if (id === 'custom') return 'Custom';
-  return id === 'gemini' || id === 'openai' || id === 'deepseek'
-    ? PROVIDER_PRESETS[id].label
-    : id;
+  return id === 'gemini' || id === 'openai' || id === 'deepseek' ? PROVIDER_PRESETS[id].label : id;
 }
 
 /** Builds a ProviderConfig from stored settings fields. */
@@ -79,7 +81,11 @@ function cfgFromSettings(
   supportsDetail: boolean | undefined,
 ): ProviderConfig {
   const isPreset = provider === 'gemini' || provider === 'openai' || provider === 'deepseek';
-  const p: ProviderConfig['provider'] = isPreset ? provider : provider === 'custom' ? 'custom' : 'gemini';
+  const p: ProviderConfig['provider'] = isPreset
+    ? provider
+    : provider === 'custom'
+      ? 'custom'
+      : 'gemini';
   return {
     provider: p,
     model: model ?? (p === 'custom' ? '' : PROVIDER_PRESETS[p].defaultModel),
@@ -198,7 +204,9 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   useEffect(() => {
     const apply = (s: SettingsView) => {
       setSettings(s);
-      setPrimaryCfg(cfgFromSettings(s.aiProvider, s.aiModel, s.customBaseUrl, s.customSupportsDetail));
+      setPrimaryCfg(
+        cfgFromSettings(s.aiProvider, s.aiModel, s.customBaseUrl, s.customSupportsDetail),
+      );
       if (s.fallbackProvider) {
         setFbCfg(
           cfgFromSettings(
@@ -413,9 +421,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     if (anyOn && s.reminders && s.reminders.tzOffsetMinutes !== deviceTz) {
       // Silent self-heal: re-save the same enabled slots so the Worker gets the
       // current offset. No toast — the user didn't do anything.
-      const enabledTimes = Object.fromEntries(
-        Object.entries(times).filter(([label]) => on[label]),
-      );
+      const enabledTimes = Object.fromEntries(Object.entries(times).filter(([label]) => on[label]));
       backend.saveReminders(true, enabledTimes).catch(() => {
         /* best-effort; will retry next app open */
       });
@@ -762,7 +768,9 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                       type="password"
                       autoComplete="off"
                       placeholder={
-                        settings?.fallbackConnected ? 'saved — paste to replace' : 'paste your fallback key'
+                        settings?.fallbackConnected
+                          ? 'saved — paste to replace'
+                          : 'paste your fallback key'
                       }
                       value={fbKey}
                       onChange={(e) => setFbKey(e.target.value)}
@@ -782,10 +790,18 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                       disabled={!fbKey.trim() || savingFb}
                       onClick={handleSaveFallback}
                     >
-                      {savingFb ? 'Saving…' : settings?.fallbackConnected ? 'Replace key' : 'Save fallback'}
+                      {savingFb
+                        ? 'Saving…'
+                        : settings?.fallbackConnected
+                          ? 'Replace key'
+                          : 'Save fallback'}
                     </Button>
                     {settings?.fallbackConnected && (
-                      <Button variant="secondary" disabled={savingFb} onClick={handleRemoveFallback}>
+                      <Button
+                        variant="secondary"
+                        disabled={savingFb}
+                        onClick={handleRemoveFallback}
+                      >
                         Remove
                       </Button>
                     )}
@@ -806,8 +822,8 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
             <li>We store your logged meals: foods, nutrition, notes, and timestamps.</li>
             <li>
-              Meal photos are only kept for meals you send to the Telegram bot, and are served
-              back only to you.
+              Meal photos are only kept for meals you send to the Telegram bot, and are served back
+              only to you.
             </li>
             <li>Your AI API key is encrypted at rest and never included in exports or logs.</li>
             <li>You can export everything or delete your account at any time below.</li>
@@ -823,11 +839,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               <Download className="size-4" />
               {exporting ? 'Exporting…' : 'Export my data'}
             </Button>
-            <Button
-              variant="destructive"
-              className="gap-2"
-              onClick={() => setConfirmDelete(true)}
-            >
+            <Button variant="destructive" className="gap-2" onClick={() => setConfirmDelete(true)}>
               <Trash2 className="size-4" />
               Delete account
             </Button>

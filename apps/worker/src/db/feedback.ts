@@ -1,7 +1,7 @@
-import { desc } from 'drizzle-orm';
 import { FEEDBACK_MAX_LEN } from '@snapbite/core';
+import { desc } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { feedback, type FeedbackRow } from './schema.js';
+import { type FeedbackRow, feedback } from './schema.js';
 
 export function createFeedbackDb(d1: D1Database) {
   return drizzle(d1, { schema: { feedback } });

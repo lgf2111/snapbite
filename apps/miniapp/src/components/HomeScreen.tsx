@@ -1,18 +1,18 @@
-import { type DailyTargets, PROVIDER_PRESETS } from '@snapbite/core';
-import { Camera, Plus, RefreshCw, Sparkles, Target } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cacheKey } from '@/lib/cache';
 import type { Backend, RecentMeal } from '@/lib/backend';
+import { cacheKey } from '@/lib/cache';
 import { hapticNotify } from '@/lib/telegram';
 import { useCachedData } from '@/lib/useCachedData';
 import { cn } from '@/lib/utils';
 import { loadWeekPrefs, weekRange } from '@/lib/weekPrefs';
+import { type DailyTargets, PROVIDER_PRESETS } from '@snapbite/core';
+import { Camera, Plus, RefreshCw, Sparkles, Target } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DateSelector } from './DateSelector.js';
-import { ManualMealDialog } from './ManualMealDialog.js';
 import { MacroLegend, MacroLine } from './MacroLine.js';
+import { ManualMealDialog } from './ManualMealDialog.js';
 import { ProgressRing } from './ProgressRing.js';
 import { SwipeableRow } from './SwipeableRow.js';
 
@@ -72,14 +72,18 @@ export function HomeScreen({
 
   // Meals for the current view, served instantly from cache then revalidated.
   const mealsKey =
-    view === 'weekly' ? cacheKey.mealsRange(range.startKey, range.endKey) : cacheKey.mealsByDate(date);
+    view === 'weekly'
+      ? cacheKey.mealsRange(range.startKey, range.endKey)
+      : cacheKey.mealsByDate(date);
   const {
     data: mealsData,
     loading: mealsLoading,
     error,
     refresh: refreshMeals,
   } = useCachedData<RecentMeal[]>(mealsKey, () =>
-    view === 'weekly' ? backend.mealsInRange(range.startKey, range.endKey) : backend.mealsByDate(date),
+    view === 'weekly'
+      ? backend.mealsInRange(range.startKey, range.endKey)
+      : backend.mealsByDate(date),
   );
   const meals = mealsLoading ? null : (mealsData ?? []);
 
@@ -183,7 +187,12 @@ export function HomeScreen({
           >
             <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
           </Button>
-          <Button variant="secondary" size="sm" className="gap-1.5" onClick={() => setAddOpen(true)}>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setAddOpen(true)}
+          >
             <Plus className="size-4" /> Add meal
           </Button>
         </div>

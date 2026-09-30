@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { computeTargets } from '../profile/profile.js';
 import {
-  applyAnswer,
-  buildProfile,
   ONBOARDING_STEPS,
   type OnboardingState,
+  applyAnswer,
+  buildProfile,
   promptFor,
   startOnboarding,
 } from './onboarding.js';

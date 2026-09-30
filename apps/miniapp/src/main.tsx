@@ -24,7 +24,7 @@ function hasLaunchParams(): boolean {
     const stored =
       sessionStorage.getItem('@telegram-apps/launch-params') ??
       sessionStorage.getItem('tapps/launchParams');
-    if (stored && stored.includes('tgWebApp')) return true;
+    if (stored?.includes('tgWebApp')) return true;
     const tg = (window as { Telegram?: { WebApp?: unknown } }).Telegram;
     if (tg?.WebApp) return true;
   } catch {

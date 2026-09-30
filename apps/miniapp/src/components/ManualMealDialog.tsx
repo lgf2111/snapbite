@@ -1,6 +1,3 @@
-import { buildManualMeal, type ManualFoodInput } from '@snapbite/core';
-import { Star, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -14,6 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Favorite } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
+import { type ManualFoodInput, buildManualMeal } from '@snapbite/core';
+import { Star, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 type ToastKind = 'success' | 'error' | 'info';
 

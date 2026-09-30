@@ -59,7 +59,10 @@ describe('parseUpdate', () => {
 
 describe('replyForCommand', () => {
   it('replies to /start with a web_app launch button', () => {
-    const reply = replyForCommand({ chatId: 1, command: 'start', args: '', text: '/start' }, CONFIG);
+    const reply = replyForCommand(
+      { chatId: 1, command: 'start', args: '', text: '/start' },
+      CONFIG,
+    );
     expect(reply?.text).toContain('Welcome');
     const button = reply?.replyMarkup?.inline_keyboard[0]?.[0];
     expect(button?.web_app?.url).toBe('https://app.example.com');
@@ -113,7 +116,9 @@ describe('photoLoggedReply', () => {
     expect(reply.text).toContain('Fat 18 g');
     expect(reply.text.toLowerCase()).toContain('estimate');
     // Launch button present when a mini app URL is configured.
-    expect(reply.replyMarkup?.inline_keyboard[0]?.[0]?.web_app?.url).toBe('https://app.example.com');
+    expect(reply.replyMarkup?.inline_keyboard[0]?.[0]?.web_app?.url).toBe(
+      'https://app.example.com',
+    );
   });
 
   it('omits the launch button when no mini app URL is set', () => {

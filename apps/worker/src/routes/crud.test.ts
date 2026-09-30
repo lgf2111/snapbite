@@ -1,5 +1,5 @@
-import { signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
+import { signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
@@ -29,7 +29,11 @@ function meal(name: string, kcal = 100) {
   };
 }
 
-async function save(app: ReturnType<typeof createApp>, tgId: number, name: string): Promise<string> {
+async function save(
+  app: ReturnType<typeof createApp>,
+  tgId: number,
+  name: string,
+): Promise<string> {
   const res = await app.request(
     '/api/meals',
     { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ meal: meal(name) }) },
@@ -76,12 +80,16 @@ describe('PUT /api/meals/:id', () => {
     expect(detail.foods[0]?.nutritionSource).toBe('table');
   });
 
-  it('returns 404 when updating another user\'s meal', async () => {
+  it("returns 404 when updating another user's meal", async () => {
     const app = createApp();
     const id = await save(app, 7102, 'private');
     const res = await app.request(
       `/api/meals/${id}`,
-      { method: 'PUT', headers: await headers(7103), body: JSON.stringify({ meal: meal('hacked') }) },
+      {
+        method: 'PUT',
+        headers: await headers(7103),
+        body: JSON.stringify({ meal: meal('hacked') }),
+      },
       env,
     );
     expect(res.status).toBe(404);
@@ -92,7 +100,11 @@ describe('PUT /api/meals/:id', () => {
     const id = await save(app, 7104, 'valid');
     const res = await app.request(
       `/api/meals/${id}`,
-      { method: 'PUT', headers: await headers(7104), body: JSON.stringify({ meal: { foods: [] } }) },
+      {
+        method: 'PUT',
+        headers: await headers(7104),
+        body: JSON.stringify({ meal: { foods: [] } }),
+      },
       env,
     );
     expect(res.status).toBe(400);
@@ -121,7 +133,7 @@ describe('DELETE /api/meals/:id', () => {
     expect(list.meals.find((m) => m.id === id)).toBeUndefined();
   });
 
-  it('returns 404 when deleting another user\'s meal', async () => {
+  it("returns 404 when deleting another user's meal", async () => {
     const app = createApp();
     const id = await save(app, 7202, 'safe');
     const res = await app.request(
