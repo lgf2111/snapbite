@@ -44,7 +44,7 @@ import {
   setOnboardingState,
 } from '../db/settings.js';
 import { createDb, listBroadcastTargets, setBroadcastRef, upsertUser } from '../db/users.js';
-import { type AppBindings, parseAdminId } from '../env.js';
+import { type AppBindings, parseAdminId, parseChatId } from '../env.js';
 import { lookupBarcode } from '../openfoodfacts.js';
 import { enqueuePhotoRetry } from '../photoRetry.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
@@ -127,7 +127,9 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
         // cause is a validation error (so schema failures are diagnosable); else
         // the stack. The failing-field summary is already in desc.message.
         const causeIssues =
-          e.cause && typeof e.cause === 'object' && Array.isArray((e.cause as { issues?: unknown }).issues)
+          e.cause &&
+          typeof e.cause === 'object' &&
+          Array.isArray((e.cause as { issues?: unknown }).issues)
             ? JSON.stringify((e.cause as { issues: unknown[] }).issues).slice(0, 800)
             : undefined;
         const detail =
@@ -163,6 +165,10 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
     // else falls through to the pure `replyForCommand`.
     if (parsed.command === 'feedback') {
       await handleFeedbackCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
+    if (parsed.command === 'ping') {
+      await handlePingCommand(c, bot, parsed);
       return c.json({ ok: true });
     }
     if (parsed.command === 'errors') {
@@ -388,6 +394,39 @@ async function handleFeedbackCommand(
       text: 'Sorry — could not save that just now. Please try again in a moment.',
     });
   }
+}
+
+/**
+ * `/ping` — ADMIN-only self-test: routes a sample alert through `adminNotify`
+ * (as an `error` kind, so it lands in the errors Topic / owner DM) so the owner
+ * can confirm alerts are actually being delivered end-to-end. Non-admins get the
+ * normal fallback reply (the command is effectively invisible to them).
+ */
+async function handlePingCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const adminId = parseAdminId(c.env.ADMIN_TELEGRAM_ID);
+  const isAdmin = adminId != null && parsed.fromId === adminId;
+  if (!isAdmin) {
+    // Treat like an unknown message for non-admins — don't reveal the command.
+    const reply = replyForCommand({ command: null }, { miniAppUrl: c.env.MINI_APP_URL ?? '' });
+    if (reply) await bot.sendMessage(parsed.chatId, reply);
+    return;
+  }
+
+  const groupId = parseChatId(c.env.ADMIN_GROUP_CHAT_ID);
+  const dest = groupId != null ? 'the admin group topic' : 'your DM';
+  await adminNotify(
+    c.env,
+    bot,
+    'error',
+    `🏓 Test alert from /ping at ${shortTime(Date.now())}. If you can read this, admin alerts are being delivered.`,
+  );
+  await bot.sendMessage(parsed.chatId, {
+    text: `Sent a test alert to ${dest}. If it didn't arrive, check the group/thread config (see \`wrangler tail\` for [adminNotify] logs).`,
+  });
 }
 
 /**

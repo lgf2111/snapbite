@@ -242,7 +242,8 @@ describe('DeepSeekProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     // The retry appended a corrective user message.
     const retryBody = JSON.parse(
-      (fetchMock as unknown as { mock: { calls: [string, { body: string }][] } }).mock.calls[1][1].body,
+      (fetchMock as unknown as { mock: { calls: [string, { body: string }][] } }).mock.calls[1][1]
+        .body,
     );
     const lastMsg = retryBody.messages[retryBody.messages.length - 1];
     expect(lastMsg.role).toBe('user');
@@ -257,7 +258,11 @@ describe('DeepSeekProvider', () => {
   });
 
   it('throws the parse error if BOTH attempts fail', async () => {
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, text: async () => envelope('nope') }));
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => envelope('nope'),
+    }));
     const provider = new DeepSeekProvider({ apiKey: 'sk-test', fetch: fetchMock });
     await expect(provider.analyzeMeal(IMAGE)).rejects.toMatchObject({ kind: 'parse' });
     expect(fetchMock).toHaveBeenCalledTimes(2);
