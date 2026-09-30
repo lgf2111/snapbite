@@ -1,6 +1,6 @@
 import { desc } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { errorLogs, type ErrorLogRow } from './schema.js';
+import { type ErrorLogRow, errorLogs } from './schema.js';
 
 export function createErrorsDb(d1: D1Database) {
   return drizzle(d1, { schema: { errorLogs } });
@@ -81,9 +81,7 @@ export function describeError(err: unknown): {
       name?: unknown;
     };
     const message =
-      typeof anyErr.message === 'string' && anyErr.message
-        ? anyErr.message
-        : String(err);
+      typeof anyErr.message === 'string' && anyErr.message ? anyErr.message : String(err);
     const kind =
       typeof anyErr.kind === 'string'
         ? anyErr.kind

@@ -1,5 +1,5 @@
-import { signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
+import { signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
@@ -56,7 +56,14 @@ describe('/api/favorites', () => {
     // List returns it with the meal + kcal.
     const list = (await (
       await app.request('/api/favorites', { headers: await headers(tgId) }, env)
-    ).json()) as { favorites: Array<{ id: string; label: string; energyKcal: number; meal: { total: { energyKcal: number } } }> };
+    ).json()) as {
+      favorites: Array<{
+        id: string;
+        label: string;
+        energyKcal: number;
+        meal: { total: { energyKcal: number } };
+      }>;
+    };
     expect(list.favorites).toHaveLength(1);
     expect(list.favorites[0]?.label).toBe('My chicken rice');
     expect(list.favorites[0]?.energyKcal).toBe(540);
@@ -80,7 +87,11 @@ describe('/api/favorites', () => {
     const tgId = 9501;
     await app.request(
       '/api/favorites',
-      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ meal: meal('Oatmeal') }) },
+      {
+        method: 'POST',
+        headers: await headers(tgId),
+        body: JSON.stringify({ meal: meal('Oatmeal') }),
+      },
       env,
     );
     const list = (await (
@@ -95,7 +106,11 @@ describe('/api/favorites', () => {
     const other = 9503;
     const save = await app.request(
       '/api/favorites',
-      { method: 'POST', headers: await headers(owner), body: JSON.stringify({ meal: meal('Secret') }) },
+      {
+        method: 'POST',
+        headers: await headers(owner),
+        body: JSON.stringify({ meal: meal('Secret') }),
+      },
       env,
     );
     const { id } = (await save.json()) as { id: string };
@@ -119,7 +134,11 @@ describe('/api/favorites', () => {
     const app = createApp();
     const res = await app.request(
       '/api/favorites',
-      { method: 'POST', headers: await headers(9504), body: JSON.stringify({ meal: { nope: true } }) },
+      {
+        method: 'POST',
+        headers: await headers(9504),
+        body: JSON.stringify({ meal: { nope: true } }),
+      },
       env,
     );
     expect(res.status).toBe(400);

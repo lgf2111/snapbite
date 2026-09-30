@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  UserProfile,
   computeBmr,
   computeTargets,
   computeTdee,
   feetInchesToCm,
   lbToKg,
-  UserProfile,
 } from './profile.js';
 
 const base: UserProfile = {

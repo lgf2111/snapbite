@@ -2,8 +2,8 @@ import { dueReminderSlots, reminderMessage } from '@snapbite/core';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { logError } from './db/errors.js';
-import { parsePreferences, type ReminderConfig } from './db/settings.js';
 import { settings, users } from './db/schema.js';
+import { type ReminderConfig, parsePreferences } from './db/settings.js';
 import type { Env } from './env.js';
 import { TelegramBotClient } from './telegram/botClient.js';
 

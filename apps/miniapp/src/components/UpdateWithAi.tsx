@@ -1,6 +1,3 @@
-import type { MealResult } from '@snapbite/core';
-import { Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,6 +10,9 @@ import {
 import { Input } from '@/components/ui/input';
 import type { Backend } from '@/lib/backend';
 import { hapticNotify } from '@/lib/telegram';
+import type { MealResult } from '@snapbite/core';
+import { Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 type ToastKind = 'success' | 'error' | 'info';
 
@@ -100,8 +100,8 @@ export function ReviseWithAiDialog({
         <DialogHeader>
           <DialogTitle>Update with AI</DialogTitle>
           <DialogDescription>
-            Describe the change in plain words — e.g. "add a can of coke", "the rice was double",
-            or "remove the fries". You'll review the result before saving.
+            Describe the change in plain words — e.g. "add a can of coke", "the rice was double", or
+            "remove the fries". You'll review the result before saving.
           </DialogDescription>
         </DialogHeader>
         <Input

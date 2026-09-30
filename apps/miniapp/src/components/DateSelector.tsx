@@ -1,8 +1,8 @@
-import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
-import { lazy, Suspense, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Suspense, lazy, useState } from 'react';
 
 // react-day-picker is heavy; only load it when the calendar popover opens.
 const Calendar = lazy(() =>

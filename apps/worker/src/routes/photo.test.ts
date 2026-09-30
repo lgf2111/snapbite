@@ -1,5 +1,5 @@
-import { type BotReply, signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
+import { type BotReply, signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';

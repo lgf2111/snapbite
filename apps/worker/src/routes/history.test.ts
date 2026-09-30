@@ -1,5 +1,5 @@
-import { signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
+import { signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
@@ -74,7 +74,7 @@ describe('GET /api/meals/:id', () => {
     expect(detail.total.energyKcal).toBe(100);
   });
 
-  it('returns 404 for another user\'s meal', async () => {
+  it("returns 404 for another user's meal", async () => {
     const id = await save(4002, 'private dish');
     const app = createApp();
     const res = await app.request(`/api/meals/${id}`, { headers: await headers(4003) }, env);

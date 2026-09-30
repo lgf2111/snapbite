@@ -67,9 +67,7 @@
       "indexes": {
         "error_logs_created_at_idx": {
           "name": "error_logs_created_at_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         }
       },
@@ -128,9 +126,7 @@
       "indexes": {
         "feedback_created_at_idx": {
           "name": "feedback_created_at_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         }
       },
@@ -231,16 +227,12 @@
       "indexes": {
         "food_items_meal_idx": {
           "name": "food_items_meal_idx",
-          "columns": [
-            "meal_id"
-          ],
+          "columns": ["meal_id"],
           "isUnique": false
         },
         "food_items_name_idx": {
           "name": "food_items_name_idx",
-          "columns": [
-            "name"
-          ],
+          "columns": ["name"],
           "isUnique": false
         }
       },
@@ -249,12 +241,8 @@
           "name": "food_items_meal_id_meals_id_fk",
           "tableFrom": "food_items",
           "tableTo": "meals",
-          "columnsFrom": [
-            "meal_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["meal_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -340,10 +328,7 @@
       "indexes": {
         "meals_user_logged_idx": {
           "name": "meals_user_logged_idx",
-          "columns": [
-            "user_id",
-            "logged_at"
-          ],
+          "columns": ["user_id", "logged_at"],
           "isUnique": false
         }
       },
@@ -352,12 +337,8 @@
           "name": "meals_user_id_users_id_fk",
           "tableFrom": "meals",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -418,12 +399,8 @@
           "name": "nutrition_meal_id_meals_id_fk",
           "tableFrom": "nutrition",
           "tableTo": "meals",
-          "columnsFrom": [
-            "meal_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["meal_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -492,12 +469,8 @@
           "name": "settings_user_id_users_id_fk",
           "tableFrom": "settings",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -562,9 +535,7 @@
       "indexes": {
         "users_telegram_user_id_idx": {
           "name": "users_telegram_user_id_idx",
-          "columns": [
-            "telegram_user_id"
-          ],
+          "columns": ["telegram_user_id"],
           "isUnique": true
         }
       },

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  REMINDER_STEP_MINUTES,
   dueReminderSlots,
   localParts,
   parseHhMm,
-  REMINDER_STEP_MINUTES,
   reminderMessage,
   snapToReminderStep,
 } from './reminders.js';

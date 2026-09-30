@@ -1,7 +1,7 @@
 import type { TelegramUser } from '@snapbite/core';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { settings, users, type UserRow } from './schema.js';
+import { type UserRow, settings, users } from './schema.js';
 
 /** A user + their last-broadcast reference, for the /broadcast command. */
 export interface BroadcastTarget {

@@ -1,9 +1,9 @@
 import { AIFoodAnalysis } from '../schemas/analysis.js';
 import {
-  buildRevisePrompt,
-  buildUserPrompt,
   REVISE_SYSTEM_PROMPT,
   SYSTEM_PROMPT,
+  buildRevisePrompt,
+  buildUserPrompt,
 } from './prompt.js';
 import {
   type AIProvider,
@@ -177,8 +177,8 @@ function extractContent(raw: string, providerId: string): string {
   } catch (cause) {
     throw new AIProviderError('parse', `${providerId} response was not valid JSON`, { cause });
   }
-  const content = (envelope as { choices?: Array<{ message?: { content?: unknown } }> })?.choices?.[0]
-    ?.message?.content;
+  const content = (envelope as { choices?: Array<{ message?: { content?: unknown } }> })
+    ?.choices?.[0]?.message?.content;
   if (typeof content !== 'string' || content.trim() === '') {
     throw new AIProviderError('empty', `${providerId} response had no message content`);
   }
@@ -287,7 +287,8 @@ function coerceAnalysis(input: unknown): unknown {
       };
       const qty = num(food.quantity);
       out.quantity = qty !== undefined && qty > 0 ? qty : 1;
-      if (typeof food.portion === 'string' && food.portion.trim()) out.portion = food.portion.trim();
+      if (typeof food.portion === 'string' && food.portion.trim())
+        out.portion = food.portion.trim();
 
       const aiN = coerceNutrition(food.aiNutrition);
       if (aiN) out.aiNutrition = aiN;
@@ -306,7 +307,8 @@ function coerceAnalysis(input: unknown): unknown {
   const result: Record<string, unknown> = {
     foods,
     confidence: coerceConfidence(o.confidence),
-    needsConfirmation: typeof o.needsConfirmation === 'boolean' ? o.needsConfirmation : foods.length === 0,
+    needsConfirmation:
+      typeof o.needsConfirmation === 'boolean' ? o.needsConfirmation : foods.length === 0,
   };
   if (typeof o.title === 'string' && o.title.trim()) result.title = o.title.trim();
   if (typeof o.notes === 'string' && o.notes.trim()) result.notes = o.notes.trim();

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildRevisePrompt, buildUserPrompt, REVISE_SYSTEM_PROMPT, SYSTEM_PROMPT } from './prompt.js';
+import {
+  REVISE_SYSTEM_PROMPT,
+  SYSTEM_PROMPT,
+  buildRevisePrompt,
+  buildUserPrompt,
+} from './prompt.js';
 
 describe('SYSTEM_PROMPT', () => {
   it('requires strict JSON and the per-100g nutrition basis', () => {

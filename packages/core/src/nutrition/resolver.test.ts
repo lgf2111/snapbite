@@ -57,9 +57,7 @@ describe('resolveFoodNutrition', () => {
 
   it('accounts for quantity in scaling', () => {
     // egg 155 kcal/100g, 50g each x 2 = 100g -> 155 kcal
-    const result = resolveFoodNutrition(
-      food({ name: 'egg', estimatedWeightG: 50, quantity: 2 }),
-    );
+    const result = resolveFoodNutrition(food({ name: 'egg', estimatedWeightG: 50, quantity: 2 }));
     expect(result?.energyKcal).toBe(155);
     expect(result?.source).toBe('table');
   });

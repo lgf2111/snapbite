@@ -1,5 +1,5 @@
-import { signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
+import { signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
@@ -33,10 +33,18 @@ async function saveKeyAndMeal(tgId: number): Promise<void> {
   const h = await headers(tgId);
   await app.request(
     '/api/settings',
-    { method: 'PUT', headers: h, body: JSON.stringify({ apiKey: 'sk-secret-9999', aiProvider: 'gemini' }) },
+    {
+      method: 'PUT',
+      headers: h,
+      body: JSON.stringify({ apiKey: 'sk-secret-9999', aiProvider: 'gemini' }),
+    },
     env,
   );
-  await app.request('/api/meals', { method: 'POST', headers: h, body: JSON.stringify({ meal }) }, env);
+  await app.request(
+    '/api/meals',
+    { method: 'POST', headers: h, body: JSON.stringify({ meal }) },
+    env,
+  );
 }
 
 describe('GET /api/account/export', () => {
@@ -92,7 +100,7 @@ describe('DELETE /api/account', () => {
     expect(body.meals).toEqual([]);
   });
 
-  it('does not touch another user\'s data', async () => {
+  it("does not touch another user's data", async () => {
     const keep = 8003;
     const drop = 8004;
     await saveKeyAndMeal(keep);

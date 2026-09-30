@@ -1,5 +1,5 @@
-import { type BotReply, signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
+import { type BotReply, signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { recentFeedback } from '../db/feedback.js';
@@ -40,13 +40,19 @@ describe('POST /api/feedback', () => {
     const app = createApp(captureBot(sent));
     const res = await app.request(
       '/api/feedback',
-      { method: 'POST', headers: await authHeaders(7001), body: JSON.stringify({ message: 'love it, add streaks' }) },
+      {
+        method: 'POST',
+        headers: await authHeaders(7001),
+        body: JSON.stringify({ message: 'love it, add streaks' }),
+      },
       env,
     );
     expect(res.status).toBe(200);
 
     const rows = await recentFeedback(env.DB, 20);
-    const found = rows.find((r) => r.telegramUserId === 7001 && r.message === 'love it, add streaks');
+    const found = rows.find(
+      (r) => r.telegramUserId === 7001 && r.message === 'love it, add streaks',
+    );
     expect(found).toBeTruthy();
     expect(found?.source).toBe('miniapp');
 
@@ -59,7 +65,11 @@ describe('POST /api/feedback', () => {
     const app = createApp();
     const res = await app.request(
       '/api/feedback',
-      { method: 'POST', headers: await authHeaders(7002), body: JSON.stringify({ message: '   ' }) },
+      {
+        method: 'POST',
+        headers: await authHeaders(7002),
+        body: JSON.stringify({ message: '   ' }),
+      },
       env,
     );
     expect(res.status).toBe(400);
@@ -83,7 +93,11 @@ describe('POST /api/feedback', () => {
     const app = createApp();
     const res = await app.request(
       '/api/feedback',
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: 'hi' }) },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ message: 'hi' }),
+      },
       env,
     );
     expect(res.status).toBe(401);

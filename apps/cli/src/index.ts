@@ -3,9 +3,9 @@ import { readFile } from 'node:fs/promises';
 import {
   type AIProvider,
   DeepSeekProvider,
-  formatMealResult,
   type MealImage,
   MockAIProvider,
+  formatMealResult,
   resolveMeal,
 } from '@snapbite/core';
 import { HELP_TEXT, mimeTypeForPath, parseArgs } from './args.js';

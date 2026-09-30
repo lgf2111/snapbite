@@ -1,5 +1,5 @@
-import type { AIProvider } from './types.js';
 import { type FetchLike, OpenAICompatibleProvider } from './openai-compatible.js';
+import type { AIProvider } from './types.js';
 
 /** Known AI provider ids. */
 export type ProviderId = 'gemini' | 'deepseek' | 'openai';

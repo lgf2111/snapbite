@@ -1,23 +1,23 @@
 import {
-  computeTargets,
-  createProvider,
-  type DailyTargets,
-  decryptSecret,
   DEFAULT_PROVIDER_ID,
   DEFAULT_REMINDER_TIMES,
+  type DailyTargets,
+  UserProfile,
+  computeTargets,
+  createProvider,
+  decryptSecret,
   encryptSecret,
   isProviderId,
   lastFour,
   snapToReminderStep,
-  UserProfile,
 } from '@snapbite/core';
 import { Hono } from 'hono';
 import {
+  type Preferences,
+  type ReminderConfig,
   createSettingsDb,
   getSettings,
   parsePreferences,
-  type Preferences,
-  type ReminderConfig,
   saveEncryptedKey,
   savePreferences,
 } from '../db/settings.js';
@@ -173,8 +173,9 @@ export function settingsRoutes() {
     }
     const db = createSettingsDb(c.env.DB);
     // Preserve any existing lastSent stamps so toggling doesn't cause a re-send.
-    const existing = parsePreferences((await getSettings(db, c.get('userId')))?.preferencesJson)
-      .reminders;
+    const existing = parsePreferences(
+      (await getSettings(db, c.get('userId')))?.preferencesJson,
+    ).reminders;
     const reminders: ReminderConfig = {
       enabled,
       times: Object.keys(times).length > 0 ? times : (existing?.times ?? DEFAULT_REMINDER_TIMES),
@@ -229,7 +230,9 @@ export function settingsRoutes() {
       return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
     }
     const db = createSettingsDb(c.env.DB);
-    const current = parsePreferences((await getSettings(db, c.get('userId')))?.preferencesJson).fallback;
+    const current = parsePreferences(
+      (await getSettings(db, c.get('userId')))?.preferencesJson,
+    ).fallback;
     const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
 
     // Explicit remove wipes the stored key.

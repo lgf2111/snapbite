@@ -1,27 +1,27 @@
 import {
   type AIFoodAnalysis,
   type AIProvider,
+  type MealImage,
+  MealResult,
   createProvider,
   decryptSecret,
-  type MealImage,
   mealLoggedMessage,
-  MealResult,
   resolveMeal,
   verifyInitData,
 } from '@snapbite/core';
 import { Hono } from 'hono';
+import { describeError, logError } from '../db/errors.js';
 import {
+  type MealDetail,
   createMealsDb,
   deleteMeal,
   getMealDetail,
   listMeals,
-  type MealDetail,
   saveMeal,
   updateMeal,
 } from '../db/meals.js';
-import { describeError, logError } from '../db/errors.js';
-import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import type { SettingsRow } from '../db/schema.js';
+import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
@@ -191,7 +191,10 @@ export function mealsRoutes(
     const mealField = (body as { meal?: unknown })?.meal ?? body;
     const parsed = MealResult.safeParse(mealField);
     if (!parsed.success) {
-      return c.json({ error: 'Bad request', detail: 'Invalid meal', issues: parsed.error.issues }, 400);
+      return c.json(
+        { error: 'Bad request', detail: 'Invalid meal', issues: parsed.error.issues },
+        400,
+      );
     }
 
     const telegramFileId = (body as { telegramFileId?: unknown })?.telegramFileId;
@@ -268,7 +271,10 @@ export function mealsRoutes(
     const mealField = (body as { meal?: unknown })?.meal ?? body;
     const parsed = MealResult.safeParse(mealField);
     if (!parsed.success) {
-      return c.json({ error: 'Bad request', detail: 'Invalid meal', issues: parsed.error.issues }, 400);
+      return c.json(
+        { error: 'Bad request', detail: 'Invalid meal', issues: parsed.error.issues },
+        400,
+      );
     }
 
     const db = createMealsDb(c.env.DB);

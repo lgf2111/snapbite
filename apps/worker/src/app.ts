@@ -5,7 +5,7 @@ import { telegramAuth } from './middleware/auth.js';
 import { accountRoutes } from './routes/account.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { feedbackRoutes } from './routes/feedback.js';
-import { mealPhotoRoutes, mealsRoutes, type ProviderFactory } from './routes/meals.js';
+import { type ProviderFactory, mealPhotoRoutes, mealsRoutes } from './routes/meals.js';
 import { settingsRoutes } from './routes/settings.js';
 import { type BotClientFactory, webhookRoutes } from './routes/webhook.js';
 

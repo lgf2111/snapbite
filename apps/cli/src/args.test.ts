@@ -1,7 +1,7 @@
 import {
   DEFAULT_MOCK_ANALYSIS,
-  formatMealResult,
   MockAIProvider,
+  formatMealResult,
   resolveMeal,
 } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';

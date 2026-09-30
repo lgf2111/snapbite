@@ -135,7 +135,7 @@ export function replyForCommand(
 
 /** Prompt shown for `/feedback` with no text — tells the user how to send it. */
 export const FEEDBACK_PROMPT =
-  'Tell me what went wrong or what you\'d like improved.\n\nSend it like: /feedback the photo analysis was way off for my salad';
+  "Tell me what went wrong or what you'd like improved.\n\nSend it like: /feedback the photo analysis was way off for my salad";
 
 /** Confirmation shown after a user's feedback is stored + forwarded. */
 export const FEEDBACK_THANKS = '🙏 Thanks — your feedback was sent to the maintainer.';
@@ -189,7 +189,9 @@ export function photoLoggedReply(
   if (config.miniAppUrl) {
     return {
       text,
-      replyMarkup: { inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: config.miniAppUrl } }]] },
+      replyMarkup: {
+        inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: config.miniAppUrl } }]],
+      },
     };
   }
   return { text };

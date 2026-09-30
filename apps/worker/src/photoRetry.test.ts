@@ -1,5 +1,5 @@
-import { signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
+import { signInitData } from '@snapbite/core';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from './app.js';
 import { createDb, upsertUser } from './db/users.js';
@@ -48,10 +48,9 @@ function stubFetch(aiOk: boolean) {
     }
     if (url.includes('/chat/completions')) {
       if (!aiOk) {
-        return new Response(
-          JSON.stringify({ error: { message: 'The model is overloaded.' } }),
-          { status: 503 },
-        );
+        return new Response(JSON.stringify({ error: { message: 'The model is overloaded.' } }), {
+          status: 503,
+        });
       }
       const content = JSON.stringify({
         foods: [

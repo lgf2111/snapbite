@@ -47,6 +47,9 @@ export const FoodItem = z.object({
    * The Worker looks this up in Open Food Facts to replace the estimate with
    * the product's exact per-100g nutrition.
    */
-  barcode: z.string().regex(/^\d{6,14}$/).optional(),
+  barcode: z
+    .string()
+    .regex(/^\d{6,14}$/)
+    .optional(),
 });
 export type FoodItem = z.infer<typeof FoodItem>;

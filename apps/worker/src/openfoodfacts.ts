@@ -31,7 +31,7 @@ function num(v: unknown): number | null {
 function energyKcal(nutriments: Record<string, unknown>): number | null {
   const kcal = num(nutriments['energy-kcal_100g']);
   if (kcal != null) return kcal;
-  const kj = num(nutriments['energy_100g']) ?? num(nutriments['energy-kj_100g']);
+  const kj = num(nutriments.energy_100g) ?? num(nutriments['energy-kj_100g']);
   return kj != null ? Math.round((kj / 4.184) * 10) / 10 : null;
 }
 
@@ -64,9 +64,9 @@ export async function lookupBarcode(
 
     const nutriments = body.product.nutriments as Record<string, unknown>;
     const kcal = energyKcal(nutriments);
-    const proteinG = num(nutriments['proteins_100g']);
-    const carbsG = num(nutriments['carbohydrates_100g']);
-    const fatG = num(nutriments['fat_100g']);
+    const proteinG = num(nutriments.proteins_100g);
+    const carbsG = num(nutriments.carbohydrates_100g);
+    const fatG = num(nutriments.fat_100g);
     // Require at least energy to consider it usable.
     if (kcal == null) return null;
 

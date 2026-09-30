@@ -1,5 +1,5 @@
-import { type AIFoodAnalysis, MockAIProvider, signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
+import { type AIFoodAnalysis, MockAIProvider, signInitData } from '@snapbite/core';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
@@ -29,7 +29,11 @@ async function saveKey(tgId: number): Promise<void> {
   const app = createApp();
   await app.request(
     '/api/settings',
-    { method: 'PUT', headers: await headers(tgId), body: JSON.stringify({ apiKey: 'sk-test-1234' }) },
+    {
+      method: 'PUT',
+      headers: await headers(tgId),
+      body: JSON.stringify({ apiKey: 'sk-test-1234' }),
+    },
     env,
   );
 }
@@ -158,7 +162,11 @@ describe('POST /api/meals/:id/revise', () => {
 
     const res = await app.request(
       `/api/meals/${id}/revise`,
-      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ instruction: 'add a coke' }) },
+      {
+        method: 'POST',
+        headers: await headers(tgId),
+        body: JSON.stringify({ instruction: 'add a coke' }),
+      },
       env,
     );
     expect(res.status).toBe(200);
@@ -176,7 +184,11 @@ describe('POST /api/meals/:id/revise', () => {
   it('requires a non-empty instruction', async () => {
     const tgId = 4002;
     const id = await saveRice(tgId);
-    const app = reviseApp({ foods: rice.foods.map((f) => f.food) as never, confidence: 0.9, needsConfirmation: false });
+    const app = reviseApp({
+      foods: rice.foods.map((f) => f.food) as never,
+      confidence: 0.9,
+      needsConfirmation: false,
+    });
     const res = await app.request(
       `/api/meals/${id}/revise`,
       { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ instruction: '  ' }) },
@@ -195,7 +207,11 @@ describe('POST /api/meals/:id/revise', () => {
     });
     const res = await app.request(
       `/api/meals/${id}/revise`,
-      { method: 'POST', headers: await headers(4004), body: JSON.stringify({ instruction: 'add a coke' }) },
+      {
+        method: 'POST',
+        headers: await headers(4004),
+        body: JSON.stringify({ instruction: 'add a coke' }),
+      },
       env,
     );
     expect(res.status).toBe(404);
@@ -213,7 +229,11 @@ describe('POST /api/meals/:id/revise', () => {
     const { id } = (await save.json()) as { id: string };
     const res = await app.request(
       `/api/meals/${id}/revise`,
-      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ instruction: 'add a coke' }) },
+      {
+        method: 'POST',
+        headers: await headers(tgId),
+        body: JSON.stringify({ instruction: 'add a coke' }),
+      },
       env,
     );
     expect(res.status).toBe(400);
@@ -308,13 +328,17 @@ describe('POST /api/meals + GET /api/meals', () => {
     const app = createApp();
     const res = await app.request(
       '/api/meals',
-      { method: 'POST', headers: await headers(3002), body: JSON.stringify({ meal: { foods: [] } }) },
+      {
+        method: 'POST',
+        headers: await headers(3002),
+        body: JSON.stringify({ meal: { foods: [] } }),
+      },
       env,
     );
     expect(res.status).toBe(400);
   });
 
-  it('does not list another user\'s meals', async () => {
+  it("does not list another user's meals", async () => {
     const app = createApp();
     await app.request(
       '/api/meals',
@@ -369,10 +393,7 @@ describe('localDayKey / groupByDay (local-time bucketing)', () => {
   });
 
   it('groupByDay uses the local day for the bucket key', () => {
-    const groups = groupByDay(
-      [{ id: 'm1', loggedAt: may10_0030_utcPlus8, energyKcal: 500 }],
-      -480,
-    );
+    const groups = groupByDay([{ id: 'm1', loggedAt: may10_0030_utcPlus8, energyKcal: 500 }], -480);
     expect(groups[0]?.date).toBe('2024-05-10');
     expect(groups[0]?.mealIds).toEqual(['m1']);
   });

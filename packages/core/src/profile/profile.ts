@@ -12,13 +12,7 @@ import { z } from 'zod';
 export const Sex = z.enum(['male', 'female']);
 export type Sex = z.infer<typeof Sex>;
 
-export const ActivityLevel = z.enum([
-  'sedentary',
-  'light',
-  'moderate',
-  'active',
-  'very_active',
-]);
+export const ActivityLevel = z.enum(['sedentary', 'light', 'moderate', 'active', 'very_active']);
 export type ActivityLevel = z.infer<typeof ActivityLevel>;
 
 /**

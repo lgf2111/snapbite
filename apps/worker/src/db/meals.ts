@@ -240,11 +240,7 @@ export async function deleteMeal(db: MealsDb, mealId: string, userId: string): P
 }
 
 /** Verifies a meal belongs to the user (for detail/delete in later tasks). */
-export async function mealOwnedBy(
-  db: MealsDb,
-  mealId: string,
-  userId: string,
-): Promise<boolean> {
+export async function mealOwnedBy(db: MealsDb, mealId: string, userId: string): Promise<boolean> {
   const rows = await db
     .select({ id: meals.id })
     .from(meals)
@@ -341,5 +337,3 @@ export async function getMealDetail(
       : null,
   };
 }
-
-

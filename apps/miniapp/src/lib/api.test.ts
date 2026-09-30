@@ -80,7 +80,11 @@ describe('ApiClient', () => {
       mode: 'simple' as const,
     };
     const fetchMock = vi.fn(async () =>
-      jsonResponse({ ok: true, profile, targets: { energyKcal: 2760, proteinG: 144, carbsG: 373, fatG: 77 } }),
+      jsonResponse({
+        ok: true,
+        profile,
+        targets: { energyKcal: 2760, proteinG: 144, carbsG: 373, fatG: 77 },
+      }),
     );
     const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
     const res = await client.saveProfile(profile);

@@ -1,6 +1,6 @@
+import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { DayPicker } from 'react-day-picker';
-import { cn } from '@/lib/utils';
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
@@ -8,7 +8,12 @@ export type CalendarProps = React.ComponentProps<typeof DayPicker>;
  * shadcn-style calendar built on react-day-picker v9, themed with the app's
  * design tokens so it follows the Telegram theme. Used inside a Popover.
  */
-export function Calendar({ className, classNames, showOutsideDays = true, ...props }: CalendarProps) {
+export function Calendar({
+  className,
+  classNames,
+  showOutsideDays = true,
+  ...props
+}: CalendarProps) {
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}

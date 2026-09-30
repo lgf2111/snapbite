@@ -1,5 +1,5 @@
-import type * as React from 'react';
 import { cn } from '@/lib/utils';
+import type * as React from 'react';
 
 interface SwitchProps {
   checked: boolean;
@@ -13,7 +13,13 @@ interface SwitchProps {
  * A small accessible toggle switch. Track is 44×24 (w-11 h-6); the 20px thumb
  * slides between 2px (off) and 22px (on) so it always stays inside the track.
  */
-export function Switch({ checked, onCheckedChange, disabled, id, ...aria }: SwitchProps & React.AriaAttributes) {
+export function Switch({
+  checked,
+  onCheckedChange,
+  disabled,
+  id,
+  ...aria
+}: SwitchProps & React.AriaAttributes) {
   return (
     <button
       id={id}

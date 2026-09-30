@@ -1,4 +1,9 @@
-import { computeTargets, type DailyTargets, type MealResult, type UserProfile } from '@snapbite/core';
+import {
+  type DailyTargets,
+  type MealResult,
+  type UserProfile,
+  computeTargets,
+} from '@snapbite/core';
 import {
   ApiClient,
   type CustomProviderInput,
@@ -10,8 +15,8 @@ import {
 } from './api.js';
 import { cacheKey, clearCache, invalidate, setCached } from './cache.js';
 import { readConfig } from './config.js';
-import { dayKeyFromMs } from './weekPrefs.js';
 import {
+  type SavedMeal,
   clearMeals,
   clearProfile,
   deleteFavoriteLocal,
@@ -21,11 +26,11 @@ import {
   loadProfile,
   saveFavoriteLocal,
   saveMeal as saveMealLocal,
-  type SavedMeal,
   saveProfileLocal,
   updateSavedMeal,
 } from './store.js';
 import { getRawInitData } from './telegram.js';
+import { dayKeyFromMs } from './weekPrefs.js';
 
 /** A unified recent-meal shape the home screen renders, from either source. */
 export interface RecentMeal {
@@ -263,9 +268,9 @@ export function createBackend(): Backend {
         .map(fromSaved);
     },
     async mealDates() {
-      return [
-        ...new Set(loadMeals().map((m) => localDayKey(new Date(m.savedAt).getTime()))),
-      ].sort((a, b) => (a < b ? 1 : -1));
+      return [...new Set(loadMeals().map((m) => localDayKey(new Date(m.savedAt).getTime())))].sort(
+        (a, b) => (a < b ? 1 : -1),
+      );
     },
     async detail(id) {
       const saved = loadMeals().find((m) => m.id === id);

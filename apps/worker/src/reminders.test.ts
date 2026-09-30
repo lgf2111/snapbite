@@ -1,5 +1,5 @@
-import { signInitData } from '@snapbite/core';
 import { env } from 'cloudflare:test';
+import { signInitData } from '@snapbite/core';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from './app.js';
 import { INIT_DATA_HEADER } from './middleware/auth.js';
