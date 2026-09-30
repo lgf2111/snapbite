@@ -28,6 +28,7 @@ import { type Favorite, createFavoritesDb, listFavorites } from '../db/favorites
 import { recentFeedback, storeFeedback } from '../db/feedback.js';
 import {
   type MealTelegramRef,
+  countMealsSince,
   createMealsDb,
   findMealByMessageId,
   getMealDetail,
@@ -1040,6 +1041,10 @@ async function enrichWithBarcodes(
   return enrichedAny ? 'openfoodfacts' : originalProvider;
 }
 
+/** Rolling window + max photos per user for the bot's generous rate limit. */
+const PHOTO_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const PHOTO_RATE_MAX = 40;
+
 interface PhotoJob {
   fileId: string;
   fromId: number;
@@ -1080,6 +1085,22 @@ async function handlePhoto(
             },
           }
         : {}),
+    });
+    return;
+  }
+
+  // Generous per-user rate limit: cap photos logged per rolling hour so a flood
+  // can't run up D1 writes + Telegram downloads. Well above any real meal cadence
+  // (a normal day is a handful of photos). Counts successful logs in the window.
+  const mealsDbForLimit = createMealsDb(c.env.DB);
+  const recentCount = await countMealsSince(
+    mealsDbForLimit,
+    user.id,
+    Date.now() - PHOTO_RATE_WINDOW_MS,
+  );
+  if (recentCount >= PHOTO_RATE_MAX) {
+    await bot.sendMessage(chatId, {
+      text: `You've logged a lot of photos in the last hour (limit ${PHOTO_RATE_MAX}). Give it a few minutes and try again — your existing meals are safe in SnapBite.`,
     });
     return;
   }

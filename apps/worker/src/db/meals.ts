@@ -1,5 +1,5 @@
 import type { MealResult } from '@snapbite/core';
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, count, desc, eq, gte } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { type FoodItemRow, foodItems, meals, nutrition } from './schema.js';
 
@@ -107,6 +107,23 @@ export async function recentMealsForUser(
     .orderBy(desc(meals.loggedAt))
     .limit(limit);
   return rows;
+}
+
+/**
+ * Counts a user's meals logged since `sinceMs`. A single indexed COUNT (the
+ * `meals_user_logged_idx` on userId+loggedAt covers it), used by the bot's generous
+ * per-user photo rate-limit so a flood of photos can't run up D1/Telegram work.
+ */
+export async function countMealsSince(
+  db: MealsDb,
+  userId: string,
+  sinceMs: number,
+): Promise<number> {
+  const rows = await db
+    .select({ n: count() })
+    .from(meals)
+    .where(and(eq(meals.userId, userId), gte(meals.loggedAt, sinceMs)));
+  return rows[0]?.n ?? 0;
 }
 
 /** Finds a user's meal by the bot message_id it replied to (for reply-to targeting). */
