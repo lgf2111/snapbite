@@ -305,14 +305,15 @@ Do NOT run long-lived dev servers via automation (they block). If you need one, 
 - Bot: `@SnapBiteAI_bot` — webhook → the worker; Menu Button + Configure Mini App both set to
   `https://snapbite.leeguanfeng.com`; avatar = `apps/miniapp/public/icon.png`.
 
-RETIRED (after a final "shutting down today" broadcast — v0.20.0):
-- Old worker `foodlog-worker` — **DELETED** (confirmed: its URL now 404s). `wrangler.old.toml`, the
-  temporary old-worker deploy config, has also been removed.
-- Old Pages `foodlog` (`foodlog-7f5.pages.dev`) and old bot `@foodlog2111_bot` — **still to delete**
-  (Pages dashboard + BotFather; both optional). With the worker gone the old bot can no longer
-  respond regardless of its webhook.
-- Old D1 `foodlog-db`, id `f0312e67-2fef-47a6-a9ca-59cb9c21a79b` — **kept as a data backup**; delete
-  after a couple of stable weeks with `wrangler d1 delete foodlog-db`.
+RETIRED — old FoodLog infra fully decommissioned (after a final "shutting down" broadcast, v0.20.0):
+- Old worker `foodlog-worker` — **DELETED** (its URL 404s). `wrangler.old.toml` removed.
+- Old bot `@foodlog2111_bot` — **DELETED** in BotFather.
+- Old D1 `foodlog-db` (was id `f0312e67-2fef-47a6-a9ca-59cb9c21a79b`) — **DELETED** (backup no longer
+  needed; verified `snapbite-db` had strictly more data and was actively growing before deleting).
+- Old Pages `foodlog` (`foodlog-7f5.pages.dev`) — being deleted via the Cloudflare dashboard.
+
+Only SnapBite infra remains: worker `snapbite-worker`, Pages `snapbite` (`snapbite.leeguanfeng.com`),
+D1 `snapbite-db` (`6c331800-c9a5-4c32-b5b4-17190c23dd6c`), bot `@SnapBiteAI_bot`.
 
 Migration notes:
 - Data copied old→new via `d1 export --no-schema` then filtered out `d1_migrations` + `sqlite_sequence`
