@@ -8,6 +8,7 @@ import { HomeScreen } from './HomeScreen.js';
 
 afterEach(() => {
   clearCache();
+  localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -119,5 +120,28 @@ describe('HomeScreen', () => {
 
     await waitFor(() => expect(backend.mealsInRange).toHaveBeenCalled());
     expect(backend.mealsByDate).not.toHaveBeenCalled();
+  });
+
+  it('shows the total/daily-average toggle only in weekly view', async () => {
+    const backend = stubBackend();
+    const { rerender } = render(<HomeScreen {...props(backend)} />);
+    // Daily view: no weekly toggle.
+    expect(screen.queryByRole('button', { name: 'Daily avg' })).not.toBeInTheDocument();
+
+    rerender(<HomeScreen {...props(backend, { view: 'weekly' })} />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Daily avg' })).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/week total/i)).toBeInTheDocument();
+  });
+
+  it('switches the weekly label to a daily average when toggled', async () => {
+    const backend = stubBackend({ mealsInRange: vi.fn(async () => [] as RecentMeal[]) });
+    render(<HomeScreen {...props(backend, { view: 'weekly' })} />);
+
+    const avg = await screen.findByRole('button', { name: 'Daily avg' });
+    await userEvent.click(avg);
+    expect(screen.getByText(/daily average/i)).toBeInTheDocument();
+    expect(avg).toHaveAttribute('aria-pressed', 'true');
   });
 });
