@@ -187,7 +187,6 @@ export const CM_PER_INCH = 2.54;
 
 export const kgToLb = (kg: number): number => kg * LB_PER_KG;
 export const lbToKg = (lb: number): number => lb / LB_PER_KG;
-export const cmToInches = (cm: number): number => cm / CM_PER_INCH;
 export const inchesToCm = (inches: number): number => inches * CM_PER_INCH;
 
 /** Splits total inches into feet + inches (for imperial height display). */

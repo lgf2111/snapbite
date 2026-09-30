@@ -3,12 +3,6 @@
  * supplies the current time and the send transport.
  */
 
-/** A reminder slot with its label and 24h "HH:MM" local time. */
-export interface ReminderSlot {
-  label: string;
-  time: string;
-}
-
 /** Default reminder slots offered in the UI (fixed daily times). */
 export const DEFAULT_REMINDER_TIMES: Record<string, string> = {
   breakfast: '08:00',
