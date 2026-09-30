@@ -508,6 +508,33 @@ describe('/errors command (admin-gated)', () => {
   });
 });
 
+describe('/ping command (admin-gated self-test)', () => {
+  it('routes a sample alert and confirms to the admin', async () => {
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/ping', chat: { id: ADMIN_ID }, from: { id: ADMIN_ID } } }),
+      env,
+    );
+    // With no ADMIN_GROUP_CHAT_ID set, the alert DMs the admin; both the sample
+    // alert and the confirmation land in the admin chat.
+    const texts = sent.map((s) => s.reply.text ?? '');
+    expect(texts.some((t) => t.toLowerCase().includes('test alert'))).toBe(true);
+    expect(lastText(sent).toLowerCase()).toContain('sent a test alert');
+  });
+
+  it('hides /ping from non-admins (generic nudge instead)', async () => {
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/ping', chat: { id: 4401 }, from: { id: 4401 } } }),
+      env,
+    );
+    expect(lastText(sent).toLowerCase()).toContain('open snapbite');
+    expect(lastText(sent).toLowerCase()).not.toContain('test alert');
+  });
+});
+
 describe('webhook photo failure logging', () => {
   it('writes an error_logs row and DMs the admin on a photo failure', async () => {
     const tgId = 4500;
