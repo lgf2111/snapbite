@@ -123,7 +123,7 @@ export function replyForCommand(
       );
     case 'help':
       return withButton(
-        'SnapBite logs meals from photos.\n\n• Send a photo straight to this chat — I analyze it and log it\n• Open the app to review or correct any entry\n• Browse history, search, and see your trends there\n\nSend /setup to set your goal + targets right here in chat.\nUse /settings to add or update your AI key.\nHit a problem? Send /feedback <your message> and it goes straight to the maintainer.',
+        'SnapBite logs meals from photos.\n\n• Send a photo straight to this chat — I analyze it and log it\n• Open the app to review or correct any entry\n• Browse history, search, and see your trends there\n\nSend /setup to set your goal + targets right here in chat.\nUse /saved to re-log a meal you starred in the app.\nUse /settings to add or update your AI key.\nHit a problem? Send /feedback <your message> and it goes straight to the maintainer.',
       );
     case 'settings':
       return withButton('Open SnapBite and go to Settings to add or update your AI key.');
