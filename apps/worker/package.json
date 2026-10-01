@@ -11,7 +11,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply snapbite-db --local",
-    "bot:commands": "node scripts/set-bot-commands.mjs"
+    "bot:commands": "node scripts/set-bot-commands.mjs",
+    "bot:profile": "node scripts/set-bot-profile.mjs"
   },
   "dependencies": {
     "@snapbite/core": "workspace:*",

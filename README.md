@@ -94,6 +94,10 @@ pnpm --filter @snapbite/miniapp exec wrangler pages deploy dist --project-name=s
 # Admin-only /errors and /feedback-review are intentionally NOT listed (gated by ADMIN_TELEGRAM_ID).
 TELEGRAM_BOT_TOKEN=<your-bot-token> pnpm --filter @snapbite/worker bot:commands
 # (or drop the token in a gitignored .bot-token file at the repo root and run the command without it)
+
+# Bot profile text: sets the About line (profile page, setMyShortDescription) and the
+# Description (the "What can this bot do?" pre-Start screen, setMyDescription). Same token source.
+TELEGRAM_BOT_TOKEN=<your-bot-token> pnpm --filter @snapbite/worker bot:profile
 ```
 
 ## AI providers
