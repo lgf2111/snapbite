@@ -210,6 +210,7 @@ describe('POST /webhook', () => {
           analyzeText: async () => {
             throw new Error('n/a');
           },
+          coachReply: async () => 'ok',
           reviseMeal: async () => {
             throw new Error('n/a');
           },
@@ -279,6 +280,7 @@ describe('POST /webhook', () => {
           analyzeText: async () => {
             throw new Error('n/a');
           },
+          coachReply: async () => 'ok',
           reviseMeal: async () => {
             throw new Error('n/a');
           },
@@ -343,6 +345,7 @@ describe('POST /webhook', () => {
           analyzeText: async () => {
             throw new Error('n/a');
           },
+          coachReply: async () => 'ok',
           reviseMeal: async () => {
             throw new Error('n/a');
           },
@@ -398,6 +401,7 @@ describe('POST /webhook', () => {
           analyzeText: async () => {
             throw new Error('n/a');
           },
+          coachReply: async () => 'ok',
           reviseMeal: async () => {
             throw new Error('n/a');
           },
@@ -490,6 +494,7 @@ describe('/errors command (admin-gated)', () => {
         analyzeText: async () => {
           throw new Error('n/a');
         },
+        coachReply: async () => 'ok',
         reviseMeal: async () => {
           throw new Error('n/a');
         },
@@ -710,6 +715,7 @@ describe('per-user photo rate limit', () => {
         analyzeText: async () => {
           throw new Error('n/a');
         },
+        coachReply: async () => 'ok',
         reviseMeal: async () => {
           throw new Error('n/a');
         },
@@ -783,6 +789,7 @@ describe('webhook photo failure logging', () => {
         analyzeText: async () => {
           throw new Error('n/a');
         },
+        coachReply: async () => 'ok',
         reviseMeal: async () => {
           throw new Error('n/a');
         },
@@ -1123,6 +1130,63 @@ describe('text meal logging', () => {
   });
 });
 
+describe('/coach command', () => {
+  it('prompts for a question when /coach has no args', async () => {
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/coach', chat: { id: 9500 }, from: { id: 9500 } } }),
+      env,
+    );
+    expect(lastText(sent).toLowerCase()).toContain('ask me');
+  });
+
+  it('nudges to add a key when none is saved', async () => {
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({
+        message: { text: '/coach am I low on protein?', chat: { id: 9501 }, from: { id: 9501 } },
+      }),
+      env,
+    );
+    expect(lastText(sent).toLowerCase()).toContain('add your ai key');
+  });
+
+  it('answers from the user data via the provider when a key is saved', async () => {
+    const tgId = 9502;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'k', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+    const { app, sent } = appWithCapture(); // MockAIProvider.coachReply echoes the question
+    await app.request(
+      '/webhook',
+      post({
+        message: {
+          text: '/coach am I low on protein today?',
+          chat: { id: tgId },
+          from: { id: tgId },
+        },
+      }),
+      env,
+    );
+    expect(lastText(sent)).toContain('Coach (mock)');
+    expect(lastText(sent)).toContain('am I low on protein today?');
+  });
+});
+
 describe('/broadcast (admin-gated)', () => {
   it('sends the changelog to known users and reports a summary to the admin', async () => {
     // Create a couple of users by having them interact (upsertUser via a message).
@@ -1268,6 +1332,7 @@ describe('barcode → Open Food Facts enrichment', () => {
           analyzeText: async () => {
             throw new Error('n/a');
           },
+          coachReply: async () => 'ok',
           reviseMeal: async () => {
             throw new Error('n/a');
           },
@@ -1340,6 +1405,7 @@ describe('overload retry by message text (not just status 503)', () => {
           analyzeText: async () => {
             throw new Error('n/a');
           },
+          coachReply: async () => 'ok',
           reviseMeal: async () => {
             throw new Error('n/a');
           },

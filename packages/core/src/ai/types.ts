@@ -57,6 +57,18 @@ export interface AIProvider {
     instruction: string,
     opts?: ReviseMealOptions,
   ): Promise<AIFoodAnalysis>;
+  /**
+   * Answers a nutrition question (the on-demand `/coach`) from a compact,
+   * pre-summarized context about the user's logged data. Returns a short plain-
+   * text answer (NOT JSON). On-demand only; the caller keeps the context small.
+   */
+  coachReply(context: string, question: string, opts?: CoachOptions): Promise<string>;
+}
+
+/** Options that tune a single coach call. */
+export interface CoachOptions {
+  /** Abort signal so the transport layer can enforce timeouts. */
+  signal?: AbortSignal;
 }
 
 /**

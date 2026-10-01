@@ -94,6 +94,7 @@ describe('POST /api/meals/analyze', () => {
         analyzeText: async () => {
           throw new Error('n/a');
         },
+        coachReply: async () => 'ok',
         reviseMeal: async () => {
           throw Object.assign(new Error('provider down'), { kind: 'network' });
         },
@@ -130,6 +131,7 @@ describe('POST /api/meals/:id/revise', () => {
         analyzeMeal: async () => analysis,
         analyzeText: async () => analysis,
         reviseMeal: async () => analysis,
+        coachReply: async () => 'ok',
       }),
     });
   }

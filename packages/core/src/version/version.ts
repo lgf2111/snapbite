@@ -19,6 +19,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.25.0',
+    date: '2026-10-29',
+    notes: [
+      '🧑‍🍳 Ask your coach — send "/coach am I low on protein today?" and get a quick answer from your own logged data',
+      'It reads your today/this-week totals vs your targets and replies in a sentence or two, on your own key',
+      'On-demand only, always an estimate',
+      'Send /feedback anytime — more coming soon 💙',
+    ],
+  },
+  {
     version: '0.24.0',
     date: '2026-10-22',
     notes: [

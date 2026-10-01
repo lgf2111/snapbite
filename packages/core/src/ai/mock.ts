@@ -3,6 +3,7 @@ import type {
   AIProvider,
   AnalyzeMealOptions,
   AnalyzeTextOptions,
+  CoachOptions,
   MealImage,
   ReviseMealInput,
   ReviseMealOptions,
@@ -46,6 +47,19 @@ export class MockAIProvider implements AIProvider {
   async analyzeText(description: string, _opts?: AnalyzeTextOptions): Promise<AIFoodAnalysis> {
     this.#lastText = description;
     return structuredClone(this.#response);
+  }
+
+  #lastCoach: { context: string; question: string } | undefined;
+
+  /** The most recent coach call, for assertions. */
+  get lastCoach(): { context: string; question: string } | undefined {
+    return this.#lastCoach;
+  }
+
+  /** Deterministic coach reply — echoes the question so local/demo mode "works". */
+  async coachReply(context: string, question: string, _opts?: CoachOptions): Promise<string> {
+    this.#lastCoach = { context, question };
+    return `Coach (mock): about "${question}" — keep logging and you're on track.`;
   }
 
   /** The most recent revise call, for assertions. */

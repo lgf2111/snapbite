@@ -96,6 +96,24 @@ describe('DeepSeekProvider', () => {
     expect(parsed.response_format).toEqual({ type: 'json_object' });
   });
 
+  it('coachReply sends a plain-text (non-JSON-mode) request and returns the content', async () => {
+    const fetchMock = okFetch(
+      envelope("You're 14 g short on protein today — a Greek yogurt closes it."),
+    );
+    const provider = new DeepSeekProvider({ apiKey: 'sk-test', fetch: fetchMock });
+
+    const answer = await provider.coachReply('today: 90g protein / 150g target', 'am I low?');
+    expect(answer).toContain('14 g short on protein');
+
+    const init = (fetchMock as unknown as { mock: { calls: [string, any][] } }).mock.calls[0][1];
+    const parsed = JSON.parse(init.body);
+    // Coach is prose, so JSON mode must NOT be forced.
+    expect(parsed.response_format).toBeUndefined();
+    expect(parsed.messages[0].role).toBe('system');
+    expect(parsed.messages[1].content).toContain('am I low?');
+    expect(parsed.messages[1].content).toContain('CONTEXT');
+  });
+
   it('respects an explicit detail level and custom model/base URL', async () => {
     const fetchMock = okFetch(envelope(JSON.stringify(validAnalysis)));
     const provider = new DeepSeekProvider({
