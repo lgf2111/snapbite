@@ -79,6 +79,8 @@ export const foodItems = sqliteTable(
     proteinG: real('protein_g'),
     carbsG: real('carbs_g'),
     fatG: real('fat_g'),
+    /** Dietary fiber (grams). Nullable — null means "unknown", not zero. */
+    fiberG: real('fiber_g'),
     nutritionSource: text('nutrition_source'),
   },
   (t) => ({
@@ -96,6 +98,8 @@ export const nutrition = sqliteTable('nutrition', {
   proteinG: real('protein_g').notNull(),
   carbsG: real('carbs_g').notNull(),
   fatG: real('fat_g').notNull(),
+  /** Dietary fiber (grams). Nullable — null means "unknown", not zero. */
+  fiberG: real('fiber_g'),
   source: text('source').notNull(),
 });
 

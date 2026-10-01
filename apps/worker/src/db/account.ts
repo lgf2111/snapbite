@@ -24,6 +24,7 @@ export interface UserExport {
       proteinG: number;
       carbsG: number;
       fatG: number;
+      fiberG: number | null;
       source: string;
     } | null;
     foods: Array<{
@@ -36,6 +37,7 @@ export interface UserExport {
       proteinG: number | null;
       carbsG: number | null;
       fatG: number | null;
+      fiberG: number | null;
       nutritionSource: string | null;
     }>;
   }>;
@@ -75,6 +77,7 @@ export async function exportUser(db: AccountDb, userId: string): Promise<UserExp
             proteinG: n.proteinG,
             carbsG: n.carbsG,
             fatG: n.fatG,
+            fiberG: n.fiberG,
             source: n.source,
           }
         : null,
@@ -88,6 +91,7 @@ export async function exportUser(db: AccountDb, userId: string): Promise<UserExp
         proteinG: f.proteinG,
         carbsG: f.carbsG,
         fatG: f.fatG,
+        fiberG: f.fiberG,
         nutritionSource: f.nutritionSource,
       })),
     });

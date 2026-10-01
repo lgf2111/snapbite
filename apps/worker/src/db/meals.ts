@@ -58,6 +58,7 @@ export async function saveMeal(db: MealsDb, input: SaveMealInput): Promise<strin
         proteinG: f.nutrition.proteinG,
         carbsG: f.nutrition.carbsG,
         fatG: f.nutrition.fatG,
+        fiberG: f.nutrition.fiberG ?? null,
         nutritionSource: f.nutrition.source,
       }),
     ),
@@ -67,6 +68,7 @@ export async function saveMeal(db: MealsDb, input: SaveMealInput): Promise<strin
       proteinG: m.total.proteinG,
       carbsG: m.total.carbsG,
       fatG: m.total.fatG,
+      fiberG: m.total.fiberG ?? null,
       source: m.total.source,
     }),
   ];
@@ -288,6 +290,7 @@ export interface MealDetail {
     proteinG: number | null;
     carbsG: number | null;
     fatG: number | null;
+    fiberG: number | null;
     nutritionSource: string | null;
   }>;
   total: {
@@ -295,6 +298,7 @@ export interface MealDetail {
     proteinG: number;
     carbsG: number;
     fatG: number;
+    fiberG: number | null;
     source: string;
   } | null;
 }
@@ -341,6 +345,7 @@ export async function getMealDetail(
       proteinG: f.proteinG,
       carbsG: f.carbsG,
       fatG: f.fatG,
+      fiberG: f.fiberG,
       nutritionSource: f.nutritionSource,
     })),
     total: n
@@ -349,6 +354,7 @@ export async function getMealDetail(
           proteinG: n.proteinG,
           carbsG: n.carbsG,
           fatG: n.fatG,
+          fiberG: n.fiberG,
           source: n.source,
         }
       : null,

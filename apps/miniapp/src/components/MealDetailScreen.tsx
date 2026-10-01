@@ -613,6 +613,7 @@ export function MealDetailScreen({
                   proteinG={resolved.total.proteinG}
                   carbsG={resolved.total.carbsG}
                   fatG={resolved.total.fatG}
+                  fiberG={resolved.total.fiberG}
                   sourceLabel={sourceLabel(resolved.total.source)}
                 />
               </div>

@@ -18,6 +18,8 @@ export const NutritionPer100g = z.object({
   proteinG: nonNegative,
   carbsG: nonNegative,
   fatG: nonNegative,
+  /** Dietary fiber per 100g. Optional: `undefined` means "unknown", not zero. */
+  fiberG: nonNegative.optional(),
 });
 export type NutritionPer100g = z.infer<typeof NutritionPer100g>;
 

@@ -5,6 +5,8 @@ interface MacroLineProps {
   proteinG?: number | null;
   carbsG?: number | null;
   fatG?: number | null;
+  /** Dietary fiber (grams). Only rendered when provided (non-null). */
+  fiberG?: number | null;
   sourceLabel?: string;
   /** Compact = kcal only (for list rows). */
   compact?: boolean;
@@ -19,6 +21,7 @@ export function MacroLine({
   proteinG,
   carbsG,
   fatG,
+  fiberG,
   sourceLabel,
   compact = false,
 }: MacroLineProps) {
@@ -55,6 +58,11 @@ export function MacroLine({
       <span title="fat" className="whitespace-nowrap" aria-label={`${fmt(fatG)} grams fat`}>
         <span aria-hidden="true">🧈</span> {fmt(fatG)}g
       </span>
+      {fiberG != null ? (
+        <span title="fiber" className="whitespace-nowrap" aria-label={`${fmt(fiberG)} grams fiber`}>
+          <span aria-hidden="true">🌾</span> {fmt(fiberG)}g
+        </span>
+      ) : null}
       {sourceLabel ? (
         <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
           {sourceLabel}

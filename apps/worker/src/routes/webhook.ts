@@ -463,6 +463,7 @@ async function handleSavedCommand(
       proteinG: meal.total.proteinG,
       carbsG: meal.total.carbsG,
       fatG: meal.total.fatG,
+      fiberG: meal.total.fiberG,
     },
     { miniAppUrl },
   );
@@ -799,6 +800,7 @@ async function handleTextRevise(
       proteinG: meal.total.proteinG,
       carbsG: meal.total.carbsG,
       fatG: meal.total.fatG,
+      fiberG: meal.total.fiberG,
     },
     { miniAppUrl },
   );
@@ -1191,6 +1193,7 @@ async function handlePhoto(
       proteinG: meal.total.proteinG,
       carbsG: meal.total.carbsG,
       fatG: meal.total.fatG,
+      fiberG: meal.total.fiberG,
     },
     { miniAppUrl },
   );

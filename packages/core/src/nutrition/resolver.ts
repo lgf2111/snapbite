@@ -20,6 +20,9 @@ function scale(per100g: NutritionPer100g, grams: number, source: NutritionSource
     proteinG: round1(per100g.proteinG * factor),
     carbsG: round1(per100g.carbsG * factor),
     fatG: round1(per100g.fatG * factor),
+    // Fiber is optional — scale it only when the source actually provided it,
+    // so an unknown stays unknown rather than becoming a false 0.
+    ...(per100g.fiberG != null ? { fiberG: round1(per100g.fiberG * factor) } : {}),
     source,
   };
 }
@@ -44,6 +47,9 @@ export function resolveFoodNutrition(food: FoodItem): NutritionValue | undefined
       proteinG: round1(food.manualNutrition.proteinG),
       carbsG: round1(food.manualNutrition.carbsG),
       fatG: round1(food.manualNutrition.fatG),
+      ...(food.manualNutrition.fiberG != null
+        ? { fiberG: round1(food.manualNutrition.fiberG) }
+        : {}),
       source: 'manual',
     };
   }
@@ -73,6 +79,14 @@ export function aggregate(values: readonly NutritionValue[]): NutritionValue {
     { energyKcal: 0, proteinG: 0, carbsG: 0, fatG: 0 },
   );
 
+  // Fiber is optional per food — sum only the foods that reported it. If none
+  // did, the total's fiber stays undefined ("unknown") rather than a false 0.
+  const fiberValues = values.filter((v) => v.fiberG != null);
+  const fiberG =
+    fiberValues.length > 0
+      ? round1(fiberValues.reduce((acc, v) => acc + (v.fiberG ?? 0), 0))
+      : undefined;
+
   const sources = new Set(values.map((v) => v.source));
   let source: NutritionSource;
   if (sources.size === 1) {
@@ -87,6 +101,7 @@ export function aggregate(values: readonly NutritionValue[]): NutritionValue {
     proteinG: round1(sum.proteinG),
     carbsG: round1(sum.carbsG),
     fatG: round1(sum.fatG),
+    ...(fiberG != null ? { fiberG } : {}),
     source,
   };
 }

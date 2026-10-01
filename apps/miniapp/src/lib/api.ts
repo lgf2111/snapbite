@@ -68,6 +68,7 @@ export interface MealDetail {
     proteinG: number | null;
     carbsG: number | null;
     fatG: number | null;
+    fiberG?: number | null;
     nutritionSource: string | null;
   }>;
   total: {
@@ -75,6 +76,7 @@ export interface MealDetail {
     proteinG: number;
     carbsG: number;
     fatG: number;
+    fiberG?: number | null;
     source: string;
   } | null;
 }
@@ -133,6 +135,7 @@ export interface UserExport {
       proteinG: number;
       carbsG: number;
       fatG: number;
+      fiberG?: number | null;
       source: string;
     } | null;
     foods: Array<{
@@ -145,6 +148,7 @@ export interface UserExport {
       proteinG: number | null;
       carbsG: number | null;
       fatG: number | null;
+      fiberG?: number | null;
       nutritionSource: string | null;
     }>;
   }>;

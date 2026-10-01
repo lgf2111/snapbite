@@ -281,11 +281,14 @@ function coerceNutrition(v: unknown): Record<string, number> | undefined {
   const carbsG = num(o.carbsG);
   const fatG = num(o.fatG);
   if ([energyKcal, proteinG, carbsG, fatG].some((x) => x === undefined)) return undefined;
+  // Fiber is optional — carry it through only when the model supplied a number.
+  const fiberG = num(o.fiberG);
   return {
     energyKcal: Math.max(0, energyKcal as number),
     proteinG: Math.max(0, proteinG as number),
     carbsG: Math.max(0, carbsG as number),
     fatG: Math.max(0, fatG as number),
+    ...(fiberG !== undefined ? { fiberG: Math.max(0, fiberG) } : {}),
   };
 }
 
