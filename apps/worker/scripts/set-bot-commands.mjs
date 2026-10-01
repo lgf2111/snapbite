@@ -29,6 +29,7 @@ const COMMANDS = [
   { command: 'setup', description: 'Set your goal & targets by chat' },
   { command: 'saved', description: 'Re-log a saved meal' },
   { command: 'weight', description: 'Log your weight (for adaptive targets)' },
+  { command: 'coach', description: 'Ask about your nutrition' },
   { command: 'settings', description: 'Add or update your AI key' },
   { command: 'feedback', description: 'Report a problem or send an idea' },
   { command: 'help', description: 'How SnapBite works' },

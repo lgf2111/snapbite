@@ -108,6 +108,10 @@ shown as an **estimate** and is always **editable**.
 
 ## Feedback & support
 
+- **Ask the coach** — send `/coach <question>` (e.g. "/coach am I low on protein today?") and the bot
+  answers from *your* logged data — today's and this week's totals vs. your targets — in a sentence or
+  two, on your own AI key. On-demand only (no background chatter), and it stays anchored to your
+  nutrition rather than being a general chatbot.
 - **Send feedback** — report a problem or share an idea via `/feedback` in the bot or the "Send
   feedback" dialog in Mini App Settings; it goes straight to the maintainer.
 

@@ -1,8 +1,10 @@
 import { AIFoodAnalysis } from '../schemas/analysis.js';
 import {
+  COACH_SYSTEM_PROMPT,
   REVISE_SYSTEM_PROMPT,
   SYSTEM_PROMPT,
   TEXT_SYSTEM_PROMPT,
+  buildCoachPrompt,
   buildRevisePrompt,
   buildTextPrompt,
   buildUserPrompt,
@@ -12,6 +14,7 @@ import {
   AIProviderError,
   type AnalyzeMealOptions,
   type AnalyzeTextOptions,
+  type CoachOptions,
   type MealImage,
   type ReviseMealInput,
   type ReviseMealOptions,
@@ -163,11 +166,28 @@ export class OpenAICompatibleProvider implements AIProvider {
     }
   }
 
-  /** One HTTP round-trip to the chat-completions endpoint; returns the raw body text. */
-  async #post(messages: ChatMessage[], signal?: AbortSignal): Promise<string> {
+  /**
+   * Answers a nutrition question for `/coach` from a compact context. Plain-text
+   * completion (no JSON mode): returns the model's message content trimmed.
+   */
+  async coachReply(context: string, question: string, opts: CoachOptions = {}): Promise<string> {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: COACH_SYSTEM_PROMPT },
+      { role: 'user', content: buildCoachPrompt(context, question) },
+    ];
+    const raw = await this.#post(messages, opts.signal, false);
+    return extractContent(raw, this.id).trim();
+  }
+
+  /**
+   * One HTTP round-trip to the chat-completions endpoint; returns the raw body
+   * text. `jsonMode` (default true) requests a strict JSON object; the coach
+   * path passes false for a prose answer.
+   */
+  async #post(messages: ChatMessage[], signal?: AbortSignal, jsonMode = true): Promise<string> {
     const body = JSON.stringify({
       model: this.#model,
-      response_format: { type: 'json_object' },
+      ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
       messages,
     });
 

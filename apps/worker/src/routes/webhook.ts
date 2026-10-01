@@ -186,6 +186,10 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
       await handleWeightCommand(c, bot, parsed);
       return c.json({ ok: true });
     }
+    if (parsed.command === 'coach' && parsed.fromId != null) {
+      await handleCoachCommand(c, bot, providerFactory, parsed);
+      return c.json({ ok: true });
+    }
     if (parsed.command === 'errors') {
       await handleErrorsCommand(c, bot, parsed);
       return c.json({ ok: true });
@@ -550,6 +554,127 @@ async function recordWeight(
     : " Turn on adaptive targets in SnapBite → Settings and I'll tune your calorie goal to your real burn.";
 
   await bot.sendMessage(chatId, { text: `⚖️ Logged ${kg} kg.${trendLine}${tail}` });
+}
+
+/** Local day start (UTC epoch ms) for a tz offset, mirroring buildGoalNudge. */
+function localDayStartMs(nowMs: number, tzOffsetMinutes: number): number {
+  const localMidnight = new Date(nowMs - tzOffsetMinutes * 60_000);
+  localMidnight.setUTCHours(0, 0, 0, 0);
+  return localMidnight.getTime() + tzOffsetMinutes * 60_000;
+}
+
+/**
+ * Builds the compact CONTEXT string for `/coach` from the user's own data —
+ * today's and this week's totals, their targets (if a profile exists), and a
+ * few recent meal names. Deliberately small (summaries, never raw history) so
+ * the coach call stays cheap.
+ */
+async function buildCoachContext(
+  c: Context<AppBindings>,
+  settings: SettingsRow,
+  userId: string,
+): Promise<string> {
+  const prefs = parsePreferences(settings.preferencesJson);
+  const tz = prefs.adaptive?.tzOffsetMinutes ?? prefs.reminders?.tzOffsetMinutes ?? 0;
+  const now = Date.now();
+
+  const mealsDb = createMealsDb(c.env.DB);
+  const [today, week, recent] = await Promise.all([
+    sumMealsSince(mealsDb, userId, localDayStartMs(now, tz)),
+    sumMealsSince(mealsDb, userId, now - 7 * 24 * 60 * 60 * 1000),
+    recentMealsForUser(mealsDb, userId, now - 7 * 24 * 60 * 60 * 1000, 5),
+  ]);
+
+  const lines: string[] = [];
+  const r0 = (n: number) => Math.round(n);
+  lines.push(
+    `Today so far: ${r0(today.energyKcal)} kcal, ${r0(today.proteinG)}g protein, ${r0(today.carbsG)}g carbs, ${r0(today.fatG)}g fat.`,
+  );
+  lines.push(
+    `Last 7 days total: ${r0(week.energyKcal)} kcal, ${r0(week.proteinG)}g protein (avg ${r0(week.energyKcal / 7)} kcal/day).`,
+  );
+
+  const profileParsed = prefs.profile ? UserProfile.safeParse(prefs.profile) : undefined;
+  if (profileParsed?.success) {
+    const t = computeTargets(profileParsed.data);
+    lines.push(
+      `Daily targets: ${t.energyKcal} kcal, ${t.proteinG}g protein, ${t.carbsG}g carbs, ${t.fatG}g fat (goal: ${GOAL_LABELS[profileParsed.data.goal]}).`,
+    );
+  } else {
+    lines.push('No goal/targets set yet.');
+  }
+
+  if (recent.length > 0) {
+    // recentMealsForUser returns refs; a count is enough context without a join.
+    lines.push(`${recent.length} meal(s) logged in the last 7 days.`);
+  } else {
+    lines.push('No meals logged in the last 7 days.');
+  }
+  return lines.join('\n');
+}
+
+/**
+ * `/coach <question>` — a short, on-demand nutrition answer grounded in the
+ * user's own logged data, on their own key. Not a general chatbot.
+ */
+async function handleCoachCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  providerFactory: ProviderFactory,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const { chatId } = parsed;
+  const miniAppUrl = c.env.MINI_APP_URL ?? '';
+  const question = parsed.args.trim();
+  if (!question) {
+    await bot.sendMessage(chatId, {
+      text: 'Ask me about your nutrition and I\u2019ll answer from your logged data — e.g. "/coach am I low on protein today?" or "/coach what should I eat to hit my goal?"',
+    });
+    return;
+  }
+
+  const settingsDb = createSettingsDb(c.env.DB);
+  const userDb = createDb(c.env.DB);
+  const user = await upsertUser(userDb, { id: parsed.fromId as number });
+  const settings = await getSettings(settingsDb, user.id);
+  if (!c.env.ENCRYPTION_KEY || !settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
+    await bot.sendMessage(chatId, {
+      text: 'Add your AI key first: open SnapBite → Settings, then ask again.',
+      ...(miniAppUrl
+        ? {
+            replyMarkup: {
+              inline_keyboard: [[{ text: '⚙️ Open SnapBite', web_app: { url: miniAppUrl } }]],
+            },
+          }
+        : {}),
+    });
+    return;
+  }
+
+  try {
+    const apiKey = await decryptSecret(
+      { ciphertext: settings.apiKeyCiphertext, iv: settings.apiKeyIv },
+      c.env.ENCRYPTION_KEY,
+    );
+    const context = await buildCoachContext(c, settings, user.id);
+    await bot.sendChatAction?.(chatId, 'typing');
+    const provider = providerFactory(primaryProviderChoice(settings, apiKey));
+    const answer = await provider.coachReply(context, question);
+    await bot.sendMessage(chatId, {
+      text: answer || "I couldn't come up with an answer — try rephrasing.",
+    });
+  } catch (err) {
+    const e = err as ProviderErrorLike;
+    const desc = describeError(e);
+    await logError(c.env.DB, {
+      telegramUserId: parsed.fromId,
+      source: 'webhook',
+      kind: desc.kind ?? 'coach',
+      status: desc.status ?? null,
+      message: desc.message,
+    });
+    await bot.sendMessage(chatId, { text: friendlyPhotoError(e) });
+  }
 }
 
 /** A numbered list of saved meals with a re-log hint. */
