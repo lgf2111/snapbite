@@ -13,6 +13,7 @@ import {
   broadcastMessage,
   computeTargets,
   createProvider,
+  currentStreak,
   decryptSecret,
   goalNudgeLine,
   parseUpdate,
@@ -21,6 +22,7 @@ import {
   replyForCommand,
   resolveMeal,
   startOnboarding,
+  streakLine,
   weightTrend,
 } from '@snapbite/core';
 import { type Context, Hono } from 'hono';
@@ -34,6 +36,7 @@ import {
   createMealsDb,
   findMealByMessageId,
   getMealDetail,
+  mealRowsSince,
   recentMealsForUser,
   saveMeal,
   sumMealsSince,
@@ -55,7 +58,12 @@ import { type AppBindings, parseAdminId, parseChatId } from '../env.js';
 import { lookupBarcode } from '../openfoodfacts.js';
 import { enqueuePhotoRetry } from '../photoRetry.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
-import { type ProviderFactory, detailToAnalysis, primaryProviderChoice } from './meals.js';
+import {
+  type ProviderFactory,
+  detailToAnalysis,
+  localDayKey,
+  primaryProviderChoice,
+} from './meals.js';
 
 /** The bot-client surface the webhook uses (so tests can mock just these). */
 export interface BotClient {
@@ -1088,7 +1096,10 @@ async function logTextMeal(
     const meal = resolveMeal(analysis);
 
     const foods = meal.foods.map((f) => f.food.name);
-    const goalNudge = await buildGoalNudge(c, settingsDb, userId, settings, meal);
+    const [goalNudge, streak] = await Promise.all([
+      buildGoalNudge(c, settingsDb, userId, settings, meal),
+      settings ? buildStreakLine(c, settings, userId) : Promise.resolve(null),
+    ]);
     const reply = photoLoggedReply(
       foods,
       {
@@ -1099,7 +1110,7 @@ async function logTextMeal(
         fiberG: meal.total.fiberG,
       },
       { miniAppUrl },
-      goalNudge,
+      [goalNudge, streak],
     );
     const confirmMessageId = await replyOrEdit(bot, chatId, ack.messageId, reply);
     await saveMeal(mealsDb, {
@@ -1392,6 +1403,32 @@ async function buildGoalNudge(
   }
 }
 
+/**
+ * Builds the "🔥 N-day logging streak" footer line for a just-logged meal, or
+ * null below 2 days. Buckets the user's recent meals into local day-keys (using
+ * their stored tz when set) and counts consecutive days. Best-effort → null.
+ */
+async function buildStreakLine(
+  c: Context<AppBindings>,
+  settings: SettingsRow,
+  userId: string,
+): Promise<string | null> {
+  try {
+    const prefs = parsePreferences(settings.preferencesJson);
+    const tz = prefs.adaptive?.tzOffsetMinutes ?? prefs.reminders?.tzOffsetMinutes ?? 0;
+    const now = Date.now();
+    const mealsDb = createMealsDb(c.env.DB);
+    // 60-day window is plenty to measure any current streak cheaply.
+    const rows = await mealRowsSince(mealsDb, userId, now - 60 * 24 * 60 * 60 * 1000);
+    const dayKeys = new Set(rows.map((r) => localDayKey(r.loggedAt, tz)));
+    // The just-logged meal isn't saved yet — include today so the streak counts it.
+    dayKeys.add(localDayKey(now, tz));
+    return streakLine(currentStreak(dayKeys, localDayKey(now, tz)));
+  } catch {
+    return null;
+  }
+}
+
 /** Downloads the photo, runs the pipeline with the user's key, saves, and replies. */
 async function handlePhoto(
   c: Context<AppBindings>,
@@ -1522,8 +1559,11 @@ async function handlePhoto(
   // can edit it in place later.
   const mealsDb = createMealsDb(c.env.DB);
   const foods = meal.foods.map((f) => f.food.name);
-  // Deterministic goal-progress nudge (no AI) — only for users with a profile.
-  const goalNudge = await buildGoalNudge(c, settingsDb, user.id, settings, meal);
+  // Deterministic footer (no AI): goal-progress nudge + logging streak.
+  const [goalNudge, streak] = await Promise.all([
+    buildGoalNudge(c, settingsDb, user.id, settings, meal),
+    settings ? buildStreakLine(c, settings, user.id) : Promise.resolve(null),
+  ]);
   const reply = photoLoggedReply(
     foods,
     {
@@ -1534,7 +1574,7 @@ async function handlePhoto(
       fiberG: meal.total.fiberG,
     },
     { miniAppUrl },
-    goalNudge,
+    [goalNudge, streak],
   );
 
   // Edit the "Analyzing…" message into the result (single transforming message).

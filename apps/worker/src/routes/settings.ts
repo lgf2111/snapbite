@@ -15,6 +15,7 @@ import { Hono } from 'hono';
 import {
   type AdaptiveConfig,
   type Preferences,
+  type RecapConfig,
   type ReminderConfig,
   addWeightEntry,
   createSettingsDb,
@@ -148,6 +149,8 @@ export function settingsRoutes() {
       reminders: prefs.reminders ?? null,
       // Opt-in adaptive calorie targets + the latest weight check-in.
       adaptive: prefs.adaptive ?? null,
+      // Opt-in weekly recap digest.
+      recap: prefs.recap ?? null,
       latestWeightKg:
         Array.isArray(prefs.weights) && prefs.weights.length > 0
           ? (prefs.weights[prefs.weights.length - 1]?.kg ?? null)
@@ -220,6 +223,33 @@ export function settingsRoutes() {
     };
     await mergePreferences(db, c.get('userId'), { adaptive });
     return c.json({ ok: true, adaptive });
+  });
+
+  // PUT /api/settings/recap — opt in/out of the weekly recap digest.
+  // Body: { enabled: boolean, tzOffsetMinutes?: number }. No key needed.
+  app.put('/recap', async (c) => {
+    let body: { enabled?: unknown; tzOffsetMinutes?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
+    }
+    const enabled = body.enabled === true;
+    const tzOffsetMinutes =
+      typeof body.tzOffsetMinutes === 'number' && Number.isFinite(body.tzOffsetMinutes)
+        ? body.tzOffsetMinutes
+        : 0;
+    const db = createSettingsDb(c.env.DB);
+    const existing = parsePreferences(
+      (await getSettings(db, c.get('userId')))?.preferencesJson,
+    ).recap;
+    const recap: RecapConfig = {
+      enabled,
+      tzOffsetMinutes,
+      ...(existing?.lastRecapKey ? { lastRecapKey: existing.lastRecapKey } : {}),
+    };
+    await mergePreferences(db, c.get('userId'), { recap });
+    return c.json({ ok: true, recap });
   });
 
   // POST /api/settings/weight — record a bodyweight check-in. Body: { kg: number }.

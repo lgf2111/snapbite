@@ -186,6 +186,16 @@ export function goalNudgeLine(input: GoalNudgeInput | null | undefined): string 
   return `📊 ${k} kcal today — at your ${kTarget} kcal goal.`;
 }
 
+/**
+ * A short "🔥 N-day streak" line for the log confirmation, or null below 2 days
+ * (a 1-day "streak" isn't worth celebrating). Highlights weekly milestones.
+ */
+export function streakLine(streak: number): string | null {
+  if (!Number.isFinite(streak) || streak < 2) return null;
+  const milestone = streak % 7 === 0 ? ' 🎉' : '';
+  return `🔥 ${streak}-day logging streak${milestone}`;
+}
+
 /** The macro/energy totals shown in the detailed photo-logged reply. */
 export interface PhotoLoggedTotals {
   energyKcal: number;
@@ -210,9 +220,15 @@ export function photoLoggedReply(
   foods: string[],
   totals: PhotoLoggedTotals,
   config: BotConfig,
-  /** Optional deterministic goal-progress line (see {@link goalNudgeLine}). */
-  goalNudge?: string | null,
+  /**
+   * Optional deterministic footer line(s) — e.g. the goal-progress nudge (see
+   * {@link goalNudgeLine}) and/or a streak line. Falsy entries are dropped.
+   */
+  footer?: string | null | readonly (string | null | undefined)[],
 ): BotReply {
+  const footerLines = (Array.isArray(footer) ? footer : [footer]).filter(
+    (l): l is string => typeof l === 'string' && l.length > 0,
+  );
   const list = foods.length > 0 ? foods.join(', ') : 'your meal';
   const lines = [
     `✅ Logged: ${list}`,
@@ -224,8 +240,8 @@ export function photoLoggedReply(
     `🧈 Fat ${round1(totals.fatG)} g`,
     // Fiber only when the analysis actually produced it.
     ...(totals.fiberG != null ? [`🌾 Fiber ${round1(totals.fiberG)} g`] : []),
-    // Goal-progress nudge, only for users with a profile/targets.
-    ...(goalNudge ? ['', goalNudge] : []),
+    // Footer line(s): goal-progress nudge and/or streak, when present.
+    ...(footerLines.length > 0 ? ['', ...footerLines] : []),
     '',
     'These are estimates — open the app to review or correct.',
   ];

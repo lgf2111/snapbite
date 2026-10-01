@@ -1067,6 +1067,50 @@ describe('text meal logging', () => {
     expect(list.meals[0]?.foods).toContain('white rice');
   });
 
+  it('shows a logging-streak line when prior days are logged', async () => {
+    const tgId = 8910;
+    await keyedUser(tgId);
+    // Seed meals on the two previous days so logging today makes a 3-day streak.
+    const { createMealsDb, saveMeal } = await import('../db/meals.js');
+    const { createDb, upsertUser } = await import('../db/users.js');
+    const user = await upsertUser(createDb(env.DB), { id: tgId });
+    const mealsDb = createMealsDb(env.DB);
+    const DAY = 24 * 60 * 60 * 1000;
+    const seedMeal = {
+      foods: [
+        {
+          food: { name: 'x', estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
+          nutrition: {
+            energyKcal: 300,
+            proteinG: 20,
+            carbsG: 30,
+            fatG: 10,
+            source: 'ai_estimate' as const,
+          },
+        },
+      ],
+      total: {
+        energyKcal: 300,
+        proteinG: 20,
+        carbsG: 30,
+        fatG: 10,
+        source: 'ai_estimate' as const,
+      },
+      confidence: 0.9,
+      needsConfirmation: false,
+    };
+    for (const d of [1, 2]) {
+      await saveMeal(mealsDb, { userId: user.id, meal: seedMeal, loggedAt: Date.now() - d * DAY });
+    }
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: 'log an apple', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(lastText(sent)).toContain('day logging streak');
+  });
+
   it('logs a NEW meal from plain text when there is nothing recent to revise', async () => {
     const tgId = 8901;
     await keyedUser(tgId);

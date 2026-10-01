@@ -169,6 +169,40 @@ export async function sumMealsSince(
   );
 }
 
+/** A meal's timestamp + per-meal totals, for streak/recap bucketing by local day. */
+export interface MealRowForStats {
+  loggedAt: number;
+  energyKcal: number;
+  proteinG: number;
+}
+
+/**
+ * Returns a user's meals since `sinceMs` as `(loggedAt, energyKcal, proteinG)`
+ * rows (newest first), for computing the logging streak and the weekly recap by
+ * bucketing into the user's local day. One indexed scan + nutrition join.
+ */
+export async function mealRowsSince(
+  db: MealsDb,
+  userId: string,
+  sinceMs: number,
+): Promise<MealRowForStats[]> {
+  const rows = await db
+    .select({
+      loggedAt: meals.loggedAt,
+      energyKcal: nutrition.energyKcal,
+      proteinG: nutrition.proteinG,
+    })
+    .from(meals)
+    .innerJoin(nutrition, eq(nutrition.mealId, meals.id))
+    .where(and(eq(meals.userId, userId), gte(meals.loggedAt, sinceMs)))
+    .orderBy(desc(meals.loggedAt));
+  return rows.map((r) => ({
+    loggedAt: r.loggedAt,
+    energyKcal: r.energyKcal ?? 0,
+    proteinG: r.proteinG ?? 0,
+  }));
+}
+
 /** Finds a user's meal by the bot message_id it replied to (for reply-to targeting). */
 export async function findMealByMessageId(
   db: MealsDb,
