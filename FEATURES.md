@@ -53,6 +53,10 @@ shown as an **estimate** and is always **editable**.
   plain-language change like "add a coke" or "the rice was double"; the bot re-runs the AI, updates
   the meal, and edits the confirmation in place. If you replied, it sends an "✅ Updated" reply to the
   meal.
+- **One-tap portion fix** — portion size is where AI estimates are weakest, so when a log comes back
+  low-confidence the bot adds quick buttons (¼× · ½× · 1× · 2×) right under the confirmation. Tap one
+  and every macro is rescaled instantly — pure arithmetic, no new AI call — and the message updates in
+  place with the buttons still there so you can keep nudging until it looks right.
 - **Disambiguation** — if you logged several meals in the last few minutes, the bot asks you to reply
   to the specific one you want to change.
 - **Full edit in the Mini App** — review, edit, and correct any logged meal; "Update with AI" lets

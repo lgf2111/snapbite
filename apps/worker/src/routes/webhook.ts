@@ -16,14 +16,21 @@ import {
   currentStreak,
   decryptSecret,
   goalNudgeLine,
+  isLowConfidence,
+  parseCallbackQuery,
+  parseRescaleCallback,
   parseUpdate,
   photoLoggedReply,
+  portionLabel,
   promptFor,
   replyForCommand,
+  rescaleMeal,
+  rescaleNote,
   resolveMeal,
   startOnboarding,
   streakLine,
   weightTrend,
+  withPortionButtons,
 } from '@snapbite/core';
 import { type Context, Hono } from 'hono';
 import { adminNotify } from '../adminNotify.js';
@@ -34,6 +41,7 @@ import {
   type MealTelegramRef,
   countMealsSince,
   createMealsDb,
+  detailToMealResult,
   findMealByMessageId,
   getMealDetail,
   mealRowsSince,
@@ -76,6 +84,8 @@ export interface BotClient {
   editMessageText?(chatId: number, messageId: number, reply: BotReply): Promise<boolean>;
   /** Delete a message. Best-effort. */
   deleteMessage?(chatId: number, messageId: number): Promise<boolean>;
+  /** Answer an inline-button tap (clears the spinner; optional toast). Best-effort. */
+  answerCallbackQuery?(callbackId: string, text?: string): Promise<boolean>;
 }
 
 /** Injectable bot-client factory so tests can supply a mock (no network). */
@@ -115,6 +125,26 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
     try {
       update = await c.req.json();
     } catch {
+      return c.json({ ok: true });
+    }
+
+    // Inline-button tap (e.g. a one-tap portion rescale). Handled before the
+    // message parse, since a callback update carries no message text/photo.
+    const callback = parseCallbackQuery(update);
+    if (callback && c.env.TELEGRAM_BOT_TOKEN) {
+      const bot = botClientFactory(c.env.TELEGRAM_BOT_TOKEN);
+      try {
+        await handleCallbackQuery(c, bot, callback);
+      } catch (err) {
+        // A rescale failing shouldn't leave the user's button spinning.
+        await bot.answerCallbackQuery?.(callback.callbackId, "Couldn't adjust that — try again.");
+        await logError(c.env.DB, {
+          telegramUserId: callback.fromId,
+          source: 'webhook',
+          kind: 'callback',
+          message: describeError(err).message,
+        });
+      }
       return c.json({ ok: true });
     }
 
@@ -1100,7 +1130,7 @@ async function logTextMeal(
       buildGoalNudge(c, settingsDb, userId, settings, meal),
       settings ? buildStreakLine(c, settings, userId) : Promise.resolve(null),
     ]);
-    const reply = photoLoggedReply(
+    const baseReply = photoLoggedReply(
       foods,
       {
         energyKcal: meal.total.energyKcal,
@@ -1112,6 +1142,8 @@ async function logTextMeal(
       { miniAppUrl },
       [goalNudge, streak],
     );
+    // Low confidence → offer one-tap portion correction (deterministic rescale).
+    const reply = isLowConfidence(meal.confidence) ? withPortionButtons(baseReply) : baseReply;
     const confirmMessageId = await replyOrEdit(bot, chatId, ack.messageId, reply);
     await saveMeal(mealsDb, {
       userId,
@@ -1429,6 +1461,79 @@ async function buildStreakLine(
   }
 }
 
+/**
+ * Handles an inline-button tap. Currently just the one-tap portion rescale: a
+ * `rsz:<factor>` payload scales the just-logged meal (the one the tapped
+ * confirmation message belongs to) by `factor` — deterministically, with NO AI
+ * re-call — persists it, and edits the confirmation in place (keeping the
+ * portion buttons so the user can keep nudging). Each tap is relative to the
+ * currently-shown meal (½ halves it, 2× doubles it, 1× is a no-op). Always
+ * answers the callback so the client spinner clears.
+ */
+async function handleCallbackQuery(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  callback: { callbackId: string; fromId: number; chatId: number; messageId: number; data: string },
+): Promise<void> {
+  const miniAppUrl = c.env.MINI_APP_URL ?? '';
+  const factor = parseRescaleCallback(callback.data);
+  if (factor == null) {
+    // Unknown/!rescale callback — just clear the spinner.
+    await bot.answerCallbackQuery?.(callback.callbackId);
+    return;
+  }
+
+  const userDb = createDb(c.env.DB);
+  const user = await upsertUser(userDb, { id: callback.fromId });
+  const mealsDb = createMealsDb(c.env.DB);
+
+  // The tapped confirmation message maps 1:1 to a stored meal.
+  const ref = await findMealByMessageId(mealsDb, user.id, callback.messageId);
+  if (!ref) {
+    await bot.answerCallbackQuery?.(callback.callbackId, "I couldn't find that meal to adjust.");
+    return;
+  }
+
+  // 1× is a no-op — acknowledge without a rewrite.
+  if (factor === 1) {
+    await bot.answerCallbackQuery?.(callback.callbackId, 'Keeping the current portion.');
+    return;
+  }
+
+  const detail = await getMealDetail(mealsDb, ref.id, user.id);
+  if (!detail) {
+    await bot.answerCallbackQuery?.(callback.callbackId, "I couldn't load that meal to adjust.");
+    return;
+  }
+
+  // Deterministic rescale (no AI): scale the stored absolute macros + total.
+  const current = detailToMealResult(detail);
+  const scaled = rescaleMeal(current, factor);
+  const withNote: typeof scaled = { ...scaled, notes: rescaleNote(factor) };
+  await updateMeal(mealsDb, ref.id, user.id, withNote);
+
+  // Re-render the confirmation with the portion buttons still attached so the
+  // user can keep adjusting.
+  const foods = scaled.foods.map((f) => f.food.name);
+  const base = photoLoggedReply(
+    foods,
+    {
+      energyKcal: scaled.total.energyKcal,
+      proteinG: scaled.total.proteinG,
+      carbsG: scaled.total.carbsG,
+      fatG: scaled.total.fatG,
+      fiberG: scaled.total.fiberG,
+    },
+    { miniAppUrl },
+  );
+  const reply = withPortionButtons(base);
+  await replyOrEdit(bot, callback.chatId, callback.messageId, reply);
+  await bot.answerCallbackQuery?.(
+    callback.callbackId,
+    `Adjusted to ${portionLabel(factor)} portion.`,
+  );
+}
+
 /** Downloads the photo, runs the pipeline with the user's key, saves, and replies. */
 async function handlePhoto(
   c: Context<AppBindings>,
@@ -1564,7 +1669,7 @@ async function handlePhoto(
     buildGoalNudge(c, settingsDb, user.id, settings, meal),
     settings ? buildStreakLine(c, settings, user.id) : Promise.resolve(null),
   ]);
-  const reply = photoLoggedReply(
+  const baseReply = photoLoggedReply(
     foods,
     {
       energyKcal: meal.total.energyKcal,
@@ -1576,6 +1681,10 @@ async function handlePhoto(
     { miniAppUrl },
     [goalNudge, streak],
   );
+  // Portion sizing is the weak point of AI estimates. When overall confidence
+  // is low, offer one-tap multipliers (¼/½/1×/2×) that rescale deterministically
+  // (no AI re-call) so the user can correct the portion in a tap.
+  const reply = isLowConfidence(meal.confidence) ? withPortionButtons(baseReply) : baseReply;
 
   // Edit the "Analyzing…" message into the result (single transforming message).
   // If the edit fails or we never got an id, fall back to sending a new message

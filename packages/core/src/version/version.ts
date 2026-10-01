@@ -19,6 +19,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.27.0',
+    date: '2026-09-16',
+    notes: [
+      '🍽️ One-tap portion fix — when a photo logs with low confidence, tap ¼× · ½× · 1× · 2× to rescale the whole meal instantly',
+      "It's pure math on your logged meal — no new AI call, and the message updates in place so you can keep nudging",
+      'Portion sizing is where estimates are weakest, so this makes correcting it a single tap',
+      'Send /feedback anytime — more coming soon 💙',
+    ],
+  },
+  {
     version: '0.26.0',
     date: '2026-09-16',
     notes: [

@@ -95,6 +95,30 @@ export class TelegramBotClient {
     }
   }
 
+  /**
+   * Answers a callback_query (an inline-button tap) to clear the client's
+   * loading spinner, optionally showing a short toast. Best-effort — returns
+   * false on failure, never throws. Telegram requires this within a few seconds
+   * of the tap or the button appears stuck.
+   */
+  async answerCallbackQuery(callbackId: string, text?: string): Promise<boolean> {
+    try {
+      const body: Record<string, unknown> = { callback_query_id: callbackId };
+      if (text) body.text = text;
+      const res = await this.#fetch(
+        `https://api.telegram.org/bot${this.#token}/answerCallbackQuery`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      );
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
   /** Deletes a message. Best-effort — returns false on failure, never throws. */
   async deleteMessage(chatId: number, messageId: number): Promise<boolean> {
     try {

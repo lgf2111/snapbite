@@ -26,6 +26,54 @@ export interface TelegramUpdate {
     /** The message this one replies to (Telegram populates it on a reply). */
     reply_to_message?: { message_id?: number };
   };
+  /** An inline-button tap (we use these for one-tap portion rescaling). */
+  callback_query?: {
+    id?: string;
+    data?: string;
+    from?: { id: number };
+    message?: {
+      message_id?: number;
+      chat?: { id: number };
+    };
+  };
+}
+
+/** A parsed inline-button tap: who tapped it, which message, and the payload. */
+export interface ParsedCallback {
+  /** Telegram's callback_query id — must be answered to clear the loading spinner. */
+  callbackId: string;
+  /** The app user's Telegram id. */
+  fromId: number;
+  /** The chat the message lives in. */
+  chatId: number;
+  /** The message_id the button is attached to (our meal confirmation). */
+  messageId: number;
+  /** The opaque callback_data payload (e.g. "rsz:0.5"). */
+  data: string;
+}
+
+/**
+ * Parses a Telegram callback_query (an inline-button tap) into the fields the
+ * Worker needs, or null when the update isn't a usable callback. Separate from
+ * {@link parseUpdate} because callbacks have no command/text/photo shape.
+ */
+export function parseCallbackQuery(update: TelegramUpdate): ParsedCallback | null {
+  const cq = update.callback_query;
+  if (
+    !cq?.id ||
+    cq.from?.id == null ||
+    cq.message?.message_id == null ||
+    cq.message.chat?.id == null
+  ) {
+    return null;
+  }
+  return {
+    callbackId: cq.id,
+    fromId: cq.from.id,
+    chatId: cq.message.chat.id,
+    messageId: cq.message.message_id,
+    data: cq.data ?? '',
+  };
 }
 
 export interface ParsedCommand {
@@ -84,6 +132,8 @@ export interface InlineKeyboardButton {
   text: string;
   web_app?: { url: string };
   url?: string;
+  /** Opaque payload Telegram sends back in a callback_query when tapped (≤64 bytes). */
+  callback_data?: string;
 }
 
 export interface BotReply {

@@ -11,6 +11,7 @@ const SECRET = 'test-webhook-secret';
 function mockBot(sent: Array<{ chatId: number; reply: BotReply }>) {
   let nextId = 1000;
   const edits: Array<{ chatId: number; messageId: number; reply: BotReply }> = [];
+  const answers: Array<{ callbackId: string; text?: string }> = [];
   const bot = {
     async sendMessage(chatId: number, reply: BotReply) {
       sent.push({ chatId, reply });
@@ -31,9 +32,14 @@ function mockBot(sent: Array<{ chatId: number; reply: BotReply }>) {
     async deleteMessage() {
       return true;
     },
+    async answerCallbackQuery(callbackId: string, text?: string) {
+      answers.push({ callbackId, text });
+      return true;
+    },
   };
-  // Expose the edit log for assertions that need it.
+  // Expose the edit + answer logs for assertions that need them.
   (bot as unknown as { edits: typeof edits }).edits = edits;
+  (bot as unknown as { answers: typeof answers }).answers = answers;
   return bot;
 }
 
@@ -1652,5 +1658,136 @@ describe('goal-progress nudge on photo log', () => {
     );
     expect(lastText(b.sent)).toContain('Logged');
     expect(lastText(b.sent).toLowerCase()).not.toContain('to your goal');
+  });
+});
+
+/** A low-confidence analysis (below 0.75) that triggers the portion buttons. */
+const LOW_CONF_ANALYSIS: AIFoodAnalysis = {
+  foods: [
+    {
+      name: 'pasta',
+      estimatedWeightG: 300,
+      portion: '1 plate',
+      quantity: 1,
+      confidence: 0.5,
+      aiNutrition: { energyKcal: 150, proteinG: 5, carbsG: 30, fatG: 1.5 },
+    },
+  ],
+  confidence: 0.5,
+  needsConfirmation: true,
+};
+
+describe('one-tap portion rescale (R6)', () => {
+  /** Saves an AI key for a Telegram user via the authenticated settings route. */
+  async function saveKey(tgId: number): Promise<string> {
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'sk-test-key' }),
+      },
+      env,
+    );
+    return initData;
+  }
+
+  it('offers portion buttons on a low-confidence log', async () => {
+    const tgId = 8600;
+    await saveKey(tgId);
+    const { app, sent } = appWithCapture(LOW_CONF_ANALYSIS);
+    await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    const kb = sent[sent.length - 1]?.reply.replyMarkup?.inline_keyboard;
+    // First row is the portion multipliers.
+    expect(kb?.[0]?.map((b) => b.callback_data)).toEqual(['rsz:0.25', 'rsz:0.5', 'rsz:1', 'rsz:2']);
+  });
+
+  it('does NOT offer portion buttons on a confident log', async () => {
+    const tgId = 8601;
+    await saveKey(tgId);
+    // Default mock analysis has confidence 0.82 (>= 0.75).
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    const kb = sent[sent.length - 1]?.reply.replyMarkup?.inline_keyboard;
+    // Only the "Open SnapBite" launch button — no portion row.
+    expect(kb?.[0]?.[0]?.callback_data).toBeUndefined();
+    expect(kb?.[0]?.[0]?.web_app?.url).toBeDefined();
+  });
+
+  it('rescales the logged meal when a portion button is tapped', async () => {
+    const tgId = 8602;
+    const initData = await saveKey(tgId);
+    const { app, sent } = appWithCapture(LOW_CONF_ANALYSIS);
+    await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    // The photo flow sends an "Analyzing…" ack (message id 1000) and edits it
+    // in place into the result, so the confirmation message id is 1000.
+    const confirmMessageId = 1000;
+
+    // Read the pre-rescale calories.
+    const before = (await (
+      await createApp().request('/api/meals', { headers: { [INIT_DATA_HEADER]: initData } }, env)
+    ).json()) as { meals: Array<{ energyKcal: number | null }> };
+    const beforeKcal = before.meals[0]?.energyKcal ?? 0;
+    expect(beforeKcal).toBeGreaterThan(0);
+
+    // Tap "½×".
+    const res = await app.request(
+      '/webhook',
+      post({
+        callback_query: {
+          id: 'cb-1',
+          data: 'rsz:0.5',
+          from: { id: tgId },
+          message: { message_id: confirmMessageId, chat: { id: tgId } },
+        },
+      }),
+      env,
+    );
+    expect(res.status).toBe(200);
+
+    const after = (await (
+      await createApp().request('/api/meals', { headers: { [INIT_DATA_HEADER]: initData } }, env)
+    ).json()) as { meals: Array<{ energyKcal: number | null }> };
+    expect(after.meals[0]?.energyKcal).toBeCloseTo(beforeKcal * 0.5, 1);
+    // The edited confirmation still carries the portion buttons.
+    const kb = sent[sent.length - 1]?.reply.replyMarkup?.inline_keyboard;
+    expect(kb?.[0]?.map((b) => b.callback_data)).toContain('rsz:0.5');
+  });
+
+  it('answers an unknown-meal callback without throwing', async () => {
+    const tgId = 8603;
+    await saveKey(tgId);
+    const { app } = appWithCapture();
+    const res = await app.request(
+      '/webhook',
+      post({
+        callback_query: {
+          id: 'cb-x',
+          data: 'rsz:2',
+          from: { id: tgId },
+          message: { message_id: 999999, chat: { id: tgId } },
+        },
+      }),
+      env,
+    );
+    expect(res.status).toBe(200);
   });
 });
