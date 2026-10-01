@@ -8,7 +8,31 @@ export interface SavedMeal {
   meal: MealResult;
 }
 
-const STORAGE_KEY = 'foodlog.meals.v1';
+const STORAGE_KEY = 'snapbite.meals.v1';
+
+/**
+ * One-time migration of the pre-rebrand localStorage keys (`foodlog.*`) to the
+ * `snapbite.*` namespace. Only matters in local/dev mode. Copies a legacy value
+ * to the new key when the new key is absent, then removes the legacy key. Safe
+ * to call on every load (idempotent) and never throws.
+ */
+function migrateLegacyKeys(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const moves: Array<[legacy: string, next: string]> = [
+      ['foodlog.meals.v1', STORAGE_KEY],
+      ['foodlog.profile.v1', PROFILE_KEY],
+    ];
+    for (const [legacy, next] of moves) {
+      const legacyVal = localStorage.getItem(legacy);
+      if (legacyVal == null) continue;
+      if (localStorage.getItem(next) == null) localStorage.setItem(next, legacyVal);
+      localStorage.removeItem(legacy);
+    }
+  } catch {
+    // storage unavailable — non-fatal
+  }
+}
 
 /**
  * Minimal localStorage-backed meal store for the pre-backend Mini App. Swapped
@@ -75,7 +99,11 @@ export function deleteSavedMeal(id: string): boolean {
   return true;
 }
 
-const PROFILE_KEY = 'foodlog.profile.v1';
+const PROFILE_KEY = 'snapbite.profile.v1';
+
+// Run the one-time foodlog.* -> snapbite.* key migration now that both target
+// key constants exist. Idempotent and safe on every module load.
+migrateLegacyKeys();
 
 /** Reads the locally stored user profile (browser-dev / local mode). */
 export function loadProfile(): UserProfile | null {
