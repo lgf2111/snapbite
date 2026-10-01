@@ -150,6 +150,40 @@ export function mealLoggedMessage(foods: string[], energyKcal: number | null): s
   return `✅ Logged ${list}${kcal}.`;
 }
 
+/** Today's running macro totals + the user's daily targets, for the goal nudge. */
+export interface GoalNudgeInput {
+  todayKcal: number;
+  todayProteinG: number;
+  target: { energyKcal: number; proteinG: number };
+}
+
+/**
+ * A single deterministic "where you are vs. your goal today" line for the bot's
+ * log confirmation (no AI). Leads with protein (the most actionable macro):
+ * how much is left, or a note when the target is met. Falls back to calories
+ * remaining. Returns null when there are no usable targets (so callers simply
+ * omit the line for users without a profile).
+ */
+export function goalNudgeLine(input: GoalNudgeInput | null | undefined): string | null {
+  if (!input) return null;
+  const { todayKcal, todayProteinG, target } = input;
+  if (!(target.proteinG > 0) && !(target.energyKcal > 0)) return null;
+
+  const p = Math.round(todayProteinG);
+  const pTarget = Math.round(target.proteinG);
+  if (pTarget > 0) {
+    const left = pTarget - p;
+    if (left > 0) return `📊 ${p}g protein today — ${left}g to your goal.`;
+    return `📊 ${p}g protein today — you've hit your ${pTarget}g goal! 💪`;
+  }
+
+  const k = Math.round(todayKcal);
+  const kTarget = Math.round(target.energyKcal);
+  const kLeft = kTarget - k;
+  if (kLeft > 0) return `📊 ${k} kcal today — ${kLeft} to your goal.`;
+  return `📊 ${k} kcal today — at your ${kTarget} kcal goal.`;
+}
+
 /** The macro/energy totals shown in the detailed photo-logged reply. */
 export interface PhotoLoggedTotals {
   energyKcal: number;
@@ -174,6 +208,8 @@ export function photoLoggedReply(
   foods: string[],
   totals: PhotoLoggedTotals,
   config: BotConfig,
+  /** Optional deterministic goal-progress line (see {@link goalNudgeLine}). */
+  goalNudge?: string | null,
 ): BotReply {
   const list = foods.length > 0 ? foods.join(', ') : 'your meal';
   const lines = [
@@ -186,6 +222,8 @@ export function photoLoggedReply(
     `🧈 Fat ${round1(totals.fatG)} g`,
     // Fiber only when the analysis actually produced it.
     ...(totals.fiberG != null ? [`🌾 Fiber ${round1(totals.fiberG)} g`] : []),
+    // Goal-progress nudge, only for users with a profile/targets.
+    ...(goalNudge ? ['', goalNudge] : []),
     '',
     'These are estimates — open the app to review or correct.',
   ];
