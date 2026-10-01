@@ -211,9 +211,12 @@ export function MealDetailScreen({
     };
   }, [backend, detail]);
 
-  // If opened with an instruction (from the Home row), start the AI edit.
+  // Opened in "AI mode" from the Home sparkle button? Auto-open the AI dialog.
+  // The marker is a non-null instruction (an empty string means "AI mode, no
+  // prefilled text"); only a plain open passes null, so check against null —
+  // not truthiness, which would miss the empty-string case.
   useEffect(() => {
-    if (initialAiInstruction && detail) setAiOpen(true);
+    if (initialAiInstruction != null && detail) setAiOpen(true);
   }, [initialAiInstruction, detail]);
 
   // Release the preview object URL if we unmount while it's still open.
