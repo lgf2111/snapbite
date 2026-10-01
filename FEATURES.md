@@ -101,3 +101,13 @@ shown as an **estimate** and is always **editable**.
   framed as beta with frequent updates.
 - **Quiet updates** — if your previous update message is still recent, it's edited in place to the
   newest version rather than sending you a new message.
+
+## Notes & known limitations
+
+- **Old FoodLog photos don't display.** SnapBite was formerly FoodLog, with a different bot. Meals
+  logged through the old bot kept a Telegram `file_id` tied to that retired bot's token, which the
+  new `@SnapBiteAI_bot` can't fetch — so those older entries show without their photo. The meal and
+  its nutrition data are unaffected; only the image preview is missing. New photos logged through
+  SnapBite display normally.
+- **Re-log a saved meal from chat.** Star a meal in the app, then send `/saved` to the bot to list
+  your saved meals and `/saved <number>` to log one again instantly — no photo or AI call needed.
