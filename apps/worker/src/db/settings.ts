@@ -73,8 +73,34 @@ export interface Preferences {
   reminders?: ReminderConfig;
   /** In-progress conversational onboarding via the bot (`/setup`). */
   onboarding?: OnboardingState;
+  /** Bodyweight check-ins (canonical kg), oldest→newest, capped to a small window. */
+  weights?: WeightEntry[];
+  /** Opt-in adaptive calorie targets (recalibrated weekly from intake vs weight trend). */
+  adaptive?: AdaptiveConfig;
   updatedAt?: number;
 }
+
+/** A single bodyweight check-in stored in preferences. `ts` ms, `kg` canonical. */
+export interface WeightEntry {
+  ts: number;
+  kg: number;
+}
+
+/**
+ * Opt-in adaptive-targets config. When enabled, a weekly cron pass measures the
+ * user's real TDEE (logged intake vs. smoothed weight trend) and nudges their
+ * calorie target. `tzOffsetMinutes` (Date.getTimezoneOffset()) pins the local
+ * week boundary; `lastCheckinKey` is the local YYYY-Www we last recalibrated,
+ * so we recalibrate at most once per week.
+ */
+export interface AdaptiveConfig {
+  enabled: boolean;
+  tzOffsetMinutes: number;
+  lastCheckinKey?: string;
+}
+
+/** Max weight check-ins retained in preferences_json (keeps the row small). */
+export const MAX_WEIGHT_ENTRIES = 60;
 
 /** Parses `preferences_json` into a Preferences object ({} on missing/invalid). */
 export function parsePreferences(preferencesJson: string | null | undefined): Preferences {
@@ -155,6 +181,26 @@ export async function mergePreferences(
     userId,
     JSON.stringify({ ...current, ...patch, updatedAt: Date.now() }),
   );
+}
+
+/**
+ * Appends a bodyweight check-in to preferences_json, newest last, capped to
+ * {@link MAX_WEIGHT_ENTRIES}. Returns the stored series. Pure-ish wrapper over
+ * mergePreferences so the webhook can record a weigh-in in one call.
+ */
+export async function addWeightEntry(
+  db: SettingsDb,
+  userId: string,
+  entry: WeightEntry,
+): Promise<WeightEntry[]> {
+  const current = parsePreferences((await getSettings(db, userId))?.preferencesJson);
+  const existing = Array.isArray(current.weights) ? current.weights : [];
+  const next = [...existing, entry]
+    .filter((e) => Number.isFinite(e.ts) && typeof e.kg === 'number' && e.kg > 0)
+    .sort((a, b) => a.ts - b.ts)
+    .slice(-MAX_WEIGHT_ENTRIES);
+  await mergePreferences(db, userId, { weights: next });
+  return next;
 }
 
 /** Reads the user's in-progress onboarding state, or undefined. */
