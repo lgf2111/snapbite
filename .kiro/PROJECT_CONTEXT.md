@@ -1,10 +1,13 @@
 # SnapBite — Project Context & Handoff
 
 > A single-file brain dump so a fresh session (or a new collaborator) can understand the whole
-> project and continue without re-discovering everything. Written 2026-09. Pair this with
-> `README.md` (user-facing + architecture), `FEATURES.md` (feature list), `PLAN.md` (build log),
-> `IMPROVEMENTS.md` (backlog, all top items now done), and `.kiro/steering/lightweight.md`
+> project and continue without re-discovering everything. Written 2026-09, updated 2026-10. Pair this
+> with `README.md` (user-facing + architecture), `FEATURES.md` (feature list), `ROADMAP.md` (the
+> forward-looking roadmap defined by the Visionary session), and `.kiro/steering/lightweight.md`
 > (the guiding principle — read it, it governs every decision).
+>
+> NOTE: the old `IMPROVEMENTS.md` (backlog #1–#15) and `PLAN.md` (original build log) were **removed**
+> once their work was fully shipped — this file + `ROADMAP.md` carry everything a new session needs.
 
 ---
 
@@ -176,9 +179,9 @@ they DM `ADMIN_TELEGRAM_ID`. `adminNotify` falls back to DM + logs on group-post
 
 ## 5. Current state (as of this handoff)
 
-**All 15 top items in `IMPROVEMENTS.md` (#1–#15) are implemented, verified, committed, pushed, and
-deployed** (worker version `b7f0da58`; Pages live). Each has a commit ref noted in IMPROVEMENTS.md.
-Highlights shipped this cycle:
+**All 15 top backlog items (#1–#15, formerly tracked in `IMPROVEMENTS.md`, now removed) are
+implemented, verified, committed, pushed, and deployed** (worker version `b7f0da58`; Pages live).
+Each has a commit ref in git history (`git log --oneline`). Highlights shipped this cycle:
 - CI workflow; AI one-shot repair-retry + Zod-issue detail in `error_logs`; admin `/ping`;
   HomeScreen + useCachedData component tests; `/saved` bot command (list + re-log favorites);
   weekly Total/Daily-avg toggle; clearer onboarding-skip path; **per-user photo rate limit** (40
@@ -186,9 +189,9 @@ Highlights shipped this cycle:
   barrel; `foodlog.*`→`snapbite.*` localStorage migration; a11y pass (aria labels, Biome a11y clean);
   `error_logs` 30-day retention sweep in cron.
 
-The **"Explicitly NOT recommended"** list in IMPROVEMENTS.md is deliberately NOT done and should stay
-that way (client-side barcode/image lib, state-mgmt lib, react-query/SWR package, server-side AI,
-heavier UI kit) — they'd all violate the lightweight principle.
+An **"Explicitly out of scope"** list is deliberately NOT done and should stay that way
+(client-side barcode/image lib, state-mgmt lib, react-query/SWR package, server-side AI, heavier UI
+kit) — they'd all violate the lightweight principle. It's carried forward in `ROADMAP.md`.
 
 **Outstanding small thing:** the bot command menu wasn't re-registered to include `/saved` in the
 `/` autocomplete (the local token was a placeholder). `/saved` itself works; it's just not listed.
@@ -233,13 +236,14 @@ rate limit, reply-to-revise). Treat group support as a design task, not a quick 
 
 ## 8. "Visionary" session — likely intent
 
-The owner is spinning up a new session named **"Visionary"**. This name suggests forward-looking
-product/architecture work (new features, bigger directions) rather than the incremental cleanup this
-cycle covered. Good candidate threads to pick up:
-- **Group-chat photo support** (section 6) — the owner explicitly parked this "for the future."
-- The IMPROVEMENTS.md backlog is now exhausted at the top; a Visionary session may want to define a
-  *new* roadmap. Whatever it is, weigh every idea against the lightweight principle and BYOK/no
-  server-side-AI-cost rules.
+The **"Visionary"** session owns forward-looking product/architecture work and has defined the
+roadmap in **`ROADMAP.md`** (repo root) — read that for the *next* set of directions. The old
+incremental backlog is fully shipped. Still-relevant parked thread:
+- **Group-chat photo support** (section 6) — the owner explicitly parked this "for the future";
+  it's roadmap item **R8** in `ROADMAP.md`.
 
-Start by reading: this file → `.kiro/steering/lightweight.md` → `README.md` → `FEATURES.md`. Then
-`git log --oneline -20` for the latest work. Build core before typechecking/testing anything.
+Weigh every idea against the lightweight principle and BYOK / no-server-side-AI-cost rules.
+
+Start by reading: this file → `.kiro/steering/lightweight.md` → `ROADMAP.md` → `README.md` →
+`FEATURES.md`. Then `git log --oneline -20` for the latest work. Build core before
+typechecking/testing anything.
