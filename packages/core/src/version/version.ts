@@ -19,6 +19,17 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.21.0',
+    date: '2026-10-01',
+    notes: [
+      '⭐ Save a meal in the app, then re-log it from chat anytime — send /saved to list them, /saved 1 to log one again (no photo needed)',
+      '📅 Weekly view now toggles between a 7-day total and your daily average, so you can compare a typical day to your target',
+      '📸 More reliable photo logging — if the AI’s first read comes back garbled, SnapBite quietly retries once so you don’t have to resend',
+      '🎯 Onboarding is lighter — skip the profile and just start logging; add a goal whenever you want the progress rings',
+      'Send /feedback anytime — more coming soon 💙',
+    ],
+  },
+  {
     version: '0.20.0',
     date: '2026-09-16',
     notes: [
