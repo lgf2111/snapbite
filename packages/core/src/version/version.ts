@@ -19,6 +19,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.22.0',
+    date: '2026-10-08',
+    notes: [
+      '🌾 Fiber is now tracked — SnapBite estimates dietary fiber per food and shows it on the meal and in the log reply',
+      '📊 Goal progress on every log — if you’ve set a goal, each logged meal tells you where you are for the day (e.g. “96g protein today — 54g to your goal”)',
+      'Both are estimates and fully editable, as always',
+      'Send /feedback anytime — more coming soon 💙',
+    ],
+  },
+  {
     version: '0.21.0',
     date: '2026-10-01',
     notes: [
