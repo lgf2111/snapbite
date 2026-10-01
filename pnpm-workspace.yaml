@@ -2,12 +2,14 @@ packages:
   - "packages/*"
   - "apps/*"
 
-onlyBuiltDependencies:
-  - "@biomejs/biome"
-  - esbuild
-  - workerd
+# Explicitly allow (true) / disallow (false) dependency build (postinstall)
+# scripts. pnpm v11+ replaced `onlyBuiltDependencies` with this `allowBuilds`
+# MAP, and under the default `strictDepBuilds` any unlisted build fails the
+# install (ERR_PNPM_IGNORED_BUILDS) — notably `pnpm install --frozen-lockfile`
+# in CI. These are our known-good native/tooling deps; keep in sync when a new
+# one appears (an un-reviewed build will be auto-added here with a placeholder).
 allowBuilds:
-  '@biomejs/biome': set this to true or false
-  esbuild: set this to true or false
-  sharp: set this to true or false
-  workerd: set this to true or false
+  "@biomejs/biome": true
+  esbuild: true
+  sharp: true
+  workerd: true
