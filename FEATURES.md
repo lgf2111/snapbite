@@ -57,6 +57,10 @@ shown as an **estimate** and is always **editable**.
   low-confidence the bot adds quick buttons (¼× · ½× · 1× · 2×) right under the confirmation. Tap one
   and every macro is rescaled instantly — pure arithmetic, no new AI call — and the message updates in
   place with the buttons still there so you can keep nudging until it looks right.
+- **Split a shared dish** — ate part of something you shared? Say "divide by 4 pax" (reply to the
+  meal, or use "Update with AI") and it scales the meal down to just your share and names it so the
+  split is obvious, e.g. "Pizza (1/4 of 4 pax)" — so your log reflects what you actually ate, not the
+  whole table's.
 - **Disambiguation** — if you logged several meals in the last few minutes, the bot asks you to reply
   to the specific one you want to change.
 - **Full edit in the Mini App** — review, edit, and correct any logged meal; "Update with AI" lets
