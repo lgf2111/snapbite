@@ -22,6 +22,8 @@ export const NutritionValue = z.object({
   proteinG: nonNegative,
   carbsG: nonNegative,
   fatG: nonNegative,
+  /** Dietary fiber (grams). Optional: `undefined` means "unknown", not zero. */
+  fiberG: nonNegative.optional(),
   source: NutritionSource,
 });
 export type NutritionValue = z.infer<typeof NutritionValue>;

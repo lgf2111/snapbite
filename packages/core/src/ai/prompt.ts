@@ -25,7 +25,7 @@ Respond with a single valid JSON object and nothing else — no markdown, no cod
       "portion": "human-readable portion, e.g. '1 bowl'",
       "quantity": 1,
       "confidence": 0.8,
-      "aiNutrition": { "energyKcal": 200, "proteinG": 8, "carbsG": 30, "fatG": 5 },
+      "aiNutrition": { "energyKcal": 200, "proteinG": 8, "carbsG": 30, "fatG": 5, "fiberG": 2 },
       "barcode": "optional digits if a product barcode is clearly readable"
     }
   ],
@@ -38,7 +38,7 @@ Rules:
 - "title" is a SHORT, natural meal name of 2–4 words that a person would use, e.g. "Chicken rice", "Egg & toast", "Blueberry oats". NOT a description or a list — keep it under ~24 characters, no "Identified as", no sentence.
 - Every field is required for each food. Never leave "name" empty or omit "estimatedWeightG".
 - "estimatedWeightG" is the realistic total weight in grams of that food as visible (a number > 0).
-- "aiNutrition" is your best rough estimate of that food's nutrition PER 100 GRAMS (not per portion): energyKcal, proteinG, carbsG, fatG, all numbers >= 0.
+- "aiNutrition" is your best rough estimate of that food's nutrition PER 100 GRAMS (not per portion): energyKcal, proteinG, carbsG, fatG, all numbers >= 0. Also include "fiberG" (dietary fiber per 100 g, a number >= 0) when you can reasonably estimate it; omit it only if you truly can't.
 - "quantity" is how many of that item are present (default 1).
 - Identify real, specific foods (e.g. "grilled chicken breast", "steamed white rice"), not "unknown food", whenever the image shows food.
 - If the image is unclear, ambiguous, or not food, still return your single best guess, set needsConfirmation to true, and lower confidence — but keep all numeric fields filled with realistic estimates, never zeros.
@@ -78,7 +78,7 @@ Respond with a single valid JSON object and nothing else — no markdown, no cod
       "portion": "human-readable portion, e.g. '1 bowl'",
       "quantity": 1,
       "confidence": 0.8,
-      "aiNutrition": { "energyKcal": 200, "proteinG": 8, "carbsG": 30, "fatG": 5 }
+      "aiNutrition": { "energyKcal": 200, "proteinG": 8, "carbsG": 30, "fatG": 5, "fiberG": 2 }
     }
   ],
   "confidence": 0.8,
@@ -92,7 +92,7 @@ Rules:
 - To add a food, append it with realistic estimates for every field. To remove one, drop it. To change a portion/quantity, adjust "estimatedWeightG"/"quantity" accordingly.
 - Every field is required for each remaining food; never leave "name" empty or omit "estimatedWeightG".
 - "estimatedWeightG" is the realistic total weight in grams of that food (a number > 0).
-- "aiNutrition" is your best rough estimate of that food's nutrition PER 100 GRAMS (not per portion): energyKcal, proteinG, carbsG, fatG, all numbers >= 0.
+- "aiNutrition" is your best rough estimate of that food's nutrition PER 100 GRAMS (not per portion): energyKcal, proteinG, carbsG, fatG, all numbers >= 0. Include "fiberG" (per 100 g, >= 0) when you reasonably can.
 - "quantity" is how many of that item are present (default 1).
 - If the result would have no foods, return your best single-food guess and set needsConfirmation to true.`;
 

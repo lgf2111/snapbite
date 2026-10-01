@@ -28,15 +28,17 @@ export function formatMealResult(meal: MealResult): string {
     const qty = food.quantity > 1 ? ` x${food.quantity}` : '';
     const portion = food.portion ? ` (${food.portion})` : '';
     lines.push(`• ${food.name}${qty}${portion} — ~${grams}g`);
+    const fib = nutrition.fiberG != null ? `  Fib ${nutrition.fiberG}g` : '';
     lines.push(
-      `    ${nutrition.energyKcal} kcal | P ${nutrition.proteinG}g  C ${nutrition.carbsG}g  F ${nutrition.fatG}g  [${sourceLabel(nutrition.source)}]`,
+      `    ${nutrition.energyKcal} kcal | P ${nutrition.proteinG}g  C ${nutrition.carbsG}g  F ${nutrition.fatG}g${fib}  [${sourceLabel(nutrition.source)}]`,
     );
   }
 
   lines.push('-'.repeat(40));
   const t = meal.total;
+  const totalFib = t.fiberG != null ? `  Fib ${t.fiberG}g` : '';
   lines.push(
-    `TOTAL: ${t.energyKcal} kcal | P ${t.proteinG}g  C ${t.carbsG}g  F ${t.fatG}g  [${sourceLabel(t.source)}]`,
+    `TOTAL: ${t.energyKcal} kcal | P ${t.proteinG}g  C ${t.carbsG}g  F ${t.fatG}g${totalFib}  [${sourceLabel(t.source)}]`,
   );
   lines.push(`Confidence: ${Math.round(meal.confidence * 100)}%`);
   if (meal.needsConfirmation) lines.push('⚠ Needs confirmation — please review.');

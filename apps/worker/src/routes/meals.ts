@@ -419,6 +419,9 @@ export function detailToAnalysis(detail: MealDetail): AIFoodAnalysis {
                 proteinG: per100(f.proteinG),
                 carbsG: per100(f.carbsG),
                 fatG: per100(f.fatG),
+                // Carry fiber back as per-100g when it was stored, so a revise
+                // round-trip doesn't silently drop it.
+                ...(f.fiberG != null ? { fiberG: per100(f.fiberG) } : {}),
               },
             }
           : {}),

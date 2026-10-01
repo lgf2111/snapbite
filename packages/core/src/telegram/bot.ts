@@ -156,6 +156,8 @@ export interface PhotoLoggedTotals {
   proteinG: number;
   carbsG: number;
   fatG: number;
+  /** Dietary fiber (grams). Shown only when known (non-null/undefined). */
+  fiberG?: number | null;
 }
 
 /** Rounds to one decimal for display. */
@@ -182,6 +184,8 @@ export function photoLoggedReply(
     `🥩 Protein ${round1(totals.proteinG)} g`,
     `🍚 Carbs ${round1(totals.carbsG)} g`,
     `🧈 Fat ${round1(totals.fatG)} g`,
+    // Fiber only when the analysis actually produced it.
+    ...(totals.fiberG != null ? [`🌾 Fiber ${round1(totals.fiberG)} g`] : []),
     '',
     'These are estimates — open the app to review or correct.',
   ];
