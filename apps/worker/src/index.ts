@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { ERROR_LOG_RETENTION_MS, pruneErrorsOlderThan } from './db/errors.js';
 import type { Env } from './env.js';
 import { runPhotoRetries } from './photoRetry.js';
+import { runWeeklyRecaps } from './recap.js';
 import { runReminders } from './reminders.js';
 
 const app = createApp();
@@ -24,5 +25,7 @@ export default {
     // Adaptive targets: once per local week per opted-in user, recalibrate the
     // calorie goal from logged intake vs. the weight trend. Best-effort.
     ctx.waitUntil(runAdaptiveCheckins(env));
+    // Weekly recap: a Sunday "week in review" DM for opted-in users. Best-effort.
+    ctx.waitUntil(runWeeklyRecaps(env));
   },
 };

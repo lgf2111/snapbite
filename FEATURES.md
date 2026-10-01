@@ -16,6 +16,10 @@ shown as an **estimate** and is always **editable**.
 - **Goal-progress nudge** — if you've set a goal, each logged meal adds one line showing where you
   are for the day (e.g. "📊 96g protein today — 54g to your goal", or a 💪 when you've hit it).
   Computed from your logged meals + targets, no AI; users without a profile just don't see it.
+- **Logging streak** — log on consecutive days and each confirmation shows your run (e.g. "🔥 5-day
+  logging streak"), with a 🎉 milestone every 7 days. Counting is forgiving: a streak that ran
+  through yesterday is still alive until the day ends, so logging in the evening never "breaks" it.
+  Pure date math from your logged days, no AI; it only appears once you're at 2+ days.
 - **Add a meal by hand** — in the Mini App, log a meal manually (name + macros) with no photo and no
   AI key required.
 - **Save meals to reuse** — from a meal's detail view, tap the **star** to save it as a reusable
@@ -81,6 +85,10 @@ shown as an **estimate** and is always **editable**.
   Monday or Sunday). Weekly compares your totals against your target × 7.
 - **Home day view** — pick any day on a calendar and see that day's totals against your targets as
   progress rings, plus every meal logged that day (swipe to delete, tap to edit).
+- **Weekly recap (opt-in)** — turn on the recap and once a week — on your local Sunday — the bot
+  sends a short message summarizing the week you logged: days logged, average calories and protein,
+  how many days you hit your protein target, your best day, and your current streak. All computed
+  deterministically from your own logged meals (no AI, no server cost), sent at most once per week.
 
 ## Meal reminders (opt-in)
 

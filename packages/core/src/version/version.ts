@@ -19,6 +19,17 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.26.0',
+    date: '2026-09-16',
+    notes: [
+      '🔥 Logging streaks — log on consecutive days and each confirmation shows your run, with a 🎉 every 7 days',
+      "Evening-friendly: a streak that was alive through yesterday won't break until the day ends",
+      '📅 Weekly recap (opt-in) — turn it on in Settings and get a short Sunday summary of your week: days logged, average calories & protein, protein-target hits, best day, and your streak',
+      'Both are computed from your own logged meals — no AI, always an estimate',
+      'Send /feedback anytime — more coming soon 💙',
+    ],
+  },
+  {
     version: '0.25.0',
     date: '2026-10-29',
     notes: [

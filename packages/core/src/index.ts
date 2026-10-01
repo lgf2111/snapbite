@@ -7,3 +7,4 @@ export * from './profile/index.js';
 export * from './reminders/index.js';
 export * from './version/index.js';
 export * from './onboarding/index.js';
+export * from './stats/index.js';

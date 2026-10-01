@@ -77,7 +77,20 @@ export interface Preferences {
   weights?: WeightEntry[];
   /** Opt-in adaptive calorie targets (recalibrated weekly from intake vs weight trend). */
   adaptive?: AdaptiveConfig;
+  /** Opt-in weekly recap digest (a Sunday "week in review" DM). */
+  recap?: RecapConfig;
   updatedAt?: number;
+}
+
+/**
+ * Opt-in weekly recap config. When enabled, the cron DMs a "week in review"
+ * once per local week (on the local Sunday). `tzOffsetMinutes` pins the local
+ * week/day; `lastRecapKey` is the local YYYY-Www we last sent, for dedup.
+ */
+export interface RecapConfig {
+  enabled: boolean;
+  tzOffsetMinutes: number;
+  lastRecapKey?: string;
 }
 
 /** A single bodyweight check-in stored in preferences. `ts` ms, `kg` canonical. */
