@@ -24,24 +24,36 @@ export function MacroLine({
 }: MacroLineProps) {
   if (compact) {
     return (
-      <span className="text-muted-foreground text-sm" title="calories">
-        🔥 {fmt(energyKcal)} kcal
+      <span
+        className="text-muted-foreground text-sm"
+        title="calories"
+        aria-label={`${fmt(energyKcal)} calories`}
+      >
+        <span aria-hidden="true">🔥</span> {fmt(energyKcal)} kcal
       </span>
     );
   }
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-      <span title="calories" className="whitespace-nowrap">
-        🔥 {fmt(energyKcal)} kcal
+      <span
+        title="calories"
+        className="whitespace-nowrap"
+        aria-label={`${fmt(energyKcal)} calories`}
+      >
+        <span aria-hidden="true">🔥</span> {fmt(energyKcal)} kcal
       </span>
-      <span title="protein" className="whitespace-nowrap">
-        🥩 {fmt(proteinG)}g
+      <span
+        title="protein"
+        className="whitespace-nowrap"
+        aria-label={`${fmt(proteinG)} grams protein`}
+      >
+        <span aria-hidden="true">🥩</span> {fmt(proteinG)}g
       </span>
-      <span title="carbs" className="whitespace-nowrap">
-        🍚 {fmt(carbsG)}g
+      <span title="carbs" className="whitespace-nowrap" aria-label={`${fmt(carbsG)} grams carbs`}>
+        <span aria-hidden="true">🍚</span> {fmt(carbsG)}g
       </span>
-      <span title="fat" className="whitespace-nowrap">
-        🧈 {fmt(fatG)}g
+      <span title="fat" className="whitespace-nowrap" aria-label={`${fmt(fatG)} grams fat`}>
+        <span aria-hidden="true">🧈</span> {fmt(fatG)}g
       </span>
       {sourceLabel ? (
         <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
@@ -68,7 +80,7 @@ export function MacroLegend({ className }: { className?: string }) {
     >
       {MACRO_LEGEND.map((m) => (
         <span key={m.label} className="whitespace-nowrap">
-          {m.icon} {m.label}
+          <span aria-hidden="true">{m.icon}</span> {m.label}
         </span>
       ))}
     </div>
