@@ -387,3 +387,53 @@ describe('PUT /api/settings/reminders', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('adaptive targets + weight check-ins', () => {
+  it('opts into adaptive and reflects it in GET', async () => {
+    const app = createApp();
+    const tgId = 2200;
+    const headers = { ...(await authHeaders(tgId)), 'content-type': 'application/json' };
+    const res = await app.request(
+      '/api/settings/adaptive',
+      { method: 'PUT', headers, body: JSON.stringify({ enabled: true, tzOffsetMinutes: -480 }) },
+      env,
+    );
+    expect(res.status).toBe(200);
+
+    const get = (await (
+      await app.request('/api/settings', { headers: await authHeaders(tgId) }, env)
+    ).json()) as { adaptive: { enabled: boolean; tzOffsetMinutes: number } | null };
+    expect(get.adaptive?.enabled).toBe(true);
+    expect(get.adaptive?.tzOffsetMinutes).toBe(-480);
+  });
+
+  it('records a weight check-in and surfaces the latest in GET', async () => {
+    const app = createApp();
+    const tgId = 2201;
+    const headers = { ...(await authHeaders(tgId)), 'content-type': 'application/json' };
+    const res = await app.request(
+      '/api/settings/weight',
+      { method: 'POST', headers, body: JSON.stringify({ kg: 72.5 }) },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; latestWeightKg: number };
+    expect(body.latestWeightKg).toBe(72.5);
+
+    const get = (await (
+      await app.request('/api/settings', { headers: await authHeaders(tgId) }, env)
+    ).json()) as { latestWeightKg: number | null };
+    expect(get.latestWeightKg).toBe(72.5);
+  });
+
+  it('rejects an implausible weight', async () => {
+    const app = createApp();
+    const headers = { ...(await authHeaders(2202)), 'content-type': 'application/json' };
+    const res = await app.request(
+      '/api/settings/weight',
+      { method: 'POST', headers, body: JSON.stringify({ kg: 5 }) },
+      env,
+    );
+    expect(res.status).toBe(400);
+  });
+});

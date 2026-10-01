@@ -100,12 +100,22 @@ export interface SettingsView {
   fallbackSupportsDetail?: boolean;
   /** Opt-in meal reminders (null when never configured). */
   reminders?: ReminderView | null;
+  /** Opt-in adaptive calorie targets (null when never configured). */
+  adaptive?: AdaptiveView | null;
+  /** The user's most recent weight check-in (kg), or null. */
+  latestWeightKg?: number | null;
 }
 
 /** Opt-in meal reminder config, as returned/sent by the API. */
 export interface ReminderView {
   enabled: boolean;
   times: Record<string, string>;
+  tzOffsetMinutes: number;
+}
+
+/** Opt-in adaptive-targets config, as returned/sent by the API. */
+export interface AdaptiveView {
+  enabled: boolean;
   tzOffsetMinutes: number;
 }
 
@@ -405,6 +415,22 @@ export class ApiClient {
     return this.#request('/api/settings/reminders', {
       method: 'PUT',
       body: JSON.stringify({ enabled, times, tzOffsetMinutes: tzOffsetMinutes() }),
+    });
+  }
+
+  /** Opts in/out of adaptive calorie targets. tz is the device offset in minutes. */
+  saveAdaptive(enabled: boolean): Promise<{ ok: boolean; adaptive: AdaptiveView }> {
+    return this.#request('/api/settings/adaptive', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled, tzOffsetMinutes: tzOffsetMinutes() }),
+    });
+  }
+
+  /** Records a bodyweight check-in (canonical kg) for adaptive targets. */
+  logWeight(kg: number): Promise<{ ok: boolean; latestWeightKg: number }> {
+    return this.#request('/api/settings/weight', {
+      method: 'POST',
+      body: JSON.stringify({ kg }),
     });
   }
 }

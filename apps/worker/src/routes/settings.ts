@@ -16,6 +16,7 @@ import {
   type AdaptiveConfig,
   type Preferences,
   type ReminderConfig,
+  addWeightEntry,
   createSettingsDb,
   getSettings,
   parsePreferences,
@@ -219,6 +220,28 @@ export function settingsRoutes() {
     };
     await mergePreferences(db, c.get('userId'), { adaptive });
     return c.json({ ok: true, adaptive });
+  });
+
+  // POST /api/settings/weight — record a bodyweight check-in. Body: { kg: number }.
+  app.post('/weight', async (c) => {
+    let body: { kg?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
+    }
+    const kg = typeof body.kg === 'number' ? body.kg : Number(body.kg);
+    // Same plausibility bound as the bot's weight parser (25–400 kg).
+    if (!Number.isFinite(kg) || kg < 25 || kg > 400) {
+      return c.json(
+        { error: 'Bad request', detail: 'kg must be a weight between 25 and 400' },
+        400,
+      );
+    }
+    const kg1 = Math.round(kg * 10) / 10;
+    const db = createSettingsDb(c.env.DB);
+    await addWeightEntry(db, c.get('userId'), { ts: Date.now(), kg: kg1 });
+    return c.json({ ok: true, latestWeightKg: kg1 });
   });
 
   // PUT /api/settings/profile — store the user's profile + goal (no key needed).
