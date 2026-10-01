@@ -19,6 +19,15 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.28.1',
+    date: '2026-09-16',
+    notes: [
+      "🌍 If your AI provider isn't available in your region (common with Gemini), SnapBite now auto-switches to your fallback provider instead of failing",
+      'And if you have no fallback set, the error now tells you to switch to OpenAI or DeepSeek in Settings',
+      'Send /feedback anytime — more coming soon 💙',
+    ],
+  },
+  {
     version: '0.28.0',
     date: '2026-09-16',
     notes: [

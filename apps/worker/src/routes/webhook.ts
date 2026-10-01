@@ -1202,6 +1202,23 @@ function isOverloadError(err: unknown): boolean {
 }
 
 /**
+ * Whether an error is a geographic block — the provider refuses the request
+ * because of where it originated (the Worker's edge region). Gemini returns
+ * this as HTTP 400 `FAILED_PRECONDITION` with "User location is not supported
+ * for the API use". It's recoverable by using a DIFFERENT provider (OpenAI /
+ * DeepSeek have no such restriction), so despite being a 400 it's worth a
+ * failover. Matched on body/message text since the status alone (400) is
+ * ambiguous with ordinary bad requests.
+ */
+function isGeoBlockError(err: unknown): boolean {
+  const e = err as ProviderErrorLike;
+  const raw = `${providerMessage(e.cause) ?? ''} ${e.message ?? ''}`;
+  return /location is not supported|user location|not available in your|FAILED_PRECONDITION.*location|location.*not supported/i.test(
+    raw,
+  );
+}
+
+/**
  * Turns a provider error into a short, friendly chat message. The two common
  * cases with the free Gemini tier get tailored guidance:
  * - 429 (quota/rate limit): daily free-tier cap or per-minute rate.
@@ -1226,6 +1243,13 @@ function friendlyPhotoError(e: ProviderErrorLike): string {
   if (e.status === 503 || /overloaded|high demand|unavailable/i.test(raw)) {
     return 'Sorry — the AI model is busy right now (a temporary demand spike). Please send the photo again in a moment.';
   }
+  if (isGeoBlockError(e)) {
+    return (
+      "Sorry — your AI provider isn't available in this region (it reported your location isn't " +
+      'supported). This is common with Google Gemini. Switch to OpenAI or DeepSeek in SnapBite → ' +
+      'Settings (or set one as your fallback) and try again.'
+    );
+  }
   return `Sorry — couldn't log that photo: ${raw || 'unknown error'}`;
 }
 
@@ -1240,6 +1264,9 @@ function friendlyPhotoError(e: ProviderErrorLike): string {
 function isFailoverError(err: unknown): boolean {
   const status = (err as { status?: number }).status;
   if (status === 429 || status === 503 || status === 402) return true;
+  // A geo-block (usually a 400 from Gemini) is recoverable on a DIFFERENT
+  // provider, so fail over despite the 400 that we'd otherwise treat as fatal.
+  if (isGeoBlockError(err)) return true;
   // Any other 4xx/5xx except bad-request/auth is worth trying the fallback.
   if (typeof status === 'number' && status >= 402 && status !== 403) return true;
 
