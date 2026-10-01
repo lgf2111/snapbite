@@ -970,6 +970,40 @@ describe('/broadcast (admin-gated)', () => {
     expect(lastText(sent).toLowerCase()).toContain('open snapbite');
     expect(lastText(sent)).not.toContain('SnapBite update');
   });
+
+  it('APPENDS newer releases when editing a recent broadcast in place', async () => {
+    const tgId = 7350;
+    // Make the user exist, then seed a prior broadcast at an OLD version that is
+    // still inside the edit window, so the next /broadcast edits in place.
+    const { createDb, upsertUser, setBroadcastRef } = await import('../db/users.js');
+    const { CHANGELOG } = await import('@snapbite/core');
+    const db = createDb(env.DB);
+    const user = await upsertUser(db, { id: tgId });
+    // Pick a version at least two releases behind current so >1 release stacks.
+    const oldVersion = CHANGELOG[2]?.version as string;
+    await setBroadcastRef(db, user.id, {
+      chatId: tgId,
+      messageId: 555,
+      version: oldVersion,
+      at: Date.now() - 60_000, // 1 min ago → well within the 48h edit window
+    });
+
+    // Capturing bot that records edits.
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({ botClientFactory: () => mockBot(sent) });
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/broadcast', chat: { id: ADMIN_ID }, from: { id: ADMIN_ID } } }),
+      env,
+    );
+
+    // The edited message (reflected into `sent` by the mock) stacks the current
+    // and the in-between release, under the stacked header, not just the latest.
+    const editedToUser = sent.find((s) => s.chatId === tgId);
+    expect(editedToUser?.reply.text).toContain('SnapBite updates');
+    expect(editedToUser?.reply.text).toContain(`v${CHANGELOG[0]?.version}`);
+    expect(editedToUser?.reply.text).toContain(`v${CHANGELOG[1]?.version}`);
+  });
 });
 
 describe('barcode → Open Food Facts enrichment', () => {
@@ -1237,5 +1271,75 @@ describe('/setup conversational onboarding', () => {
     expect(profile?.birthDate).toBe('1990-03-10'); // unchanged
     expect(profile?.heightCm).toBe(178); // unchanged
     expect(prefs.onboarding).toBeUndefined();
+  });
+});
+
+describe('goal-progress nudge on photo log', () => {
+  it('appends a protein nudge when the user has a profile; omits it otherwise', async () => {
+    const withProfile = 8800;
+    const noProfile = 8801;
+
+    async function saveKey(tgId: number) {
+      const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+      const authDate = String(Math.floor(Date.now() / 1000));
+      const initData = await signInitData(
+        { user, auth_date: authDate },
+        '123456:LOCAL-DEV-BOT-TOKEN',
+      );
+      await createApp().request(
+        '/api/settings',
+        {
+          method: 'PUT',
+          headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+          body: JSON.stringify({ apiKey: 'sk-test-key' }),
+        },
+        env,
+      );
+    }
+
+    const { createSettingsDb, mergePreferences } = await import('../db/settings.js');
+    const { createDb, upsertUser } = await import('../db/users.js');
+
+    await saveKey(withProfile);
+    const u = await upsertUser(createDb(env.DB), { id: withProfile });
+    await mergePreferences(createSettingsDb(env.DB), u.id, {
+      profile: {
+        sex: 'male',
+        birthDate: '1990-03-10',
+        heightCm: 178,
+        weightKg: 80,
+        activity: 'moderate',
+        goal: 'maintain',
+        units: 'metric',
+      },
+    });
+
+    const a = appWithCapture();
+    await a.app.request(
+      '/webhook',
+      post({
+        message: {
+          photo: [{ file_id: 'f1' }],
+          chat: { id: withProfile },
+          from: { id: withProfile },
+        },
+      }),
+      env,
+    );
+    expect(lastText(a.sent).toLowerCase()).toContain('protein today');
+    expect(lastText(a.sent).toLowerCase()).toContain('your goal');
+
+    // A user with no profile logs fine but gets no nudge line.
+    await saveKey(noProfile);
+    const b = appWithCapture();
+    await b.app.request(
+      '/webhook',
+      post({
+        message: { photo: [{ file_id: 'f1' }], chat: { id: noProfile }, from: { id: noProfile } },
+      }),
+      env,
+    );
+    expect(lastText(b.sent)).toContain('Logged');
+    expect(lastText(b.sent).toLowerCase()).not.toContain('to your goal');
   });
 });

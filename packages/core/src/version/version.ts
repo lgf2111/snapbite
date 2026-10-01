@@ -112,3 +112,49 @@ export function broadcastMessage(entry: ChangelogEntry): string {
     "You're an early beta user, so expect frequent updates and improvements. Thanks for helping shape SnapBite! Send /feedback anytime.",
   ].join('\n');
 }
+
+/** One version block (header + bullets) for a stacked, edited-in-place message. */
+function versionBlock(entry: ChangelogEntry): string {
+  const bullets = entry.notes.map((n) => `• ${n}`).join('\n');
+  return [`🚀 v${entry.version}`, bullets].join('\n');
+}
+
+/**
+ * Builds the broadcast message for an edit-in-place update that should GROW
+ * rather than replace: it stacks every changelog entry newer than
+ * `sinceVersion` (newest first), up to and including the current release, under
+ * one header. This way a user whose previous update message is still editable
+ * sees the new release(s) APPENDED to the ones already shown, instead of the
+ * message being rewritten to only the latest.
+ *
+ * - `sinceVersion` = the version currently shown in that user's message. Entries
+ *   strictly newer than it are included (so already-shown ones aren't dropped,
+ *   and the one they're already on isn't duplicated as "new").
+ * - When `sinceVersion` is missing or not found in the changelog, this falls
+ *   back to a single current-entry message (same as a fresh send).
+ *
+ * NOTE: because we stack from the full {@link CHANGELOG}, the result is
+ * deterministic and can't double-count — re-running with the same `sinceVersion`
+ * produces the same text.
+ */
+export function broadcastMessageSince(sinceVersion: string | null | undefined): string {
+  const current = CHANGELOG[0];
+  if (!current) return '';
+
+  // Index of the version the message currently shows; entries BEFORE it (newer)
+  // are the ones to stack. If unknown, just send the current entry.
+  const sinceIdx = sinceVersion ? CHANGELOG.findIndex((e) => e.version === sinceVersion) : -1;
+  const newer = sinceIdx > 0 ? CHANGELOG.slice(0, sinceIdx) : [current];
+
+  // Single entry → use the standard single-version message (keeps existing look).
+  if (newer.length <= 1) return broadcastMessage(newer[0] ?? current);
+
+  const blocks = newer.map(versionBlock).join('\n\n');
+  return [
+    '🚀 SnapBite updates',
+    '',
+    blocks,
+    '',
+    "You're an early beta user, so expect frequent updates and improvements. Thanks for helping shape SnapBite! Send /feedback anytime.",
+  ].join('\n');
+}

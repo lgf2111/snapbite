@@ -11,6 +11,7 @@ import {
   UserProfile,
   applyAnswer,
   broadcastMessage,
+  broadcastMessageSince,
   computeTargets,
   createProvider,
   decryptSecret,
@@ -269,6 +270,9 @@ async function handleBroadcastCommand(
     await bot.sendMessage(parsed.chatId, { text: 'No changelog entry to broadcast.' });
     return;
   }
+  // Fresh sends show just the current release; edits-in-place STACK every
+  // release newer than what that user's message already shows (append, not
+  // rewrite) — so each `broadcastMessageSince` is computed per target below.
   const text = broadcastMessage(entry);
   const db = createDb(c.env.DB);
   const targets = await listBroadcastTargets(db);
@@ -292,11 +296,14 @@ async function handleBroadcastCommand(
 
       let messageId: number | null = null;
       if (canEdit && bot.editMessageText && t.lastBroadcastMessageId != null) {
+        // Append, don't rewrite: stack every release newer than the one this
+        // user's message currently shows, so prior updates stay visible.
+        const stackedText = broadcastMessageSince(t.lastBroadcastVersion);
         const ok = await bot.editMessageText(
           t.lastBroadcastChatId as number,
           t.lastBroadcastMessageId,
           {
-            text,
+            text: stackedText,
           },
         );
         if (ok) {
