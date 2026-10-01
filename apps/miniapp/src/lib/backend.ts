@@ -146,15 +146,10 @@ export function createBackend(): Backend {
         return meals.map((m) => toRecent(m, (id) => api.photoUrl(id)));
       },
       async mealsInRange(startKey, endKey) {
-        // One call for all meals, filtered client-side by local day key in the
-        // inclusive [startKey, endKey] range (lighter than 7 per-day requests).
-        const { meals } = await api.listMeals();
-        return meals
-          .map((m) => toRecent(m, (id) => api.photoUrl(id)))
-          .filter((m) => {
-            const key = localDayKey(m.when);
-            return key >= startKey && key <= endKey;
-          });
+        // The server filters to the inclusive [startKey, endKey] local-day range,
+        // so the payload is just the week's meals (not the whole history).
+        const { meals } = await api.mealsInRange(startKey, endKey);
+        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id)));
       },
       async mealDates() {
         const { dates } = await api.mealDates();
