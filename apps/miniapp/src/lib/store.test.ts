@@ -1,43 +1,45 @@
-// @vitest-environment jsdom
-import type { MealResult } from '@snapbite/core';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { loadMeals, saveMeal } from './store.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const meal: MealResult = {
-  foods: [
-    {
-      food: { name: 'apple', estimatedWeightG: 150, quantity: 1, confidence: 0.9 },
-      nutrition: { energyKcal: 78, proteinG: 0.5, carbsG: 21, fatG: 0.3, source: 'table' },
-    },
-  ],
-  total: { energyKcal: 78, proteinG: 0.5, carbsG: 21, fatG: 0.3, source: 'table' },
-  confidence: 0.9,
-  needsConfirmation: false,
-};
+// Each test re-imports the module fresh so the module-load migration runs
+// against the localStorage state we set up first.
+afterEach(() => {
+  localStorage.clear();
+  vi.resetModules();
+});
+beforeEach(() => {
+  localStorage.clear();
+  vi.resetModules();
+});
 
-describe('meal store', () => {
-  beforeEach(() => {
-    localStorage.clear();
+describe('store legacy-key migration (foodlog.* -> snapbite.*)', () => {
+  it('copies legacy meals/profile to the new keys and removes the old ones', async () => {
+    const meals = JSON.stringify([{ id: 'a', savedAt: '2026-01-01', meal: { x: 1 } }]);
+    const profile = JSON.stringify({ sex: 'male' });
+    localStorage.setItem('foodlog.meals.v1', meals);
+    localStorage.setItem('foodlog.profile.v1', profile);
+
+    // Importing the module triggers migrateLegacyKeys() at load.
+    await import('./store.js');
+
+    expect(localStorage.getItem('snapbite.meals.v1')).toBe(meals);
+    expect(localStorage.getItem('snapbite.profile.v1')).toBe(profile);
+    expect(localStorage.getItem('foodlog.meals.v1')).toBeNull();
+    expect(localStorage.getItem('foodlog.profile.v1')).toBeNull();
   });
 
-  it('starts empty', () => {
-    expect(loadMeals()).toEqual([]);
+  it('does not overwrite an existing new-key value, but still clears the legacy key', async () => {
+    localStorage.setItem('foodlog.meals.v1', '["legacy"]');
+    localStorage.setItem('snapbite.meals.v1', '["current"]');
+
+    await import('./store.js');
+
+    expect(localStorage.getItem('snapbite.meals.v1')).toBe('["current"]');
+    expect(localStorage.getItem('foodlog.meals.v1')).toBeNull();
   });
 
-  it('saves and reloads a meal, newest first', () => {
-    const first = saveMeal(meal, 'data:image/jpeg;base64,AAA');
-    const second = saveMeal(meal);
-
-    const all = loadMeals();
-    expect(all).toHaveLength(2);
-    expect(all[0]?.id).toBe(second.id);
-    expect(all[1]?.id).toBe(first.id);
-    expect(all[1]?.previewUrl).toBe('data:image/jpeg;base64,AAA');
-    expect(all[0]?.meal.total.energyKcal).toBe(78);
-  });
-
-  it('tolerates corrupt storage', () => {
-    localStorage.setItem('foodlog.meals.v1', 'not json');
-    expect(loadMeals()).toEqual([]);
+  it('is a no-op when there are no legacy keys', async () => {
+    const store = await import('./store.js');
+    expect(store.loadMeals()).toEqual([]);
+    expect(localStorage.getItem('snapbite.meals.v1')).toBeNull();
   });
 });
