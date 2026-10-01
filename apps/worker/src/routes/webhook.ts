@@ -11,7 +11,6 @@ import {
   UserProfile,
   applyAnswer,
   broadcastMessage,
-  broadcastMessageSince,
   computeTargets,
   createProvider,
   decryptSecret,
@@ -240,16 +239,13 @@ function shortTime(ms: number): string {
   return `${new Date(ms).toISOString().replace('T', ' ').slice(0, 16)}Z`;
 }
 
-/** Telegram's edit window — a message can only be edited within ~48h of sending. */
-const EDIT_WINDOW_MS = 48 * 60 * 60 * 1000;
-
 /**
- * `/broadcast` — ADMIN-only. Sends the current changelog to every user. For a
- * user whose last broadcast message is still editable (<48h old), it EDITS that
- * message in place to the newest version instead of sending a new one; otherwise
- * it sends fresh. Best-effort per user; reports a summary to the admin. In a
- * private chat the DM chat id equals the user's Telegram id, so we can reach
- * users we've never stored a chat id for.
+ * `/broadcast` — ADMIN-only. Sends the current changelog to every user as a
+ * fresh, SILENT message (no notification sound/vibration), so frequent beta
+ * updates don't nag. Users already on the current version are skipped so a
+ * re-run doesn't double-send. Best-effort per user; reports a summary to the
+ * admin. In a private chat the DM chat id equals the user's Telegram id, so we
+ * can reach users we've never stored a chat id for.
  */
 async function handleBroadcastCommand(
   c: Context<AppBindings>,
@@ -270,66 +266,32 @@ async function handleBroadcastCommand(
     await bot.sendMessage(parsed.chatId, { text: 'No changelog entry to broadcast.' });
     return;
   }
-  // Fresh sends show just the current release; edits-in-place STACK every
-  // release newer than what that user's message already shows (append, not
-  // rewrite) — so each `broadcastMessageSince` is computed per target below.
   const text = broadcastMessage(entry);
   const db = createDb(c.env.DB);
   const targets = await listBroadcastTargets(db);
   const now = Date.now();
 
-  let edited = 0;
   let sent = 0;
+  let skipped = 0;
   let failed = 0;
 
   for (const t of targets) {
+    // Skip anyone already on this version (so a re-run doesn't double-send).
+    if (t.lastBroadcastVersion === entry.version) {
+      skipped += 1;
+      continue;
+    }
     // The DM chat id: use the stored one if present, else the Telegram user id
     // (equal for private chats).
     const chatId = t.lastBroadcastChatId ?? t.telegramUserId;
     try {
-      const canEdit =
-        t.lastBroadcastMessageId != null &&
-        t.lastBroadcastChatId != null &&
-        t.lastBroadcastAt != null &&
-        now - t.lastBroadcastAt < EDIT_WINDOW_MS &&
-        t.lastBroadcastVersion !== entry.version; // no-op if already on this version
-
-      let messageId: number | null = null;
-      if (canEdit && bot.editMessageText && t.lastBroadcastMessageId != null) {
-        // Append, don't rewrite: stack every release newer than the one this
-        // user's message currently shows, so prior updates stay visible.
-        const stackedText = broadcastMessageSince(t.lastBroadcastVersion);
-        const ok = await bot.editMessageText(
-          t.lastBroadcastChatId as number,
-          t.lastBroadcastMessageId,
-          {
-            text: stackedText,
-          },
-        );
-        if (ok) {
-          messageId = t.lastBroadcastMessageId;
-          edited += 1;
-        }
-      }
-      // Already on this version and still editable → skip (nothing to do).
-      if (
-        messageId == null &&
-        t.lastBroadcastVersion === entry.version &&
-        t.lastBroadcastAt != null &&
-        now - t.lastBroadcastAt < EDIT_WINDOW_MS
-      ) {
+      const res = await bot.sendMessage(chatId, { text, disableNotification: true });
+      const messageId = res.messageId;
+      if (messageId == null) {
+        failed += 1;
         continue;
       }
-      // Edit didn't happen (too old / failed / first time) → send a new message.
-      if (messageId == null) {
-        const res = await bot.sendMessage(chatId, { text });
-        messageId = res.messageId;
-        if (messageId != null) sent += 1;
-        else {
-          failed += 1;
-          continue;
-        }
-      }
+      sent += 1;
       await setBroadcastRef(db, t.id, {
         chatId,
         messageId,
@@ -341,7 +303,7 @@ async function handleBroadcastCommand(
     }
   }
 
-  const summary = `📣 Broadcast v${entry.version} done — ${sent} sent, ${edited} edited, ${failed} failed (of ${targets.length}).`;
+  const summary = `📣 Broadcast v${entry.version} done — ${sent} sent (silent), ${skipped} skipped, ${failed} failed (of ${targets.length}).`;
   // Reply to the command where it was typed, and log a record to the broadcast topic.
   await bot.sendMessage(parsed.chatId, { text: summary });
   await adminNotify(c.env, bot, 'broadcast', summary);

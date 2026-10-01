@@ -971,24 +971,22 @@ describe('/broadcast (admin-gated)', () => {
     expect(lastText(sent)).not.toContain('SnapBite update');
   });
 
-  it('APPENDS newer releases when editing a recent broadcast in place', async () => {
-    const tgId = 7350;
-    // Make the user exist, then seed a prior broadcast at an OLD version that is
-    // still inside the edit window, so the next /broadcast edits in place.
+  it('sends silently and skips users already on the current version', async () => {
+    const freshUser = 7350;
+    const currentUser = 7351;
     const { createDb, upsertUser, setBroadcastRef } = await import('../db/users.js');
-    const { CHANGELOG } = await import('@snapbite/core');
+    const { CURRENT_CHANGELOG } = await import('@snapbite/core');
     const db = createDb(env.DB);
-    const user = await upsertUser(db, { id: tgId });
-    // Pick a version at least two releases behind current so >1 release stacks.
-    const oldVersion = CHANGELOG[2]?.version as string;
-    await setBroadcastRef(db, user.id, {
-      chatId: tgId,
-      messageId: 555,
-      version: oldVersion,
-      at: Date.now() - 60_000, // 1 min ago → well within the 48h edit window
+    await upsertUser(db, { id: freshUser });
+    const u2 = await upsertUser(db, { id: currentUser });
+    // currentUser already received the current version → should be skipped.
+    await setBroadcastRef(db, u2.id, {
+      chatId: currentUser,
+      messageId: 999,
+      version: CURRENT_CHANGELOG?.version as string,
+      at: Date.now() - 60_000,
     });
 
-    // Capturing bot that records edits.
     const sent: Array<{ chatId: number; reply: BotReply }> = [];
     const app = createApp({ botClientFactory: () => mockBot(sent) });
     await app.request(
@@ -997,12 +995,16 @@ describe('/broadcast (admin-gated)', () => {
       env,
     );
 
-    // The edited message (reflected into `sent` by the mock) stacks the current
-    // and the in-between release, under the stacked header, not just the latest.
-    const editedToUser = sent.find((s) => s.chatId === tgId);
-    expect(editedToUser?.reply.text).toContain('SnapBite updates');
-    expect(editedToUser?.reply.text).toContain(`v${CHANGELOG[0]?.version}`);
-    expect(editedToUser?.reply.text).toContain(`v${CHANGELOG[1]?.version}`);
+    // The fresh user gets the update, delivered silently (disableNotification).
+    const toFresh = sent.find((s) => s.chatId === freshUser);
+    expect(toFresh?.reply.text).toContain('SnapBite update');
+    expect(toFresh?.reply.disableNotification).toBe(true);
+    // The already-current user is NOT messaged again.
+    expect(sent.some((s) => s.chatId === currentUser)).toBe(false);
+    // The admin summary mentions silent + skipped.
+    const summary = sent.find((s) => s.chatId === ADMIN_ID);
+    expect(summary?.reply.text).toContain('silent');
+    expect(summary?.reply.text).toContain('skipped');
   });
 });
 

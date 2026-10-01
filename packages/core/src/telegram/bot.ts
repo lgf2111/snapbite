@@ -94,6 +94,8 @@ export interface BotReply {
   replyToMessageId?: number;
   /** When set, posts into a forum/group Topic (Telegram `message_thread_id`). */
   threadId?: number;
+  /** When true, delivers silently (no notification sound/vibration). */
+  disableNotification?: boolean;
 }
 
 export interface BotConfig {

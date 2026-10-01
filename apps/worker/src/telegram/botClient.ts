@@ -61,6 +61,7 @@ export class TelegramBotClient {
       body.reply_parameters = { message_id: reply.replyToMessageId };
     }
     if (reply.threadId != null) body.message_thread_id = reply.threadId;
+    if (reply.disableNotification) body.disable_notification = true;
 
     const res = await this.#fetch(`https://api.telegram.org/bot${this.#token}/sendMessage`, {
       method: 'POST',
