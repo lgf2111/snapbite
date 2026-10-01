@@ -14,6 +14,7 @@ import {
   computeTargets,
   createProvider,
   decryptSecret,
+  goalNudgeLine,
   parseUpdate,
   photoLoggedReply,
   promptFor,
@@ -34,6 +35,7 @@ import {
   getMealDetail,
   recentMealsForUser,
   saveMeal,
+  sumMealsSince,
   updateMeal,
 } from '../db/meals.js';
 import {
@@ -1056,6 +1058,46 @@ interface PhotoJob {
   statusMessageId?: number | null;
 }
 
+/**
+ * Builds the deterministic goal-progress line for a just-logged meal, or null
+ * when the user has no profile/targets (so the confirmation simply omits it).
+ * Sums the day's prior meals (in the user's local day, using their reminder tz
+ * when set, else UTC) and adds this meal — no AI, one cheap query.
+ */
+async function buildGoalNudge(
+  c: Context<AppBindings>,
+  settingsDb: ReturnType<typeof createSettingsDb>,
+  userId: string,
+  settings: { preferencesJson?: string | null } | null | undefined,
+  meal: { total: { energyKcal: number; proteinG: number } },
+): Promise<string | null> {
+  try {
+    const prefs = parsePreferences(settings?.preferencesJson);
+    const profileParsed = prefs.profile ? UserProfile.safeParse(prefs.profile) : undefined;
+    if (!profileParsed?.success) return null;
+    const targets = computeTargets(profileParsed.data);
+
+    // Local day start: shift now by the user's stored tz offset (if any) to find
+    // local midnight, then convert back to a UTC epoch to query loggedAt.
+    const tzOffsetMinutes = prefs.reminders?.tzOffsetMinutes ?? 0;
+    const nowLocal = Date.now() - tzOffsetMinutes * 60_000;
+    const localMidnight = new Date(nowLocal);
+    localMidnight.setUTCHours(0, 0, 0, 0);
+    const sinceMs = localMidnight.getTime() + tzOffsetMinutes * 60_000;
+
+    const mealsDb = createMealsDb(c.env.DB);
+    const prior = await sumMealsSince(mealsDb, userId, sinceMs);
+    return goalNudgeLine({
+      todayKcal: prior.energyKcal + meal.total.energyKcal,
+      todayProteinG: prior.proteinG + meal.total.proteinG,
+      target: { energyKcal: targets.energyKcal, proteinG: targets.proteinG },
+    });
+  } catch {
+    // A nudge is a nicety — never let it break logging.
+    return null;
+  }
+}
+
 /** Downloads the photo, runs the pipeline with the user's key, saves, and replies. */
 async function handlePhoto(
   c: Context<AppBindings>,
@@ -1186,6 +1228,8 @@ async function handlePhoto(
   // can edit it in place later.
   const mealsDb = createMealsDb(c.env.DB);
   const foods = meal.foods.map((f) => f.food.name);
+  // Deterministic goal-progress nudge (no AI) — only for users with a profile.
+  const goalNudge = await buildGoalNudge(c, settingsDb, user.id, settings, meal);
   const reply = photoLoggedReply(
     foods,
     {
@@ -1196,6 +1240,7 @@ async function handlePhoto(
       fiberG: meal.total.fiberG,
     },
     { miniAppUrl },
+    goalNudge,
   );
 
   // Edit the "Analyzing…" message into the result (single transforming message).

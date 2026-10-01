@@ -128,6 +128,47 @@ export async function countMealsSince(
   return rows[0]?.n ?? 0;
 }
 
+/** Macro totals summed across a set of meals. */
+export interface MacroTotals {
+  energyKcal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+}
+
+/**
+ * Sums a user's meal nutrition since `sinceMs` (e.g. local midnight), for the
+ * bot's deterministic "today vs. target" nudge. Reads the per-meal `nutrition`
+ * rows for meals in the window via a single join — no AI, cheap on the free
+ * tier. Returns zeros when there's nothing yet.
+ */
+export async function sumMealsSince(
+  db: MealsDb,
+  userId: string,
+  sinceMs: number,
+): Promise<MacroTotals> {
+  const rows = await db
+    .select({
+      energyKcal: nutrition.energyKcal,
+      proteinG: nutrition.proteinG,
+      carbsG: nutrition.carbsG,
+      fatG: nutrition.fatG,
+    })
+    .from(nutrition)
+    .innerJoin(meals, eq(nutrition.mealId, meals.id))
+    .where(and(eq(meals.userId, userId), gte(meals.loggedAt, sinceMs)));
+
+  return rows.reduce<MacroTotals>(
+    (acc, r) => ({
+      energyKcal: acc.energyKcal + (r.energyKcal ?? 0),
+      proteinG: acc.proteinG + (r.proteinG ?? 0),
+      carbsG: acc.carbsG + (r.carbsG ?? 0),
+      fatG: acc.fatG + (r.fatG ?? 0),
+    }),
+    { energyKcal: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+  );
+}
+
 /** Finds a user's meal by the bot message_id it replied to (for reply-to targeting). */
 export async function findMealByMessageId(
   db: MealsDb,

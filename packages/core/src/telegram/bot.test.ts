@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { mealLoggedMessage, parseUpdate, photoLoggedReply, replyForCommand } from './bot.js';
+import {
+  goalNudgeLine,
+  mealLoggedMessage,
+  parseUpdate,
+  photoLoggedReply,
+  replyForCommand,
+} from './bot.js';
 
 const CONFIG = { miniAppUrl: 'https://app.example.com' };
 
@@ -125,5 +131,58 @@ describe('photoLoggedReply', () => {
     const reply = photoLoggedReply(['soup'], totals, { miniAppUrl: '' });
     expect(reply.replyMarkup).toBeUndefined();
     expect(reply.text).toContain('soup');
+  });
+});
+
+describe('goalNudgeLine', () => {
+  it('shows protein remaining to the goal', () => {
+    const line = goalNudgeLine({
+      todayKcal: 1200,
+      todayProteinG: 96,
+      target: { energyKcal: 2000, proteinG: 150 },
+    });
+    expect(line).toContain('96g protein today');
+    expect(line).toContain('54g to your goal');
+  });
+
+  it('celebrates when the protein goal is met', () => {
+    const line = goalNudgeLine({
+      todayKcal: 1800,
+      todayProteinG: 160,
+      target: { energyKcal: 2000, proteinG: 150 },
+    });
+    expect(line).toContain('hit your 150g goal');
+  });
+
+  it('falls back to calories when there is no protein target', () => {
+    const line = goalNudgeLine({
+      todayKcal: 1200,
+      todayProteinG: 40,
+      target: { energyKcal: 2000, proteinG: 0 },
+    });
+    expect(line).toContain('1200 kcal today');
+    expect(line).toContain('800 to your goal');
+  });
+
+  it('returns null when there are no usable targets', () => {
+    expect(
+      goalNudgeLine({ todayKcal: 500, todayProteinG: 20, target: { energyKcal: 0, proteinG: 0 } }),
+    ).toBeNull();
+    expect(goalNudgeLine(null)).toBeNull();
+  });
+});
+
+describe('photoLoggedReply with a goal nudge', () => {
+  it('appends the nudge line when provided, omits it otherwise', () => {
+    const totals = { energyKcal: 500, proteinG: 30, carbsG: 60, fatG: 12 };
+    const withNudge = photoLoggedReply(
+      ['eggs'],
+      totals,
+      CONFIG,
+      '📊 30g protein today — 120g to your goal.',
+    );
+    expect(withNudge.text).toContain('120g to your goal');
+    const without = photoLoggedReply(['eggs'], totals, CONFIG);
+    expect(without.text).not.toContain('to your goal');
   });
 });
