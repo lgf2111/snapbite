@@ -13,7 +13,7 @@ import {
   saveWeekViewMode,
   weekRange,
 } from '@/lib/weekPrefs';
-import { type DailyTargets, PROVIDER_PRESETS } from '@snapbite/core';
+import { type DailyTargets, type MealResult, PROVIDER_PRESETS } from '@snapbite/core';
 import { Camera, Plus, RefreshCw, Sparkles, Target } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DateSelector } from './DateSelector.js';
@@ -21,6 +21,7 @@ import { MacroLegend, MacroLine } from './MacroLine.js';
 import { ManualMealDialog } from './ManualMealDialog.js';
 import { ProgressRing } from './ProgressRing.js';
 import { SwipeableRow } from './SwipeableRow.js';
+import { ReviseWithAiDialog } from './UpdateWithAi.js';
 
 type ToastKind = 'success' | 'error' | 'info';
 
@@ -44,7 +45,6 @@ interface HomeScreenProps {
   /** Bumped by App after an edit/delete to trigger a revalidation (no remount). */
   refreshSignal: number;
   onOpenMeal: (meal: RecentMeal) => void;
-  onOpenMealWithAi: (meal: RecentMeal) => void;
   onSetGoal: () => void;
   onToast?: (kind: ToastKind, message: string) => void;
 }
@@ -65,12 +65,13 @@ export function HomeScreen({
   onViewChange,
   refreshSignal,
   onOpenMeal,
-  onOpenMealWithAi,
   onSetGoal,
   onToast,
 }: HomeScreenProps) {
   const [addOpen, setAddOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  /** The meal being edited with AI inline from Home (null = dialog closed). */
+  const [aiMeal, setAiMeal] = useState<RecentMeal | null>(null);
 
   // Week definition preference (rolling vs calendar Sun/Mon) from Settings.
   const weekPrefs = useMemo(() => loadWeekPrefs(), []);
@@ -178,6 +179,23 @@ export function HomeScreen({
       refresh();
     } catch (e) {
       onToast?.('error', e instanceof Error ? e.message : 'Could not delete');
+    }
+  }
+
+  /**
+   * Saves the AI-revised draft straight from Home (the quick inline edit). The
+   * revised meal returned by the AI is already a complete, resolved MealResult,
+   * so we persist it directly and refresh — no detour through the edit screen.
+   * To fine-tune foods, the user can still open the meal and edit by hand.
+   */
+  async function handleAiDraft(id: string, revised: MealResult) {
+    try {
+      await backend.update(id, revised);
+      hapticNotify('success');
+      onToast?.('success', 'Meal updated with AI');
+      refresh();
+    } catch (e) {
+      onToast?.('error', e instanceof Error ? e.message : 'Could not update');
     }
   }
 
@@ -383,7 +401,7 @@ export function HomeScreen({
                     aria-label="Update with AI"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onOpenMealWithAi(m);
+                      setAiMeal(m);
                     }}
                   >
                     <Sparkles className="text-primary size-4" />
@@ -403,6 +421,22 @@ export function HomeScreen({
         onLogged={refresh}
         onToast={onToast}
       />
+
+      {/* Inline "Update with AI" straight from a Home row — no detour through
+          the edit screen. The AI returns a complete revised meal, which we save
+          directly. */}
+      {aiMeal && (
+        <ReviseWithAiDialog
+          open={aiMeal !== null}
+          onOpenChange={(open) => {
+            if (!open) setAiMeal(null);
+          }}
+          backend={backend}
+          mealId={aiMeal.id}
+          onDraft={(revised) => void handleAiDraft(aiMeal.id, revised)}
+          {...(onToast ? { onToast } : {})}
+        />
+      )}
     </div>
   );
 }

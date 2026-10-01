@@ -40,8 +40,6 @@ interface MealDetailScreenProps {
   onBack: () => void;
   onChanged: () => void;
   onToast?: (kind: ToastKind, message: string) => void;
-  /** When set, immediately start an AI edit with this instruction on open. */
-  initialAiInstruction?: string | null;
 }
 
 type MacroKey = 'energyKcal' | 'proteinG' | 'carbsG' | 'fatG';
@@ -138,7 +136,6 @@ export function MealDetailScreen({
   onBack,
   onChanged,
   onToast,
-  initialAiInstruction,
 }: MealDetailScreenProps) {
   // Seed instantly from a cached full detail if present, else from the Home
   // summary, so there's no "Loading…" flash when opening a meal.
@@ -210,14 +207,6 @@ export function MealDetailScreen({
       active = false;
     };
   }, [backend, detail]);
-
-  // Opened in "AI mode" from the Home sparkle button? Auto-open the AI dialog.
-  // The marker is a non-null instruction (an empty string means "AI mode, no
-  // prefilled text"); only a plain open passes null, so check against null —
-  // not truthiness, which would miss the empty-string case.
-  useEffect(() => {
-    if (initialAiInstruction != null && detail) setAiOpen(true);
-  }, [initialAiInstruction, detail]);
 
   // Release the preview object URL if we unmount while it's still open.
   useEffect(() => {
@@ -633,7 +622,6 @@ export function MealDetailScreen({
             onOpenChange={setAiOpen}
             backend={backend}
             mealId={mealId}
-            initialInstruction={initialAiInstruction ?? ''}
             onDraft={(revised) => applyAiDraft(revised)}
             {...(onToast ? { onToast } : {})}
           />

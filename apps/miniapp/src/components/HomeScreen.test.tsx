@@ -1,6 +1,6 @@
 import type { Backend, RecentMeal } from '@/lib/backend';
 import { clearCache } from '@/lib/cache';
-import type { DailyTargets } from '@snapbite/core';
+import type { DailyTargets, MealResult } from '@snapbite/core';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -58,7 +58,6 @@ function props(backend: Backend, over: Record<string, unknown> = {}) {
     onViewChange: vi.fn(),
     refreshSignal: 0,
     onOpenMeal: vi.fn(),
-    onOpenMealWithAi: vi.fn(),
     onSetGoal: vi.fn(),
     ...over,
   };
@@ -143,5 +142,42 @@ describe('HomeScreen', () => {
     await userEvent.click(avg);
     expect(screen.getByText(/daily average/i)).toBeInTheDocument();
     expect(avg).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('edits a meal with AI inline from Home (no navigation)', async () => {
+    const draft: MealResult = {
+      foods: [
+        {
+          food: { name: 'Laksa', estimatedWeightG: 400, quantity: 2, confidence: 0.8 },
+          nutrition: { energyKcal: 1000, proteinG: 40, carbsG: 90, fatG: 40, source: 'mixed' },
+        },
+      ],
+      total: { energyKcal: 1000, proteinG: 40, carbsG: 90, fatG: 40, source: 'mixed' },
+      confidence: 0.8,
+      needsConfirmation: false,
+    };
+    const reviseDraft = vi.fn(async () => draft);
+    const update = vi.fn(async () => {});
+    const onOpenMeal = vi.fn();
+    const backend = stubBackend({
+      mealsByDate: vi.fn(async () => [meal({ id: 'x', label: 'Laksa' })]),
+      reviseDraft,
+      update,
+    });
+    render(<HomeScreen {...props(backend, { onOpenMeal })} />);
+
+    // Tap the sparkle button on the row — it should open the AI dialog here,
+    // NOT navigate to the edit screen.
+    const aiBtn = await screen.findByRole('button', { name: 'Update with AI' });
+    await userEvent.click(aiBtn);
+    expect(onOpenMeal).not.toHaveBeenCalled();
+
+    // Describe the change and apply.
+    const input = await screen.findByPlaceholderText(/describe the change/i);
+    await userEvent.type(input, 'the portion was double');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await waitFor(() => expect(reviseDraft).toHaveBeenCalledWith('x', 'the portion was double'));
+    await waitFor(() => expect(update).toHaveBeenCalledWith('x', draft));
   });
 });
