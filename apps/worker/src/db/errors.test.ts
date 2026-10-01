@@ -1,6 +1,13 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import { describeError, logError, recentErrors } from './errors.js';
+import {
+  createErrorsDb,
+  describeError,
+  logError,
+  pruneErrorsOlderThan,
+  recentErrors,
+} from './errors.js';
+import { errorLogs } from './schema.js';
 
 describe('logError / recentErrors', () => {
   it('persists an error and reads it back newest-first', async () => {
@@ -32,6 +39,43 @@ describe('logError / recentErrors', () => {
     const found = rows.find((r) => r.source === 'api' && r.message.startsWith('x'));
     expect(found?.message.length).toBeLessThanOrEqual(2000);
     expect((found?.detail ?? '').length).toBeLessThanOrEqual(2000);
+  });
+});
+
+describe('pruneErrorsOlderThan', () => {
+  it('deletes rows older than the cutoff and keeps newer ones', async () => {
+    const db = createErrorsDb(env.DB);
+    const now = Date.now();
+    const old = now - 40 * 24 * 60 * 60 * 1000; // 40 days ago
+    await db.insert(errorLogs).values([
+      {
+        id: crypto.randomUUID(),
+        createdAt: old,
+        source: 'prunetest',
+        kind: 'old',
+        message: 'ancient',
+      },
+      {
+        id: crypto.randomUUID(),
+        createdAt: now,
+        source: 'prunetest',
+        kind: 'new',
+        message: 'fresh',
+      },
+    ]);
+
+    const cutoff = now - 30 * 24 * 60 * 60 * 1000; // 30-day retention
+    const removed = await pruneErrorsOlderThan(env.DB, cutoff);
+    expect(removed).toBeGreaterThanOrEqual(1);
+
+    const rows = await recentErrors(env.DB, 100);
+    const mine = rows.filter((r) => r.source === 'prunetest');
+    expect(mine.some((r) => r.message === 'ancient')).toBe(false);
+    expect(mine.some((r) => r.message === 'fresh')).toBe(true);
+  });
+
+  it('never throws (best-effort)', async () => {
+    await expect(pruneErrorsOlderThan(env.DB, Date.now())).resolves.toBeTypeOf('number');
   });
 });
 

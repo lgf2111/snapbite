@@ -1,4 +1,4 @@
-import { desc } from 'drizzle-orm';
+import { desc, lt } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { type ErrorLogRow, errorLogs } from './schema.js';
 
@@ -59,6 +59,28 @@ export async function recentErrors(d1: D1Database, limit = 10): Promise<ErrorLog
     return await db.select().from(errorLogs).orderBy(desc(errorLogs.createdAt)).limit(limit);
   } catch {
     return [];
+  }
+}
+
+/** Default retention for error_logs: rows older than this are pruned by the cron. */
+export const ERROR_LOG_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+/**
+ * Deletes error_logs rows older than `cutoffMs` (epoch ms). Best-effort: never
+ * throws (a retention sweep must not break the cron). Returns the number of
+ * rows removed when D1 reports it, else 0. Called from the scheduled handler so
+ * the table stays small and comfortably within the free tier.
+ */
+export async function pruneErrorsOlderThan(d1: D1Database, cutoffMs: number): Promise<number> {
+  try {
+    const db = createErrorsDb(d1);
+    const res = await db.delete(errorLogs).where(lt(errorLogs.createdAt, cutoffMs));
+    const meta = (res as { meta?: { changes?: number } }).meta;
+    return meta?.changes ?? 0;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[error_log] prune failed', err);
+    return 0;
   }
 }
 
