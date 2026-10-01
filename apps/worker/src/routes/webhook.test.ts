@@ -370,6 +370,130 @@ describe('POST /webhook', () => {
     expect(lastText(sent).toLowerCase()).toContain('rate limit');
   });
 
+  it('fails over on a Gemini geo-block (400 "location is not supported")', async () => {
+    const tgId = 8310;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
+    const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
+    const setup = createApp();
+    await setup.request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+    await setup.request(
+      '/api/settings/fallback',
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'fallback-key', aiProvider: 'deepseek' }),
+      },
+      env,
+    );
+
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({
+      botClientFactory: () => mockBot(sent),
+      providerFactory: ({ apiKey }) => {
+        if (apiKey === 'fallback-key') return new MockAIProvider();
+        return {
+          id: 'primary',
+          analyzeMeal: async () => {
+            // Gemini's geo-block: HTTP 400 with the location message in `cause`.
+            throw Object.assign(new Error('primary returned HTTP 400'), {
+              kind: 'http',
+              status: 400,
+              cause: JSON.stringify({
+                error: { message: 'User location is not supported for the API use.' },
+              }),
+            });
+          },
+          analyzeText: async () => {
+            throw new Error('n/a');
+          },
+          coachReply: async () => 'ok',
+          reviseMeal: async () => {
+            throw new Error('n/a');
+          },
+        };
+      },
+    });
+
+    const res = await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    // Despite the 400, the geo-block failed over to the working fallback.
+    expect(lastText(sent)).toContain('Logged');
+    const list = (await (
+      await createApp().request('/api/meals', { headers: { [INIT_DATA_HEADER]: initData } }, env)
+    ).json()) as { meals: Array<{ aiProvider: string | null }> };
+    expect(list.meals[0]?.aiProvider).toBe('deepseek');
+  });
+
+  it('shows a region-specific message on a geo-block with no fallback', async () => {
+    const tgId = 8311;
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
+    const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ apiKey: 'primary-key', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const app = createApp({
+      botClientFactory: () => mockBot(sent),
+      providerFactory: () => ({
+        id: 'primary',
+        analyzeMeal: async () => {
+          throw Object.assign(new Error('primary returned HTTP 400'), {
+            kind: 'http',
+            status: 400,
+            cause: JSON.stringify({
+              error: { message: 'User location is not supported for the API use.' },
+            }),
+          });
+        },
+        analyzeText: async () => {
+          throw new Error('n/a');
+        },
+        coachReply: async () => 'ok',
+        reviseMeal: async () => {
+          throw new Error('n/a');
+        },
+      }),
+    });
+
+    const res = await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(lastText(sent)).not.toContain('Logged');
+    expect(lastText(sent).toLowerCase()).toContain('region');
+  });
+
   it('retries a transient 503 on the primary, then succeeds', async () => {
     const tgId = 8303;
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });

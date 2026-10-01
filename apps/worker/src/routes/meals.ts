@@ -95,6 +95,21 @@ function extractProviderMessage(cause: unknown): string | undefined {
 }
 
 /**
+ * Rewrites known provider error details into clear, actionable guidance for the
+ * Mini App. Currently handles the geographic block (Gemini's "User location is
+ * not supported for the API use", HTTP 400 FAILED_PRECONDITION) — recoverable
+ * by switching to a provider without that restriction. Any other message is
+ * returned unchanged. `detail` is the message + any JSON cause text.
+ */
+function friendlyProviderDetail(detail: string | undefined, message?: string): string | undefined {
+  const raw = `${detail ?? ''} ${message ?? ''}`;
+  if (/location is not supported|user location|not available in your/i.test(raw)) {
+    return "Your AI provider isn't available in this region (it reported your location isn't supported — common with Google Gemini). Switch to OpenAI or DeepSeek in Settings and try again.";
+  }
+  return detail;
+}
+
+/**
  * Meal routes. `analyze` runs the real AI pipeline using the user's decrypted
  * BYOK key and returns an editable MealResult; the uploaded image bytes are
  * used only for the request and then dropped (never persisted).
@@ -171,7 +186,8 @@ export function mealsRoutes(
       return c.json(
         {
           error: 'Analysis failed',
-          detail: providerDetail ?? e.message ?? 'provider error',
+          detail:
+            friendlyProviderDetail(providerDetail, e.message) ?? e.message ?? 'provider error',
           kind: e.kind ?? null,
         },
         status,
@@ -374,7 +390,8 @@ export function mealsRoutes(
       return c.json(
         {
           error: 'Revision failed',
-          detail: providerDetail ?? e.message ?? 'provider error',
+          detail:
+            friendlyProviderDetail(providerDetail, e.message) ?? e.message ?? 'provider error',
           kind: e.kind ?? null,
         },
         status,
