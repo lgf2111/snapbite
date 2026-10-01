@@ -103,3 +103,13 @@ describe('MockAIProvider.reviseMeal', () => {
     expect(mock.lastRevision?.instruction).toBe('double the rice');
   });
 });
+
+describe('REVISE_SYSTEM_PROMPT', () => {
+  it('instructs scaling to a 1/N share and noting the pax count in the title', () => {
+    // The shared-meal rule: divide macros by N AND annotate the title so it's
+    // clear only one person's portion was logged.
+    expect(REVISE_SYSTEM_PROMPT.toLowerCase()).toContain('pax');
+    expect(REVISE_SYSTEM_PROMPT).toContain('1/N');
+    expect(REVISE_SYSTEM_PROMPT.toLowerCase()).toContain('title');
+  });
+});

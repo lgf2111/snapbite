@@ -19,6 +19,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.28.0',
+    date: '2026-09-16',
+    notes: [
+      '🍽️ Shared a dish? Tell the bot "divide by 4 pax" (or reply/Update with AI) and it logs just your share',
+      'The meal name shows the split too, e.g. "Pizza (1/4 of 4 pax)", so it\u2019s clear only your portion was counted',
+      'Still an editable estimate — tweak it anytime',
+      'Send /feedback anytime — more coming soon 💙',
+    ],
+  },
+  {
     version: '0.27.1',
     date: '2026-09-16',
     notes: [

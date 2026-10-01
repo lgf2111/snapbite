@@ -137,6 +137,7 @@ Rules:
 - "title" is a SHORT, natural meal name of 2–4 words (under ~24 chars) — update it if the change alters what the meal is.
 - Start from the provided meal and change only what the instruction asks. Keep foods and their values that the instruction does not mention.
 - To add a food, append it with realistic estimates for every field. To remove one, drop it. To change a portion/quantity, adjust "estimatedWeightG"/"quantity" accordingly.
+- SHARED MEAL / "divide by N pax": if the user says the meal was split between N people (e.g. "divide by 4 pax", "split between 3", "shared by 2") and they only ate their share, scale EVERY food down to a 1/N portion — reduce each "estimatedWeightG" (and/or "quantity") and keep "aiNutrition" per 100 g unchanged — AND append the share to the title in parentheses so it's clear only one person's portion was logged, e.g. "Pizza (1/4 of 4 pax)" or "Steamboat (my share of 3)". Keep the whole title under ~24 characters; if it would be too long, use a compact form like "Pizza (÷4)".
 - Every field is required for each remaining food; never leave "name" empty or omit "estimatedWeightG".
 - "estimatedWeightG" is the realistic total weight in grams of that food (a number > 0).
 - "aiNutrition" is your best rough estimate of that food's nutrition PER 100 GRAMS (not per portion): energyKcal, proteinG, carbsG, fatG, all numbers >= 0. Include "fiberG" (per 100 g, >= 0) when you reasonably can.
