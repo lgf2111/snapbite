@@ -113,6 +113,10 @@ export interface Backend {
   sendFeedback(message: string): Promise<void>;
   /** Stores the opt-in meal reminder config; returns fresh settings. */
   saveReminders(enabled: boolean, times: Record<string, string>): Promise<SettingsView>;
+  /** Opts in/out of adaptive calorie targets; returns fresh settings. */
+  saveAdaptive(enabled: boolean): Promise<SettingsView>;
+  /** Records a bodyweight check-in (kg); returns fresh settings. */
+  logWeight(kg: number): Promise<SettingsView>;
 }
 
 export function createBackend(): Backend {
@@ -219,6 +223,18 @@ export function createBackend(): Backend {
       },
       async saveReminders(enabled, times) {
         await api.saveReminders(enabled, times);
+        const s = await api.getSettings();
+        setCached(cacheKey.settings(), s);
+        return s;
+      },
+      async saveAdaptive(enabled) {
+        await api.saveAdaptive(enabled);
+        const s = await api.getSettings();
+        setCached(cacheKey.settings(), s);
+        return s;
+      },
+      async logWeight(kg) {
+        await api.logWeight(kg);
         const s = await api.getSettings();
         setCached(cacheKey.settings(), s);
         return s;
@@ -349,6 +365,16 @@ export function createBackend(): Backend {
     async saveReminders(enabled, times) {
       const s = localMockSettings();
       return { ...s, reminders: { enabled, times, tzOffsetMinutes: 0 } };
+    },
+    // Adaptive targets need the Worker (weekly cron). Reflect the choice back
+    // in local mode so the UI stays consistent, but nothing is scheduled.
+    async saveAdaptive(enabled) {
+      const s = localMockSettings();
+      return { ...s, adaptive: { enabled, tzOffsetMinutes: 0 } };
+    },
+    async logWeight(kg) {
+      const s = localMockSettings();
+      return { ...s, latestWeightKg: kg };
     },
   };
 }

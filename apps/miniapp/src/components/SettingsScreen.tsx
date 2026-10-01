@@ -179,6 +179,12 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   });
   const [savedTimes, setSavedTimes] = useState<Record<string, string>>(DEFAULT_REMINDER_TIMES);
   const [savingReminders, setSavingReminders] = useState(false);
+  // Adaptive targets (opt-in) + a quick weight check-in.
+  const [adaptiveOn, setAdaptiveOn] = useState(false);
+  const [savingAdaptive, setSavingAdaptive] = useState(false);
+  const [latestWeightKg, setLatestWeightKg] = useState<number | null>(null);
+  const [weightInput, setWeightInput] = useState('');
+  const [savingWeight, setSavingWeight] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -218,6 +224,8 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
         );
       }
       setFbEnabled(Boolean(s.fallbackEnabled));
+      setAdaptiveOn(Boolean(s.adaptive?.enabled));
+      setLatestWeightKg(s.latestWeightKg ?? null);
       hydrateReminders(s);
     };
 
@@ -465,6 +473,43 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     setSlotOn((prev) => ({ ...prev, [label]: on }));
   }
 
+  /** Opts in/out of adaptive targets (persists immediately). */
+  async function toggleAdaptive(on: boolean) {
+    setAdaptiveOn(on);
+    setSavingAdaptive(true);
+    try {
+      const updated = await backend.saveAdaptive(on);
+      setSettings(updated);
+      toast.success(on ? 'Adaptive targets on' : 'Adaptive targets off');
+    } catch (e) {
+      setAdaptiveOn(!on); // revert on failure
+      toast.error(e instanceof Error ? e.message : 'Could not update adaptive targets');
+    } finally {
+      setSavingAdaptive(false);
+    }
+  }
+
+  /** Records a bodyweight check-in from the input (accepts kg; strips a unit). */
+  async function submitWeight() {
+    const kg = Number.parseFloat(weightInput.replace(/[^\d.]/g, ''));
+    if (!Number.isFinite(kg) || kg < 25 || kg > 400) {
+      toast.error('Enter a weight in kg (25–400).');
+      return;
+    }
+    setSavingWeight(true);
+    try {
+      const updated = await backend.logWeight(kg);
+      setSettings(updated);
+      setLatestWeightKg(updated.latestWeightKg ?? kg);
+      setWeightInput('');
+      toast.success('Weight logged');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not log weight');
+    } finally {
+      setSavingWeight(false);
+    }
+  }
+
   function handleReminderTimeChange(label: string, value: string) {
     // Snap to the nearest 15-min slot: the cron only checks every 15 min, so
     // picking 08:07 would silently behave like 08:15. Snapping keeps what the
@@ -585,6 +630,53 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             >
               {savingReminders ? 'Saving…' : 'Save changes'}
             </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Target className="text-primary size-5" />
+              <span className="font-medium">Adaptive targets</span>
+            </div>
+            <Switch
+              aria-label="Enable adaptive targets"
+              checked={adaptiveOn}
+              disabled={savingAdaptive}
+              onCheckedChange={(on) => void toggleAdaptive(on)}
+            />
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Log your weight now and then and SnapBite learns your real daily burn, nudging your
+            calorie goal once a week to match what your logging + weight trend actually show. It's a
+            deterministic estimate (no AI) and stays editable.
+          </p>
+          <div className="flex items-end gap-2 pt-1">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Label htmlFor="weight-input">Log weight (kg)</Label>
+              <Input
+                id="weight-input"
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                placeholder={latestWeightKg != null ? String(latestWeightKg) : 'e.g. 72.5'}
+                value={weightInput}
+                disabled={savingWeight}
+                onChange={(e) => setWeightInput(e.target.value)}
+              />
+            </div>
+            <Button
+              variant="secondary"
+              disabled={savingWeight || !weightInput.trim()}
+              onClick={() => void submitWeight()}
+            >
+              {savingWeight ? 'Saving…' : 'Log'}
+            </Button>
+          </div>
+          {latestWeightKg != null && (
+            <p className="text-muted-foreground text-xs">Last logged: {latestWeightKg} kg</p>
           )}
         </CardContent>
       </Card>
