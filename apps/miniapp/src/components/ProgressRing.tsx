@@ -74,7 +74,10 @@ export function ProgressRing({
             style={{ transition: 'stroke-dashoffset 400ms ease' }}
           />
         </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center leading-none"
+          aria-hidden="true"
+        >
           {icon && <span className="text-sm">{icon}</span>}
           <span className={cn('font-bold', size >= 96 ? 'text-lg' : 'text-sm')}>
             {over ? Math.abs(remaining) : Math.max(0, remaining)}
