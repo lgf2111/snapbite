@@ -48,7 +48,6 @@ export function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailMeal, setDetailMeal] = useState<RecentMeal | null>(null);
-  const [detailAiInstruction, setDetailAiInstruction] = useState<string | null>(null);
   // Bumped to tell Home to revalidate after a detail-screen edit/delete.
   // (A signal, NOT a remount key — so Home keeps its selected day/view.)
   const [homeVersion, setHomeVersion] = useState(0);
@@ -91,12 +90,6 @@ export function App() {
   }, [hasProfile, onboardingSkipped]);
 
   const openMeal = (meal: RecentMeal) => {
-    setDetailAiInstruction(null);
-    setDetailMeal(meal);
-    setDetailId(meal.id);
-  };
-  const openMealWithAi = (meal: RecentMeal) => {
-    setDetailAiInstruction('');
     setDetailMeal(meal);
     setDetailId(meal.id);
   };
@@ -139,7 +132,6 @@ export function App() {
             }}
             onChanged={() => setHomeVersion((v) => v + 1)}
             onToast={toastFn}
-            initialAiInstruction={detailAiInstruction}
           />
         </Suspense>
         <Toaster />
@@ -165,7 +157,6 @@ export function App() {
               onViewChange={setHomeView}
               refreshSignal={homeVersion}
               onOpenMeal={openMeal}
-              onOpenMealWithAi={openMealWithAi}
               onSetGoal={() => setShowOnboarding(true)}
               onToast={toastFn}
             />

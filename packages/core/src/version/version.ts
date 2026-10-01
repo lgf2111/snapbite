@@ -22,7 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '0.27.1',
     date: '2026-09-16',
     notes: [
-      '🐛 Fixed the ✨ "Update with AI" button on the Home list — it now pops the edit box open straight away instead of just taking you to the meal',
+      '✨ The "Update with AI" button on the Home list now edits right there — type your change, and it applies without opening the meal first',
       'Send /feedback anytime — more coming soon 💙',
     ],
   },
