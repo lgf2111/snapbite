@@ -284,6 +284,40 @@ describe('GET /api/meals?date= and /api/meals/dates', () => {
     const body = (await res.json()) as { meals: unknown[] };
     expect(body.meals).toEqual([]);
   });
+
+  it('includes a meal within an inclusive from/to range', async () => {
+    const tgId = 4103;
+    const app = createApp();
+    await app.request(
+      '/api/meals',
+      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ meal }) },
+      env,
+    );
+    const res = await app.request(
+      '/api/meals?from=2000-01-01&to=2999-12-31',
+      { headers: await headers(tgId) },
+      env,
+    );
+    const body = (await res.json()) as { meals: unknown[] };
+    expect(body.meals.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('excludes a meal outside the from/to range', async () => {
+    const tgId = 4104;
+    const app = createApp();
+    await app.request(
+      '/api/meals',
+      { method: 'POST', headers: await headers(tgId), body: JSON.stringify({ meal }) },
+      env,
+    );
+    const res = await app.request(
+      '/api/meals?from=1999-01-01&to=1999-12-31',
+      { headers: await headers(tgId) },
+      env,
+    );
+    const body = (await res.json()) as { meals: unknown[] };
+    expect(body.meals).toEqual([]);
+  });
 });
 
 describe('POST /api/meals + GET /api/meals', () => {

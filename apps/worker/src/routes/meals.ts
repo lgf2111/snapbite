@@ -230,11 +230,21 @@ export function mealsRoutes(
     const limitParam = Number.parseInt(c.req.query('limit') ?? '', 10);
     const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 200) : 50;
     const date = c.req.query('date');
+    const from = c.req.query('from');
+    const to = c.req.query('to');
     const tz = parseTzOffset(c.req.query('tz'));
+    const scoped = Boolean(date || from || to);
 
-    let summaries = await listMeals(db, c.get('userId'), date ? 500 : limit);
+    let summaries = await listMeals(db, c.get('userId'), scoped ? 500 : limit);
     if (date) {
       summaries = summaries.filter((m) => localDayKey(m.loggedAt, tz) === date);
+    } else if (from || to) {
+      // Inclusive [from, to] local-day-key range (either bound optional) — used
+      // by the weekly view so the server filters instead of shipping everything.
+      summaries = summaries.filter((m) => {
+        const key = localDayKey(m.loggedAt, tz);
+        return (!from || key >= from) && (!to || key <= to);
+      });
     }
     return c.json({ meals: summaries, groups: groupByDay(summaries, tz) });
   });

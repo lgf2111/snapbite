@@ -247,6 +247,19 @@ export class ApiClient {
     return this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>(`/api/meals?${params}`);
   }
 
+  /** Meals within an inclusive local-day-key range (server-side filtered). */
+  mealsInRange(
+    startKey: string,
+    endKey: string,
+  ): Promise<{ meals: MealSummary[]; groups: DayGroup[] }> {
+    const params = new URLSearchParams({
+      tz: String(tzOffsetMinutes()),
+      from: startKey,
+      to: endKey,
+    });
+    return this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>(`/api/meals?${params}`);
+  }
+
   /** Distinct days (YYYY-MM-DD) that have meals — for calendar dots. */
   mealDates(): Promise<{ dates: string[] }> {
     return this.#request<{ dates: string[] }>(`/api/meals/dates?tz=${tzOffsetMinutes()}`);
