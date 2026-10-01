@@ -62,6 +62,11 @@ shown as an **estimate** and is always **editable**.
 
 - **Personalized daily targets** — set your profile and goal to get daily calorie and macro targets,
   computed deterministically (no AI).
+- **Adaptive targets (opt-in)** — log your weight now and then (send `/weight 72.5`, or just message
+  "72.5 kg"), and once a week SnapBite measures your *real* daily burn from your logged intake vs. your
+  smoothed weight trend and gently nudges your calorie goal toward it. All deterministic math (no AI,
+  no server cost); it's an estimate you can always override, and your fixed Mifflin-St Jeor target
+  stays the default until you turn adaptive on.
 - **Set up by chat** — send `/setup` to the bot and answer a few questions (sex, date of birth,
   height, weight, activity, goal) to get your targets without opening the Mini App. `/cancel` stops
   anytime.

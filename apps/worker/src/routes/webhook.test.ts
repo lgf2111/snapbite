@@ -951,6 +951,75 @@ describe('plain-text revise of the last meal', () => {
   });
 });
 
+describe('weight check-ins', () => {
+  async function readWeights(tgId: number) {
+    const { createSettingsDb, getSettings, parsePreferences } = await import('../db/settings.js');
+    const { createDb, upsertUser } = await import('../db/users.js');
+    const user = await upsertUser(createDb(env.DB), { id: tgId });
+    const prefs = parsePreferences(
+      (await getSettings(createSettingsDb(env.DB), user.id))?.preferencesJson,
+    );
+    return (prefs.weights as Array<{ kg: number }> | undefined) ?? [];
+  }
+
+  it('records a bare "72.5 kg" message as a weight check-in', async () => {
+    const tgId = 9400;
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '72.5 kg', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(lastText(sent)).toContain('Logged 72.5 kg');
+    const weights = await readWeights(tgId);
+    expect(weights.at(-1)?.kg).toBe(72.5);
+  });
+
+  it('records /weight 158 lb (converted to kg)', async () => {
+    const tgId = 9401;
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/weight 158 lb', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(lastText(sent)).toContain('kg');
+    const weights = await readWeights(tgId);
+    expect(weights.at(-1)?.kg).toBeGreaterThan(71); // 158 lb ≈ 71.7 kg
+    expect(weights.at(-1)?.kg).toBeLessThan(72.5);
+  });
+
+  it('does NOT treat a food description as a weight', async () => {
+    const tgId = 9402;
+    // Give them a key so a text meal would actually try to log.
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'k', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: 'log 2 eggs and toast', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    // Logged as a MEAL, not a weight.
+    expect(lastText(sent)).toContain('Logged');
+    expect(lastText(sent)).not.toContain('kg');
+    expect(await readWeights(tgId)).toHaveLength(0);
+  });
+});
+
 describe('text meal logging', () => {
   async function keyedUser(tgId: number) {
     const user = JSON.stringify({ id: tgId, first_name: 'Ada' });

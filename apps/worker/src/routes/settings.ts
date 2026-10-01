@@ -13,6 +13,7 @@ import {
 } from '@snapbite/core';
 import { Hono } from 'hono';
 import {
+  type AdaptiveConfig,
   type Preferences,
   type ReminderConfig,
   createSettingsDb,
@@ -144,6 +145,12 @@ export function settingsRoutes() {
       fallbackSupportsDetail: fb?.supportsDetail ?? false,
       // Opt-in meal reminders (see §15).
       reminders: prefs.reminders ?? null,
+      // Opt-in adaptive calorie targets + the latest weight check-in.
+      adaptive: prefs.adaptive ?? null,
+      latestWeightKg:
+        Array.isArray(prefs.weights) && prefs.weights.length > 0
+          ? (prefs.weights[prefs.weights.length - 1]?.kg ?? null)
+          : null,
     });
   });
 
@@ -184,6 +191,34 @@ export function settingsRoutes() {
     };
     await mergePreferences(db, c.get('userId'), { reminders });
     return c.json({ ok: true, reminders });
+  });
+
+  // PUT /api/settings/adaptive — opt in/out of adaptive calorie targets.
+  // Body: { enabled: boolean, tzOffsetMinutes?: number }. No key needed.
+  app.put('/adaptive', async (c) => {
+    let body: { enabled?: unknown; tzOffsetMinutes?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
+    }
+    const enabled = body.enabled === true;
+    const tzOffsetMinutes =
+      typeof body.tzOffsetMinutes === 'number' && Number.isFinite(body.tzOffsetMinutes)
+        ? body.tzOffsetMinutes
+        : 0;
+    const db = createSettingsDb(c.env.DB);
+    // Preserve the weekly dedup stamp so toggling doesn't force an immediate re-run.
+    const existing = parsePreferences(
+      (await getSettings(db, c.get('userId')))?.preferencesJson,
+    ).adaptive;
+    const adaptive: AdaptiveConfig = {
+      enabled,
+      tzOffsetMinutes,
+      ...(existing?.lastCheckinKey ? { lastCheckinKey: existing.lastCheckinKey } : {}),
+    };
+    await mergePreferences(db, c.get('userId'), { adaptive });
+    return c.json({ ok: true, adaptive });
   });
 
   // PUT /api/settings/profile — store the user's profile + goal (no key needed).

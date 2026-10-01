@@ -21,6 +21,7 @@ import {
   replyForCommand,
   resolveMeal,
   startOnboarding,
+  weightTrend,
 } from '@snapbite/core';
 import { type Context, Hono } from 'hono';
 import { adminNotify } from '../adminNotify.js';
@@ -40,6 +41,7 @@ import {
 } from '../db/meals.js';
 import type { SettingsRow } from '../db/schema.js';
 import {
+  addWeightEntry,
   clearOnboardingState,
   createSettingsDb,
   getOnboardingState,
@@ -180,6 +182,10 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
       await handleSavedCommand(c, bot, parsed);
       return c.json({ ok: true });
     }
+    if (parsed.command === 'weight' && parsed.fromId != null) {
+      await handleWeightCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
     if (parsed.command === 'errors') {
       await handleErrorsCommand(c, bot, parsed);
       return c.json({ ok: true });
@@ -208,6 +214,17 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
       const onboarding = await getOnboardingState(settingsDb, user.id);
       if (onboarding) {
         await handleOnboardingAnswer(c, bot, parsed, user.id, onboarding);
+      } else if (parseWeightKg(parsed.text) != null) {
+        // A bare weight message ("72.5 kg") is a bodyweight check-in — handle it
+        // before the meal-revise/text-log flow so it isn't read as food.
+        await recordWeight(
+          c,
+          bot,
+          settingsDb,
+          user.id,
+          parsed.chatId,
+          parseWeightKg(parsed.text) as number,
+        );
       } else {
         await handleTextRevise(c, bot, providerFactory, parsed);
       }
@@ -448,6 +465,91 @@ async function handleSavedCommand(
     telegramChatId: parsed.chatId,
     telegramMessageId: confirmMessageId,
   });
+}
+
+/**
+ * Parses a bodyweight check-in from a message, returning canonical kilograms or
+ * null when it isn't clearly a weight. Deliberately strict so a food
+ * description ("2 eggs") never looks like a weight: a bare message must be just
+ * a number followed by a unit (kg / kgs / kilos / lb / lbs / pounds), e.g.
+ * "72.5 kg", "72.5kg", "158 lb". A plain number with NO unit is NOT accepted as
+ * a bare message (ambiguous) — use /weight for that.
+ */
+function parseWeightKg(raw: string, unitOptional = false): number | null {
+  const s = raw.trim().toLowerCase();
+  const m = /^(\d{1,3}(?:\.\d{1,2})?)\s*(kg|kgs|kilos?|kilograms?|lb|lbs|pounds?)?$/.exec(s);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const unit = m[2];
+  if (!unit) {
+    if (!unitOptional) return null; // bare number requires a unit outside /weight
+    // /weight 72.5 with no unit: assume kg.
+    return plausibleKg(n) ? round1(n) : null;
+  }
+  const kg = /^(lb|lbs|pounds?)$/.test(unit) ? n / 2.2046226218 : n;
+  return plausibleKg(kg) ? round1(kg) : null;
+}
+
+/** Sanity bound so a stray number isn't stored as a bodyweight. */
+function plausibleKg(kg: number): boolean {
+  return kg >= 25 && kg <= 400;
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/** `/weight [value]` — record a bodyweight check-in (value may omit the unit → kg). */
+async function handleWeightCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const settingsDb = createSettingsDb(c.env.DB);
+  const userDb = createDb(c.env.DB);
+  const user = await upsertUser(userDb, { id: parsed.fromId as number });
+  const arg = parsed.args.trim();
+  if (!arg) {
+    await bot.sendMessage(parsed.chatId, {
+      text: 'Send your weight like /weight 72.5 (kg), or just message "72.5 kg". I use it to learn your real daily burn over time.',
+    });
+    return;
+  }
+  const kg = parseWeightKg(arg, true);
+  if (kg == null) {
+    await bot.sendMessage(parsed.chatId, {
+      text: "That doesn't look like a weight. Try /weight 72.5 or /weight 158 lb.",
+    });
+    return;
+  }
+  await recordWeight(c, bot, settingsDb, user.id, parsed.chatId, kg);
+}
+
+/** Stores a weight check-in and acknowledges it (with the trend when available). */
+async function recordWeight(
+  _c: Context<AppBindings>,
+  bot: BotClient,
+  settingsDb: ReturnType<typeof createSettingsDb>,
+  userId: string,
+  chatId: number,
+  kg: number,
+): Promise<void> {
+  const series = await addWeightEntry(settingsDb, userId, { ts: Date.now(), kg });
+  const prefs = parsePreferences((await getSettings(settingsDb, userId))?.preferencesJson);
+  const adaptiveOn = prefs.adaptive?.enabled === true;
+
+  // Add a trend line once there are a couple of check-ins spanning some time.
+  const trend = weightTrend(series);
+  const trendLine =
+    trend && trend.days >= 1
+      ? `\nTrend: ${trend.endKg} kg (${trend.deltaKg >= 0 ? '+' : ''}${trend.deltaKg} kg over ${Math.round(trend.days)}d).`
+      : '';
+  const tail = adaptiveOn
+    ? " I'll factor it into your weekly adaptive target."
+    : " Turn on adaptive targets in SnapBite → Settings and I'll tune your calorie goal to your real burn.";
+
+  await bot.sendMessage(chatId, { text: `⚖️ Logged ${kg} kg.${trendLine}${tail}` });
 }
 
 /** A numbered list of saved meals with a re-log hint. */

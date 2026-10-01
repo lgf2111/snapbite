@@ -19,6 +19,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.24.0',
+    date: '2026-10-22',
+    notes: [
+      '⚖️ Adaptive targets — log your weight ("/weight 72.5" or just "72.5 kg") and SnapBite learns your real daily burn',
+      'Each week it compares what you ate to your weight trend and gently tunes your calorie goal to match',
+      'Opt in anytime in Settings; it stays an editable estimate and no AI is involved',
+      'Send /feedback anytime — more coming soon 💙',
+    ],
+  },
+  {
     version: '0.23.0',
     date: '2026-10-15',
     notes: [
