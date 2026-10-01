@@ -2,6 +2,7 @@ import type { AIFoodAnalysis } from '../schemas/analysis.js';
 import type {
   AIProvider,
   AnalyzeMealOptions,
+  AnalyzeTextOptions,
   MealImage,
   ReviseMealInput,
   ReviseMealOptions,
@@ -32,6 +33,18 @@ export class MockAIProvider implements AIProvider {
   async analyzeMeal(image: MealImage, _opts?: AnalyzeMealOptions): Promise<AIFoodAnalysis> {
     this.#lastImage = image;
     // Return a fresh clone so callers can mutate without affecting the template.
+    return structuredClone(this.#response);
+  }
+
+  #lastText: string | undefined;
+
+  /** The description passed to the most recent `analyzeText` call, for assertions. */
+  get lastText(): string | undefined {
+    return this.#lastText;
+  }
+
+  async analyzeText(description: string, _opts?: AnalyzeTextOptions): Promise<AIFoodAnalysis> {
+    this.#lastText = description;
     return structuredClone(this.#response);
   }
 

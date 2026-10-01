@@ -38,6 +38,7 @@ import {
   sumMealsSince,
   updateMeal,
 } from '../db/meals.js';
+import type { SettingsRow } from '../db/schema.js';
 import {
   clearOnboardingState,
   createSettingsDb,
@@ -704,6 +705,16 @@ async function handleTextRevise(
 
   const mealsDb = createMealsDb(c.env.DB);
 
+  // New-meal intent: an explicit "log/ate/had …" prefix always logs a NEW meal
+  // from the text (never a revise). The matched prefix is stripped so only the
+  // food description is analyzed. A reply-to always means revise, so a prefixed
+  // reply is treated as revise text (the reply target wins).
+  const newMealDescription = parsed.replyToMessageId == null ? stripLogPrefix(instruction) : null;
+  if (newMealDescription != null) {
+    await logTextMeal(c, bot, providerFactory, parsed, user.id, settings, newMealDescription);
+    return;
+  }
+
   // 1) Reply targeting wins.
   let target: MealTelegramRef | undefined;
   if (parsed.replyToMessageId != null) {
@@ -718,16 +729,9 @@ async function handleTextRevise(
     // 2) Otherwise look at recent meals.
     const recent = await recentMealsForUser(mealsDb, user.id, Date.now() - REVISE_WINDOW_MS, 5);
     if (recent.length === 0) {
-      await bot.sendMessage(chatId, {
-        text: "Send me a meal photo to log it first — then reply with a change and I'll update it.",
-        ...(miniAppUrl
-          ? {
-              replyMarkup: {
-                inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]],
-              },
-            }
-          : {}),
-      });
+      // Nothing recent to revise → treat the message as a NEW meal description
+      // and log it from text (reusing the same AI pipeline as photos).
+      await logTextMeal(c, bot, providerFactory, parsed, user.id, settings, instruction);
       return;
     }
     if (recent.length > 1) {
@@ -795,6 +799,100 @@ async function handleTextRevise(
     // Couldn't edit in place (or it lives in another chat) — send a plain ack so
     // the user still gets confirmation.
     await bot.sendMessage(chatId, { text: '✅ Updated your meal.' });
+  }
+}
+
+/**
+ * If the text starts with an explicit log cue ("log ", "ate ", "had ",
+ * "i ate ", "i had "), returns the remaining food description (trimmed, cue
+ * removed) so it's logged as a NEW meal. Returns null when there's no cue (the
+ * message is then treated as a revise instruction, the existing behavior).
+ */
+function stripLogPrefix(text: string): string | null {
+  const m = /^\s*(?:i\s+)?(?:log(?:ged)?|ate|had|eat|eating)\b[:,\s]+(.+)$/is.exec(text);
+  const rest = m?.[1]?.trim();
+  return rest ? rest : null;
+}
+
+/**
+ * Logs a NEW meal from a plain-text description, reusing the photo pipeline:
+ * analyze (text) → resolve nutrition → reply (with goal nudge) → save. Mirrors
+ * the tail of {@link handlePhoto}, including the ack-then-edit-in-place pattern
+ * and the deterministic goal nudge. Best-effort; surfaces a friendly error.
+ */
+async function logTextMeal(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  providerFactory: ProviderFactory,
+  parsed: ParsedCommand,
+  userId: string,
+  settings: SettingsRow | null | undefined,
+  description: string,
+): Promise<void> {
+  const { chatId } = parsed;
+  const miniAppUrl = c.env.MINI_APP_URL ?? '';
+  if (!c.env.ENCRYPTION_KEY || !settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
+    await bot.sendMessage(chatId, {
+      text: 'Add your AI key first: open SnapBite → Settings, then describe your meal again.',
+      ...(miniAppUrl
+        ? {
+            replyMarkup: {
+              inline_keyboard: [[{ text: '⚙️ Open SnapBite', web_app: { url: miniAppUrl } }]],
+            },
+          }
+        : {}),
+    });
+    return;
+  }
+
+  const apiKey = await decryptSecret(
+    { ciphertext: settings.apiKeyCiphertext, iv: settings.apiKeyIv },
+    c.env.ENCRYPTION_KEY,
+  );
+
+  await bot.sendChatAction?.(chatId, 'typing');
+  const ack = await bot.sendMessage(chatId, { text: '📝 Logging your meal…' });
+  const settingsDb = createSettingsDb(c.env.DB);
+  const mealsDb = createMealsDb(c.env.DB);
+
+  try {
+    const provider = providerFactory(primaryProviderChoice(settings, apiKey));
+    const analysis = await provider.analyzeText(description);
+    const meal = resolveMeal(analysis);
+
+    const foods = meal.foods.map((f) => f.food.name);
+    const goalNudge = await buildGoalNudge(c, settingsDb, userId, settings, meal);
+    const reply = photoLoggedReply(
+      foods,
+      {
+        energyKcal: meal.total.energyKcal,
+        proteinG: meal.total.proteinG,
+        carbsG: meal.total.carbsG,
+        fatG: meal.total.fatG,
+        fiberG: meal.total.fiberG,
+      },
+      { miniAppUrl },
+      goalNudge,
+    );
+    const confirmMessageId = await replyOrEdit(bot, chatId, ack.messageId, reply);
+    await saveMeal(mealsDb, {
+      userId,
+      meal,
+      aiProvider: provider.id,
+      telegramChatId: chatId,
+      telegramMessageId: confirmMessageId,
+    });
+  } catch (err) {
+    const e = err as ProviderErrorLike;
+    const desc = describeError(e);
+    await logError(c.env.DB, {
+      telegramUserId: parsed.fromId,
+      source: 'webhook',
+      kind: desc.kind ?? 'text',
+      status: desc.status ?? null,
+      message: desc.message,
+    });
+    await replyOrEdit(bot, chatId, ack.messageId, { text: friendlyPhotoError(e) });
   }
 }
 

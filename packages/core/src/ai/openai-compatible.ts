@@ -2,13 +2,16 @@ import { AIFoodAnalysis } from '../schemas/analysis.js';
 import {
   REVISE_SYSTEM_PROMPT,
   SYSTEM_PROMPT,
+  TEXT_SYSTEM_PROMPT,
   buildRevisePrompt,
+  buildTextPrompt,
   buildUserPrompt,
 } from './prompt.js';
 import {
   type AIProvider,
   AIProviderError,
   type AnalyzeMealOptions,
+  type AnalyzeTextOptions,
   type MealImage,
   type ReviseMealInput,
   type ReviseMealOptions,
@@ -102,6 +105,14 @@ export class OpenAICompatibleProvider implements AIProvider {
           { type: 'image_url', image_url: imageUrl },
         ],
       },
+    ];
+    return this.#complete(messages, opts.signal);
+  }
+
+  async analyzeText(description: string, opts: AnalyzeTextOptions = {}): Promise<AIFoodAnalysis> {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: TEXT_SYSTEM_PROMPT },
+      { role: 'user', content: buildTextPrompt(description) },
     ];
     return this.#complete(messages, opts.signal);
   }
