@@ -207,6 +207,9 @@ describe('POST /webhook', () => {
           analyzeMeal: async () => {
             throw Object.assign(new Error('quota exceeded'), { kind: 'http', status: 429 });
           },
+          analyzeText: async () => {
+            throw new Error('n/a');
+          },
           reviseMeal: async () => {
             throw new Error('n/a');
           },
@@ -273,6 +276,9 @@ describe('POST /webhook', () => {
               cause: JSON.stringify({ error: { message: 'prepayment credits are needed' } }),
             });
           },
+          analyzeText: async () => {
+            throw new Error('n/a');
+          },
           reviseMeal: async () => {
             throw new Error('n/a');
           },
@@ -334,6 +340,9 @@ describe('POST /webhook', () => {
           analyzeMeal: async () => {
             throw Object.assign(new Error('quota exceeded'), { kind: 'http', status: 429 });
           },
+          analyzeText: async () => {
+            throw new Error('n/a');
+          },
           reviseMeal: async () => {
             throw new Error('n/a');
           },
@@ -385,6 +394,9 @@ describe('POST /webhook', () => {
             if (calls === 1)
               throw Object.assign(new Error('overloaded'), { kind: 'http', status: 503 });
             return mock.analyzeMeal(img);
+          },
+          analyzeText: async () => {
+            throw new Error('n/a');
           },
           reviseMeal: async () => {
             throw new Error('n/a');
@@ -474,6 +486,9 @@ describe('/errors command (admin-gated)', () => {
         id: 'primary',
         analyzeMeal: async () => {
           throw Object.assign(new Error('bad request'), { kind: 'http', status: 400 });
+        },
+        analyzeText: async () => {
+          throw new Error('n/a');
         },
         reviseMeal: async () => {
           throw new Error('n/a');
@@ -692,6 +707,9 @@ describe('per-user photo rate limit', () => {
           analyzed.called = true;
           throw new Error('should not analyze when rate-limited');
         },
+        analyzeText: async () => {
+          throw new Error('n/a');
+        },
         reviseMeal: async () => {
           throw new Error('n/a');
         },
@@ -761,6 +779,9 @@ describe('webhook photo failure logging', () => {
         id: 'primary',
         analyzeMeal: async () => {
           throw Object.assign(new Error('kaboom'), { kind: 'http', status: 400 });
+        },
+        analyzeText: async () => {
+          throw new Error('n/a');
         },
         reviseMeal: async () => {
           throw new Error('n/a');
@@ -930,6 +951,109 @@ describe('plain-text revise of the last meal', () => {
   });
 });
 
+describe('text meal logging', () => {
+  async function keyedUser(tgId: number) {
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'k', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+    return initData;
+  }
+
+  it('logs a NEW meal from a "log …" prefixed message and reads it back', async () => {
+    const tgId = 8900;
+    const initData = await keyedUser(tgId);
+    const { app, sent } = appWithCapture();
+    const res = await app.request(
+      '/webhook',
+      post({ message: { text: 'log two eggs and toast', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(lastText(sent)).toContain('Logged');
+
+    // The meal is persisted and listed (mock analysis = rice + chicken curry).
+    const list = (await (
+      await createApp().request('/api/meals', { headers: { [INIT_DATA_HEADER]: initData } }, env)
+    ).json()) as { meals: Array<{ foods: string[] }> };
+    expect(list.meals.length).toBe(1);
+    expect(list.meals[0]?.foods).toContain('white rice');
+  });
+
+  it('logs a NEW meal from plain text when there is nothing recent to revise', async () => {
+    const tgId = 8901;
+    await keyedUser(tgId);
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: 'a bowl of oatmeal', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    // No recent meal → treated as a new meal and logged (not the old error).
+    expect(lastText(sent)).toContain('Logged');
+    expect(lastText(sent).toLowerCase()).not.toContain('send me a meal photo to log it first');
+  });
+
+  it('still REVISES (not logs new) when replying to a meal, even with a "log" word', async () => {
+    const tgId = 8902;
+    await keyedUser(tgId);
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const bot = mockBot(sent);
+    const app = createApp({
+      botClientFactory: () => bot,
+      providerFactory: () => new MockAIProvider(),
+    });
+    await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    const edits = (bot as unknown as { edits: Array<{ messageId: number }> }).edits;
+    const confirmationId = edits[0]?.messageId;
+
+    await app.request(
+      '/webhook',
+      post({
+        message: {
+          text: 'logged a coke too',
+          chat: { id: tgId },
+          from: { id: tgId },
+          reply_to_message: { message_id: confirmationId },
+        },
+      }),
+      env,
+    );
+    // Reply-to wins → it revised the existing meal (an "Updated" ack), not a 2nd log.
+    const list = (await (
+      await createApp().request(
+        '/api/meals',
+        {
+          headers: {
+            [INIT_DATA_HEADER]: await (async () => {
+              const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+              const authDate = String(Math.floor(Date.now() / 1000));
+              return signInitData({ user, auth_date: authDate }, '123456:LOCAL-DEV-BOT-TOKEN');
+            })(),
+          },
+        },
+        env,
+      )
+    ).json()) as { meals: unknown[] };
+    expect(list.meals.length).toBe(1); // still one meal (revised, not added)
+  });
+});
+
 describe('/broadcast (admin-gated)', () => {
   it('sends the changelog to known users and reports a summary to the admin', async () => {
     // Create a couple of users by having them interact (upsertUser via a message).
@@ -1072,6 +1196,9 @@ describe('barcode → Open Food Facts enrichment', () => {
         providerFactory: () => ({
           id: 'primary',
           analyzeMeal: async () => analysisWithBarcode,
+          analyzeText: async () => {
+            throw new Error('n/a');
+          },
           reviseMeal: async () => {
             throw new Error('n/a');
           },
@@ -1140,6 +1267,9 @@ describe('overload retry by message text (not just status 503)', () => {
               });
             }
             return mock.analyzeMeal(img);
+          },
+          analyzeText: async () => {
+            throw new Error('n/a');
           },
           reviseMeal: async () => {
             throw new Error('n/a');

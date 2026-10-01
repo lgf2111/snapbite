@@ -19,6 +19,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.23.0',
+    date: '2026-10-15',
+    notes: [
+      '💬 Log a meal by text — no photo needed! Just describe it: "two eggs, sourdough toast, half an avocado"',
+      'Start with "log …" (or "ate …"/"had …") to log a new meal; replying to a meal still edits that meal',
+      'Same AI estimate + editable nutrition as photo logging, on your own key',
+      'Send /feedback anytime — more coming soon 💙',
+    ],
+  },
+  {
     version: '0.22.0',
     date: '2026-10-08',
     notes: [

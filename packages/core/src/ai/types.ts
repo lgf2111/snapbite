@@ -42,6 +42,12 @@ export interface AIProvider {
   /** Analyze a meal photo into a validated, pre-nutrition food analysis. */
   analyzeMeal(image: MealImage, opts?: AnalyzeMealOptions): Promise<AIFoodAnalysis>;
   /**
+   * Analyze a plain-text meal DESCRIPTION (no photo) into the same validated,
+   * pre-nutrition food analysis as {@link analyzeMeal}, ready for the nutrition
+   * resolver. Used by the bot's text-logging path.
+   */
+  analyzeText(description: string, opts?: AnalyzeTextOptions): Promise<AIFoodAnalysis>;
+  /**
    * Revise an already-logged meal from a plain-language instruction (no photo).
    * Returns a validated, pre-nutrition food analysis in the same shape as
    * {@link analyzeMeal}, ready to be re-run through the nutrition resolver.
@@ -63,6 +69,12 @@ export type ReviseMealInput = AIFoodAnalysis;
 
 /** Options that tune a single revise call. */
 export interface ReviseMealOptions {
+  /** Abort signal so the transport layer can enforce timeouts. */
+  signal?: AbortSignal;
+}
+
+/** Options that tune a single text-analysis call. */
+export interface AnalyzeTextOptions {
   /** Abort signal so the transport layer can enforce timeouts. */
   signal?: AbortSignal;
 }

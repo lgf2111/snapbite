@@ -91,6 +91,9 @@ describe('POST /api/meals/analyze', () => {
         analyzeMeal: async () => {
           throw Object.assign(new Error('provider down'), { kind: 'network' });
         },
+        analyzeText: async () => {
+          throw new Error('n/a');
+        },
         reviseMeal: async () => {
           throw Object.assign(new Error('provider down'), { kind: 'network' });
         },
@@ -125,6 +128,7 @@ describe('POST /api/meals/:id/revise', () => {
       providerFactory: () => ({
         id: 'stub',
         analyzeMeal: async () => analysis,
+        analyzeText: async () => analysis,
         reviseMeal: async () => analysis,
       }),
     });

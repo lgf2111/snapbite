@@ -77,6 +77,25 @@ describe('DeepSeekProvider', () => {
     expect(result.needsConfirmation).toBe(false);
   });
 
+  it('analyzeText sends a text-only request (no image) and parses the analysis', async () => {
+    const fetchMock = okFetch(envelope(JSON.stringify(validAnalysis)));
+    const provider = new DeepSeekProvider({ apiKey: 'sk-test', fetch: fetchMock });
+
+    const result = await provider.analyzeText('two eggs and sourdough toast');
+    expect(result.foods[0]?.name).toBe('Rice'); // from the canned envelope
+
+    const init = (fetchMock as unknown as { mock: { calls: [string, any][] } }).mock.calls[0][1];
+    const parsed = JSON.parse(init.body);
+    // System message + a plain-STRING user message (no image_url block).
+    expect(parsed.messages[0].role).toBe('system');
+    const user = parsed.messages[1];
+    expect(user.role).toBe('user');
+    expect(typeof user.content).toBe('string');
+    expect(user.content).toContain('two eggs and sourdough toast');
+    expect(JSON.stringify(parsed)).not.toContain('image_url');
+    expect(parsed.response_format).toEqual({ type: 'json_object' });
+  });
+
   it('respects an explicit detail level and custom model/base URL', async () => {
     const fetchMock = okFetch(envelope(JSON.stringify(validAnalysis)));
     const provider = new DeepSeekProvider({

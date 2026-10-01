@@ -7,6 +7,10 @@ shown as an **estimate** and is always **editable**.
 
 - **Snap a photo to the bot** — send a meal photo to the Telegram bot and it's analyzed and logged
   automatically: foods, portions, and per-food nutrition (calories + protein/carbs/fat).
+- **Log by text** — no photo handy? Just describe the meal (e.g. "two eggs, sourdough toast, half an
+  avocado") and it's analyzed and logged the same way. Start with **`log …`** (or `ate …`/`had …`) to
+  force a new meal, or just send a description when you have no recent meal. (Replying to a logged
+  meal still edits that meal — see below.)
 - **One message that transforms** — the "📸 Analyzing your meal…" message is edited in place into
   the "✅ Logged" result, so the chat stays one message per meal instead of a growing thread.
 - **Goal-progress nudge** — if you've set a goal, each logged meal adds one line showing where you
