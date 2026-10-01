@@ -8,3 +8,4 @@ export * from './reminders/index.js';
 export * from './version/index.js';
 export * from './onboarding/index.js';
 export * from './stats/index.js';
+export * from './portion/index.js';

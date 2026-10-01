@@ -306,6 +306,7 @@ export async function updateMeal(
         proteinG: f.nutrition.proteinG,
         carbsG: f.nutrition.carbsG,
         fatG: f.nutrition.fatG,
+        fiberG: f.nutrition.fiberG ?? null,
         nutritionSource: f.nutrition.source,
       }),
     ),
@@ -315,11 +316,62 @@ export async function updateMeal(
       proteinG: meal.total.proteinG,
       carbsG: meal.total.carbsG,
       fatG: meal.total.fatG,
+      fiberG: meal.total.fiberG ?? null,
       source: meal.total.source,
     }),
   ];
   await db.batch(statements as [(typeof statements)[number], ...(typeof statements)[number][]]);
   return true;
+}
+
+/**
+ * Rebuilds a {@link MealResult} from a stored {@link MealDetail}, carrying the
+ * ABSOLUTE per-food macros + the meal total verbatim (no re-resolution). Used by
+ * the one-tap portion rescale so a meal can be scaled deterministically and
+ * written straight back via {@link updateMeal} — no AI, no nutrition resolver.
+ * Foods with no stored nutrition default to zeros tagged `ai_estimate`.
+ */
+export function detailToMealResult(detail: MealDetail): MealResult {
+  const foods = detail.foods.map((f) => ({
+    food: {
+      name: f.name,
+      estimatedWeightG: f.estimatedWeightG ?? 100,
+      ...(f.portion ? { portion: f.portion } : {}),
+      quantity: f.quantity > 0 ? f.quantity : 1,
+      confidence: f.confidence ?? 0.5,
+    },
+    nutrition: {
+      energyKcal: f.energyKcal ?? 0,
+      proteinG: f.proteinG ?? 0,
+      carbsG: f.carbsG ?? 0,
+      fatG: f.fatG ?? 0,
+      ...(f.fiberG != null ? { fiberG: f.fiberG } : {}),
+      source: (f.nutritionSource ?? 'ai_estimate') as MealResult['total']['source'],
+    },
+  }));
+  const total = detail.total ?? {
+    energyKcal: 0,
+    proteinG: 0,
+    carbsG: 0,
+    fatG: 0,
+    fiberG: null,
+    source: 'mixed',
+  };
+  return {
+    foods: foods.length > 0 ? (foods as MealResult['foods']) : [],
+    total: {
+      energyKcal: total.energyKcal,
+      proteinG: total.proteinG,
+      carbsG: total.carbsG,
+      fatG: total.fatG,
+      ...(total.fiberG != null ? { fiberG: total.fiberG } : {}),
+      source: total.source as MealResult['total']['source'],
+    },
+    confidence: detail.confidence ?? 0.5,
+    needsConfirmation: false,
+    ...(detail.title ? { title: detail.title } : {}),
+    ...(detail.notes ? { notes: detail.notes } : {}),
+  } as MealResult;
 }
 
 /**

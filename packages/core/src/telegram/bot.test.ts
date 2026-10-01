@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   goalNudgeLine,
   mealLoggedMessage,
+  parseCallbackQuery,
   parseUpdate,
   photoLoggedReply,
   replyForCommand,
@@ -60,6 +61,43 @@ describe('parseUpdate', () => {
     const parsed = parseUpdate({ message: { text: 'hi', chat: { id: 1 } } });
     expect(parsed?.messageId).toBeNull();
     expect(parsed?.replyToMessageId).toBeNull();
+  });
+});
+
+describe('parseCallbackQuery', () => {
+  it('parses an inline-button tap', () => {
+    const parsed = parseCallbackQuery({
+      callback_query: {
+        id: 'cb1',
+        data: 'rsz:0.5',
+        from: { id: 42 },
+        message: { message_id: 99, chat: { id: 7 } },
+      },
+    });
+    expect(parsed).toEqual({
+      callbackId: 'cb1',
+      fromId: 42,
+      chatId: 7,
+      messageId: 99,
+      data: 'rsz:0.5',
+    });
+  });
+
+  it('returns null for a non-callback update or incomplete fields', () => {
+    expect(parseCallbackQuery({ message: { text: 'hi', chat: { id: 1 } } })).toBeNull();
+    expect(parseCallbackQuery({ callback_query: { id: 'x', from: { id: 1 } } })).toBeNull();
+    expect(
+      parseCallbackQuery({
+        callback_query: { id: 'x', message: { message_id: 1, chat: { id: 2 } } },
+      }),
+    ).toBeNull();
+  });
+
+  it('defaults data to empty string when Telegram omits it', () => {
+    const parsed = parseCallbackQuery({
+      callback_query: { id: 'cb', from: { id: 1 }, message: { message_id: 2, chat: { id: 3 } } },
+    });
+    expect(parsed?.data).toBe('');
   });
 });
 
