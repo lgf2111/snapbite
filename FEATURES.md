@@ -131,10 +131,9 @@ shown as an **estimate** and is always **editable**.
 - **Send feedback** — report a problem or share an idea via `/feedback` in the bot or the "Send
   feedback" dialog in Mini App Settings; it goes straight to the maintainer.
 
-## Beta update notifications
+## Update notifications
 
-- **Versioned changelogs** — as a beta user you get update notifications when new versions ship,
-  framed as beta with frequent updates.
+- **Versioned changelogs** — you get a notification when a new version ships, with what changed.
 - **Quiet updates** — if your previous update message is still recent, it's edited in place to the
   newest version rather than sending you a new message.
 

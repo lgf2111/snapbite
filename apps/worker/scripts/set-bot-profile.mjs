@@ -26,18 +26,18 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..');
 
 /** About line — bot profile page + share previews. Telegram limit: 120 chars. */
-const ABOUT = 'Snap your food. AI logs the calories and macros. Your key, your data.';
+const ABOUT = 'Snap a meal or describe it — AI logs the calories and macros. Your key, your data.';
 
 /** Pre-Start "What can this bot do?" text. Telegram limit: 512 chars. */
-const DESCRIPTION = `Snap a meal → AI estimates calories, protein, carbs & fat → logged. No searching databases.
+const DESCRIPTION = `Send a photo — or just describe what you ate — and get calories, protein, carbs & fat in seconds.
 
-• Reply "add a coke" or "rice was double" to correct it
+• Reply "add a coke" or "the rice was double" to correct it
 • Reads nutrition labels & barcodes
-• Set goals & see daily progress in the Mini App
-• Runs on your own AI key — ~free to use
-• Every value is an editable estimate; your data stays yours
+• Adaptive goals, streaks, weekly recap, and /coach for questions about your own data
+• Runs on your own AI key — a meal costs a fraction of a cent
+• Every value is an editable estimate; no ads, no trackers
 
-Send a meal photo to begin.`;
+Free key in ~1 minute: snapbite.leeguanfeng.com/free-key.html`;
 
 const ABOUT_MAX = 120;
 const DESCRIPTION_MAX = 512;

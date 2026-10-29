@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#17212b" />
+    <title>SnapBite — get a free AI key</title>
+    <meta
+      name="description"
+      content="SnapBite runs on your own AI key. Here is how to get one free in about a minute, and why it works that way."
+    />
+    <link rel="icon" type="image/webp" href="/favicon.webp" />
+    <link rel="apple-touch-icon" href="/icon.png" />
+    <style>
+      :root {
+        --bg: #0f1620; --card: #17212b; --text: #eef3f8; --muted: #9fb2c4;
+        --brand: #3aa0ff; --border: #223140;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg); color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.65; -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 720px; margin: 0 auto; padding: 36px 20px 72px; }
+      a { color: var(--brand); }
+      .back { display: inline-block; margin-bottom: 26px; color: var(--muted); text-decoration: none; font-size: 0.95rem; }
+      .back:hover { color: var(--text); }
+      h1 { font-size: 1.9rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+      .lede { color: var(--muted); margin: 0 0 30px; }
+      h2 { font-size: 1.15rem; margin: 34px 0 10px; }
+      p, li { color: var(--muted); }
+      strong { color: var(--text); font-weight: 600; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; margin: 14px 0; }
+      .card h3 { margin: 0 0 6px; font-size: 1.02rem; color: var(--text); }
+      .card p { margin: 0 0 8px; }
+      .card p:last-child { margin-bottom: 0; }
+      ol { padding-left: 22px; }
+      ol li { margin: 8px 0; }
+      code { background: #0b1119; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 0.9em; }
+      .cta {
+        display: inline-flex; align-items: center; gap: 8px; background: var(--brand);
+        color: #06121f; font-weight: 650; text-decoration: none; padding: 12px 20px;
+        border-radius: 999px; font-size: 1rem; margin-top: 8px;
+      }
+      .note { border-left: 3px solid var(--brand); padding-left: 14px; color: var(--muted); font-size: 0.95rem; }
+      footer { margin-top: 44px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.88rem; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <a class="back" href="/">← SnapBite</a>
+      <h1>Get a free AI key</h1>
+      <p class="lede">About a minute. Free tier is enough for months of logging.</p>
+
+      <p>SnapBite doesn't call an AI on its own bill — it calls the provider <strong>you</strong> choose,
+      with <strong>your</strong> key. That is why it can stay free to run, and why nobody else's usage
+      limits your logging. The key is stored encrypted in SnapBite's database and used only to analyse
+      the meals you send.</p>
+
+      <h2>Easiest: Google Gemini</h2>
+      <div class="card">
+        <h3>1. Open Google AI Studio</h3>
+        <p>Go to <a href="https://aistudio.google.com/apikey" rel="noopener">aistudio.google.com/apikey</a>
+        and sign in with a Google account.</p>
+      </div>
+      <div class="card">
+        <h3>2. Create an API key</h3>
+        <p>Press <strong>Create API key</strong>, pick any project (the default is fine), and copy the
+        string that starts with <code>AIza</code>.</p>
+      </div>
+      <div class="card">
+        <h3>3. Paste it into SnapBite</h3>
+        <p>Open <a href="https://t.me/SnapBiteAI_bot" rel="noopener">@SnapBiteAI_bot</a> → the menu
+        button → <strong>Settings</strong> → choose <strong>Gemini</strong> → paste the key → Save.
+        Then send a meal.</p>
+      </div>
+
+      <h2>Prefer OpenAI or DeepSeek?</h2>
+      <div class="card">
+        <p><strong>OpenAI</strong> — <a href="https://platform.openai.com/api-keys" rel="noopener">platform.openai.com/api-keys</a>.
+        Needs billing set up on the account.</p>
+        <p><strong>DeepSeek</strong> — <a href="https://platform.deepseek.com/api_keys" rel="noopener">platform.deepseek.com/api_keys</a>.
+        Cheap per meal, no free trial.</p>
+        <p>Any OpenAI-compatible endpoint works too: pick <strong>Custom</strong> in Settings and paste
+        the base URL and key.</p>
+      </div>
+
+      <h2>What it costs</h2>
+      <p>A meal is one small vision or text call. On Gemini's free tier that's nothing; on a paid key it
+      is a fraction of a cent per meal. SnapBite itself has no subscription.</p>
+
+      <h2>If it stops working</h2>
+      <ul>
+        <li><strong>Quota or rate limit</strong> — the provider's own limit, not SnapBite's. Add a
+          fallback provider in Settings and SnapBite will switch to it automatically.</li>
+        <li><strong>Wrong region</strong> — some providers refuse some countries. Use a fallback, or a
+          provider that serves yours.</li>
+        <li><strong>Lost the key</strong> — create a new one; paste it over the old one in Settings.</li>
+      </ul>
+
+      <p class="note">You can also log meals without any key: add them by hand in the app, and use
+      targets, streaks and the weekly recap. The key is only needed for AI photo and text analysis.</p>
+
+      <p style="margin-top:26px;"><a class="cta" href="https://t.me/SnapBiteAI_bot" rel="noopener">Open SnapBite in Telegram →</a></p>
+
+      <footer>
+        <p>SnapBite is an independent project, not affiliated with Telegram, Google, OpenAI or DeepSeek.
+        Provider links and free tiers can change; check the provider's own page.</p>
+      </footer>
+    </div>
+  </body>
+</html>

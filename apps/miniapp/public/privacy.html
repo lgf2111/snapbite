@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#17212b" />
+    <title>SnapBite — Privacy</title>
+    <meta
+      name="description"
+      content="What SnapBite stores, what it never stores, and how to delete it. Bring your own AI key; no ads, no trackers, no selling of your data."
+    />
+    <link rel="icon" type="image/webp" href="/favicon.webp" />
+    <link rel="apple-touch-icon" href="/icon.png" />
+    <style>
+      :root {
+        --bg: #0f1620;
+        --card: #17212b;
+        --text: #eef3f8;
+        --muted: #9fb2c4;
+        --brand: #3aa0ff;
+        --border: #223140;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 720px; margin: 0 auto; padding: 36px 20px 72px; }
+      a { color: var(--brand); }
+      .back { display: inline-block; margin-bottom: 26px; color: var(--muted); text-decoration: none; font-size: 0.95rem; }
+      .back:hover { color: var(--text); }
+      h1 { font-size: 1.9rem; margin: 0 0 6px; letter-spacing: -0.02em; }
+      .updated { color: var(--muted); font-size: 0.9rem; margin: 0 0 30px; }
+      h2 { font-size: 1.15rem; margin: 34px 0 10px; letter-spacing: -0.01em; }
+      p, li { color: var(--muted); }
+      strong { color: var(--text); font-weight: 600; }
+      ul { padding-left: 22px; }
+      li { margin: 6px 0; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+      .card p { margin: 0 0 10px; }
+      .card p:last-child { margin-bottom: 0; }
+      footer { margin-top: 44px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.88rem; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <a class="back" href="/">← SnapBite</a>
+      <h1>Privacy</h1>
+      <p class="updated">Last updated 29 October 2026</p>
+
+      <div class="card">
+        <p><strong>The short version.</strong> SnapBite stores the meals you log, the profile you
+        set, and your encrypted AI key so it can read your log back to you. It does not run ads, does
+        not use third-party analytics, and does not sell or share your data. You can delete any meal,
+        or everything, at any time.</p>
+      </div>
+
+      <h2>What is stored</h2>
+      <ul>
+        <li>Your <strong>Telegram user id and chat id</strong>, so the bot knows whose log is whose.</li>
+        <li>Your <strong>meals</strong>: the title, the foods, their estimated nutrition, timestamps,
+          and any note you add. Edits you make are stored too.</li>
+        <li>Your <strong>profile</strong>, if you set one: sex, date of birth, height, weight, activity
+          level and goal. These are used to compute your daily targets.</li>
+        <li>Your <strong>weight check-ins</strong>, if you use adaptive targets.</li>
+        <li>Your <strong>AI provider choice and API key</strong>. The key is encrypted
+          (AES-256-GCM) before it is written to the database and decrypted only in memory while
+          handling your own request. It is never returned to any client and never logged.</li>
+        <li><strong>Saved meals</strong> you star, and the settings you change.</li>
+        <li><strong>Feedback you send</strong> with <code>/feedback</code>, and short error records
+          used to fix faults.</li>
+        <li>For a photo you send: Telegram's <strong>file reference</strong> (<code>file_id</code>),
+          so the same photo can be shown back to you in your log.</li>
+      </ul>
+
+      <h2>What is not stored</h2>
+      <ul>
+        <li><strong>Meal photos themselves.</strong> The image is fetched from Telegram, sent to your
+          AI provider for analysis, and discarded. Only Telegram's own file reference is kept, which
+          means the photo is not hosted by SnapBite.</li>
+        <li><strong>Nothing from other chats.</strong> The bot only reads messages sent to it directly.</li>
+        <li><strong>No ad networks, no third-party analytics, no tracking pixels, no fingerprinting,
+          no contact-list upload.</strong> The web app is a static page; the app itself talks only to
+          SnapBite's own backend.</li>
+      </ul>
+
+      <h2>Who else sees it</h2>
+      <p>Three parties are involved in making SnapBite work, and nothing is shared beyond them:</p>
+      <ul>
+        <li><strong>Telegram</strong> delivers your messages and hosts the photos.</li>
+        <li>Your chosen <strong>AI provider</strong> (Gemini, OpenAI, DeepSeek or a custom
+          OpenAI-compatible endpoint) receives the meal photo or text and your prompt, under your own
+          key, in order to analyse it. Their own privacy terms apply to that request. SnapBite does not
+          send your history to them — only the meal being analysed.</li>
+        <li><strong>Cloudflare</strong> runs the backend and stores the database, as infrastructure.</li>
+      </ul>
+
+      <h2>How long it is kept</h2>
+      <p>Meals, profile, saved meals and settings stay until you delete them. Error records are
+      trimmed as they age and are kept only to diagnose faults. Feedback is kept until it has been
+      handled and then removed.</p>
+
+      <h2>Deleting your data</h2>
+      <ul>
+        <li><strong>One meal</strong> — swipe it away in the app, or delete it from the meal screen.</li>
+        <li><strong>Everything</strong> — send <code>/delete</code> to the bot and confirm. This
+          removes your meals, profile, saved meals, settings and your stored AI key. It cannot be
+          undone.</li>
+        <li><strong>A copy first</strong> — send <code>/export</code> to the bot to receive your log as
+          a JSON file before you delete anything.</li>
+      </ul>
+
+      <h2>Children</h2>
+      <p>SnapBite is not intended for anyone under 13, and accounts are not knowingly created for
+      children.</p>
+
+      <h2>Estimates, not medical advice</h2>
+      <p>Every nutrition number in SnapBite is an estimate produced by a model or a reference table.
+      It is editable for exactly that reason. It is not medical or dietary advice, and it should not be
+      used to manage a medical condition without a professional.</p>
+
+      <h2>Changes</h2>
+      <p>If what SnapBite stores changes materially, this page is updated and the date above changes.
+      The code that implements all of this is public at
+      <a href="https://github.com/lgf2111/snapbite" rel="noopener">github.com/lgf2111/snapbite</a>.</p>
+
+      <h2>Contact</h2>
+      <p>Questions or a deletion request: send <code>/feedback</code> to the bot, open an issue on
+      GitHub, or write to <a href="https://leeguanfeng.com" rel="noopener">leeguanfeng.com</a>.</p>
+
+      <footer>
+        <p>SnapBite is an independent project, not affiliated with Telegram, Google, OpenAI or
+        DeepSeek.</p>
+      </footer>
+    </div>
+  </body>
+</html>
