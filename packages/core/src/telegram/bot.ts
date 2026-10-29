@@ -154,6 +154,47 @@ export interface BotConfig {
 }
 
 /**
+ * Public page that walks a user through creating a free Gemini API key. Shared
+ * by the first-run /start message and the "no key yet" prompts so there's one
+ * canonical link to the fast path.
+ */
+export const FREE_KEY_URL = 'https://snapbite.leeguanfeng.com/free-key.html';
+
+/**
+ * First-run welcome for a brand-new user who hasn't saved an AI key yet. Unlike
+ * the short returning-user /start, this doesn't dead-end: it explains what
+ * SnapBite does, offers the one-minute free-key fast path, and makes clear you
+ * can start logging by hand (with targets, streaks and the weekly recap) with
+ * no key at all. Ends by pointing at /help.
+ */
+export function firstRunStartMessage(): string {
+  return [
+    'Welcome to SnapBite 👋',
+    'Snap a photo of a meal (or just describe it) and I turn it into calories and macros — all editable.',
+    '',
+    `⚡ Fastest start: add a free AI key — it takes about a minute and is free on Google Gemini's free tier: ${FREE_KEY_URL}`,
+    '',
+    '🖐️ No key yet? No problem — you can log meals by hand in the app right now, and use your targets, logging streaks and the weekly recap without any key.',
+    '',
+    'Send /help anytime to see everything SnapBite can do.',
+  ].join('\n');
+}
+
+/**
+ * The message shown when a keyless user tries to analyse a photo or text meal.
+ * Points at the same one-minute free-key link and reminds them manual entry
+ * works today — so it never dead-ends on "add your key".
+ */
+export function keylessAnalysisMessage(): string {
+  return [
+    'To read meals from a photo or description, add a free AI key first.',
+    `⚡ It takes about a minute and is free on Gemini's free tier: ${FREE_KEY_URL}`,
+    '',
+    '🖐️ Or skip the key and log this meal by hand in the app — your targets, streaks and weekly recap all work without one.',
+  ].join('\n');
+}
+
+/**
  * Produces the reply for a parsed command. Returns null when there's nothing to
  * say (non-command messages just get a gentle nudge to open the app).
  */
@@ -183,6 +224,21 @@ export function replyForCommand(
       // Any other message: nudge toward the actual flow rather than staying silent.
       return withButton('Send me a meal photo to log it, or open SnapBite to view your history.');
   }
+}
+
+/** callback_data payloads for the two-step `/delete` confirmation. */
+export const DELETE_CONFIRM_DATA = 'del:confirm';
+export const DELETE_CANCEL_DATA = 'del:cancel';
+
+/**
+ * Parses a `/delete` confirmation callback_data payload. Returns 'confirm' or
+ * 'cancel' for the known buttons, else null (so an unrelated callback is
+ * ignored). Deliberately strict so only our own buttons act.
+ */
+export function parseDeleteCallback(data: string | null | undefined): 'confirm' | 'cancel' | null {
+  if (data === DELETE_CONFIRM_DATA) return 'confirm';
+  if (data === DELETE_CANCEL_DATA) return 'cancel';
+  return null;
 }
 
 /** Prompt shown for `/feedback` with no text — tells the user how to send it. */
