@@ -13,6 +13,7 @@ import { Hono } from 'hono';
 import { describeError, logError } from '../db/errors.js';
 import {
   type MealDetail,
+  countMealsSince,
   createMealsDb,
   deleteMeal,
   getMealDetail,
@@ -20,6 +21,7 @@ import {
   saveMeal,
   updateMeal,
 } from '../db/meals.js';
+import { recordMealSave } from '../db/metrics.js';
 import type { SettingsRow } from '../db/schema.js';
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import { createDb, upsertUser } from '../db/users.js';
@@ -215,11 +217,15 @@ export function mealsRoutes(
 
     const telegramFileId = (body as { telegramFileId?: unknown })?.telegramFileId;
     const db = createMealsDb(c.env.DB);
+    const userId = c.get('userId');
+    const isFirstMeal = (await countMealsSince(db, userId, 0)) === 0;
     const id = await saveMeal(db, {
-      userId: c.get('userId'),
+      userId,
       meal: parsed.data,
       ...(typeof telegramFileId === 'string' ? { telegramFileId } : {}),
     });
+    // First-party counters — best-effort, never fails the save (§metrics).
+    await recordMealSave(c.env.DB, c.get('telegramUser').id, isFirstMeal).catch(() => {});
 
     // Best-effort "logged" feed message to the user's bot chat. Never blocks or
     // fails the save.

@@ -50,6 +50,7 @@ import {
   sumMealsSince,
   updateMeal,
 } from '../db/meals.js';
+import { bumpCounter, readStats, recordMealSave } from '../db/metrics.js';
 import type { SettingsRow } from '../db/schema.js';
 import {
   addWeightEntry,
@@ -61,7 +62,13 @@ import {
   parsePreferences,
   setOnboardingState,
 } from '../db/settings.js';
-import { createDb, listBroadcastTargets, setBroadcastRef, upsertUser } from '../db/users.js';
+import {
+  createDb,
+  listBroadcastTargets,
+  setBroadcastRef,
+  upsertUser,
+  upsertUserWithCreated,
+} from '../db/users.js';
 import { type AppBindings, parseAdminId, parseChatId } from '../env.js';
 import { lookupBarcode } from '../openfoodfacts.js';
 import { enqueuePhotoRetry } from '../photoRetry.js';
@@ -235,6 +242,17 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
     if (parsed.command === 'broadcast') {
       await handleBroadcastCommand(c, bot, parsed);
       return c.json({ ok: true });
+    }
+    if (parsed.command === 'stats') {
+      await handleStatsCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
+    // /start creates the user row on first sight; count a new user exactly once
+    // (a returning user pressing /start again is not re-counted).
+    if (parsed.command === 'start' && parsed.fromId != null) {
+      const { created } = await upsertUserWithCreated(createDb(c.env.DB), { id: parsed.fromId });
+      if (created) await bumpCounter(c.env.DB, 'user_started');
+      // Fall through to the normal /start reply below.
     }
     // Conversational profile setup by chat.
     if (parsed.command === 'setup' && parsed.fromId != null) {
@@ -499,6 +517,7 @@ async function handleSavedCommand(
     { miniAppUrl },
   );
   const confirmMessageId = (await bot.sendMessage(parsed.chatId, reply)).messageId;
+  const isFirstMeal = (await countMealsSince(mealsDb, user.id, 0)) === 0;
   await saveMeal(mealsDb, {
     userId: user.id,
     meal,
@@ -507,6 +526,10 @@ async function handleSavedCommand(
     telegramChatId: parsed.chatId,
     telegramMessageId: confirmMessageId,
   });
+  // First-party counters — best-effort, never fails the save.
+  if (parsed.fromId != null) {
+    await recordMealSave(c.env.DB, parsed.fromId, isFirstMeal).catch(() => {});
+  }
 }
 
 /**
@@ -794,6 +817,38 @@ async function handleErrorsCommand(
   await bot.sendMessage(parsed.chatId, {
     text: `⚠️ Latest errors (${rows.length}):\n\n${lines.join('\n\n')}`,
   });
+}
+
+/**
+ * `/stats` — ADMIN-only: first-party product counters (no third-party
+ * analytics). Non-admins get the normal fallback reply, so the command is
+ * invisible to them and returns no data.
+ */
+async function handleStatsCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const adminId = parseAdminId(c.env.ADMIN_TELEGRAM_ID);
+  const isAdmin = adminId != null && parsed.fromId === adminId;
+  if (!isAdmin) {
+    const reply = replyForCommand({ command: null }, { miniAppUrl: c.env.MINI_APP_URL ?? '' });
+    if (reply) await bot.sendMessage(parsed.chatId, reply);
+    return;
+  }
+
+  const s = await readStats(c.env.DB);
+  const text = [
+    '📊 SnapBite stats',
+    `New users today: ${s.newUsersToday}`,
+    `New users (7d): ${s.newUsers7d}`,
+    `Meals today: ${s.mealsToday}`,
+    `Meals (7d): ${s.meals7d}`,
+    `Active this week: ${s.activeThisWeek}`,
+    `Total users: ${s.totalUsers}`,
+    `Total meals: ${s.totalMeals}`,
+  ].join('\n');
+  await bot.sendMessage(parsed.chatId, { text });
 }
 
 // --- conversational profile setup (/setup) ---------------------------------
@@ -1145,6 +1200,7 @@ async function logTextMeal(
     // Low confidence → offer one-tap portion correction (deterministic rescale).
     const reply = isLowConfidence(meal.confidence) ? withPortionButtons(baseReply) : baseReply;
     const confirmMessageId = await replyOrEdit(bot, chatId, ack.messageId, reply);
+    const isFirstMeal = (await countMealsSince(mealsDb, userId, 0)) === 0;
     await saveMeal(mealsDb, {
       userId,
       meal,
@@ -1152,6 +1208,10 @@ async function logTextMeal(
       telegramChatId: chatId,
       telegramMessageId: confirmMessageId,
     });
+    // First-party counters — best-effort, never fails the save.
+    if (parsed.fromId != null) {
+      await recordMealSave(c.env.DB, parsed.fromId, isFirstMeal).catch(() => {});
+    }
   } catch (err) {
     const e = err as ProviderErrorLike;
     const desc = describeError(e);
@@ -1718,6 +1778,9 @@ async function handlePhoto(
   // and use whatever id we end up with as the meal's confirmation reference.
   const confirmMessageId = await replyOrEdit(bot, chatId, job.statusMessageId, reply);
 
+  // Was this the user's first-ever meal? Check before the save so first_meal is
+  // counted exactly once. One cheap indexed COUNT.
+  const isFirstMeal = (await countMealsSince(mealsDb, user.id, 0)) === 0;
   const mealId = await saveMeal(mealsDb, {
     userId: user.id,
     meal,
@@ -1728,6 +1791,8 @@ async function handlePhoto(
   });
   // (mealId retained for symmetry / future use.)
   void mealId;
+  // First-party counters — best-effort, never fails the save (§metrics).
+  await recordMealSave(c.env.DB, fromId, isFirstMeal).catch(() => {});
 }
 
 /**

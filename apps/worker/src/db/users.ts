@@ -24,6 +24,19 @@ export type Db = ReturnType<typeof createDb>;
  * row) on first sight. Returns the user row.
  */
 export async function upsertUser(db: Db, tgUser: TelegramUser): Promise<UserRow> {
+  const { user } = await upsertUserWithCreated(db, tgUser);
+  return user;
+}
+
+/**
+ * Like {@link upsertUser}, but also reports whether the row was newly created
+ * (vs. found). Used so `/start` can count a `user_started` metric exactly once
+ * per user — a returning user pressing /start again sets `created` false.
+ */
+export async function upsertUserWithCreated(
+  db: Db,
+  tgUser: TelegramUser,
+): Promise<{ user: UserRow; created: boolean }> {
   const existing = await db
     .select()
     .from(users)
@@ -31,7 +44,7 @@ export async function upsertUser(db: Db, tgUser: TelegramUser): Promise<UserRow>
     .limit(1);
 
   const found = existing[0];
-  if (found) return found;
+  if (found) return { user: found, created: false };
 
   const now = Date.now();
   const row: UserRow = {
@@ -48,7 +61,7 @@ export async function upsertUser(db: Db, tgUser: TelegramUser): Promise<UserRow>
     .insert(settings)
     .values({ userId: row.id, aiProvider: 'gemini', updatedAt: now })
     .onConflictDoNothing();
-  return row;
+  return { user: row, created: true };
 }
 
 /** All users with their last-broadcast reference (for the admin /broadcast). */
