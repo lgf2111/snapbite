@@ -19,6 +19,18 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.0',
+    date: '2026-10-29',
+    notes: [
+      '🎉 SnapBite 1.0 — log a meal in seconds, straight from Telegram',
+      '📸 Send a photo and the AI reads the foods, portions and macros; send a nutrition label or barcode and it uses the exact values instead of guessing',
+      '✍️ No photo handy? Describe the meal in plain words — "two eggs, sourdough, half an avocado" — or just reply to a meal to fix it',
+      '📊 Targets, streaks, a weekly recap, weight check-ins that tune your calorie goal, and /coach to ask questions about your own data',
+      '🔐 It runs on your own AI key, so a meal costs a fraction of a cent and your data stays yours',
+      'Everything stays an estimate you can edit. Send /feedback anytime 💙',
+    ],
+  },
+  {
     version: '0.28.1',
     date: '2026-09-16',
     notes: [
