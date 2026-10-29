@@ -19,6 +19,16 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.2',
+    date: '2026-10-29',
+    notes: [
+      '📦 /export now tells you it\'s working the moment you send it, instead of leaving you waiting in silence',
+      '⚡ Exports are much faster on a long log — the same data in a fraction of the time',
+      '📥 If your log is very large, I send a download link for the app instead of a huge file in chat',
+      'Send /feedback anytime 💙',
+    ],
+  },
+  {
     version: '1.0.1',
     date: '2026-10-29',
     notes: [
