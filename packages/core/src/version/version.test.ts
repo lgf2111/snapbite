@@ -19,11 +19,10 @@ describe('changelog', () => {
 describe('broadcastMessage', () => {
   const entry = { version: '1.2.3', date: '2026-01-01', notes: ['Thing A', 'Thing B'] };
 
-  it('includes the version, all notes, and beta framing', () => {
+  it('includes the version, every note, and invites feedback', () => {
     const msg = broadcastMessage(entry);
     expect(msg).toContain('v1.2.3');
-    expect(msg).toContain('Thing A');
-    expect(msg).toContain('Thing B');
-    expect(msg.toLowerCase()).toContain('beta');
+    for (const note of entry.notes) expect(msg).toContain(note);
+    expect(msg.toLowerCase()).toContain('feedback');
   });
 });

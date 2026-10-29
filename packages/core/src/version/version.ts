@@ -32,7 +32,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: '0.28.1',
-    date: '2026-09-16',
+    date: '2026-10-01',
     notes: [
       "🌍 If your AI provider isn't available in your region (common with Gemini), SnapBite now auto-switches to your fallback provider instead of failing",
       'And if you have no fallback set, the error now tells you to switch to OpenAI or DeepSeek in Settings',
@@ -41,7 +41,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: '0.28.0',
-    date: '2026-09-16',
+    date: '2026-10-01',
     notes: [
       '🍽️ Shared a dish? Tell the bot "divide by 4 pax" (or reply/Update with AI) and it logs just your share',
       'The meal name shows the split too, e.g. "Pizza (1/4 of 4 pax)", so it\u2019s clear only your portion was counted',
@@ -51,7 +51,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: '0.27.1',
-    date: '2026-09-16',
+    date: '2026-10-01',
     notes: [
       '✨ The "Update with AI" button on the Home list now edits right there — type your change, and it applies without opening the meal first',
       'Send /feedback anytime — more coming soon 💙',
@@ -59,7 +59,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: '0.27.0',
-    date: '2026-09-16',
+    date: '2026-10-01',
     notes: [
       '🍽️ One-tap portion fix — when a photo logs with low confidence, tap ¼× · ½× · 1× · 2× to rescale the whole meal instantly',
       "It's pure math on your logged meal — no new AI call, and the message updates in place so you can keep nudging",
@@ -69,7 +69,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: '0.26.0',
-    date: '2026-09-16',
+    date: '2026-10-01',
     notes: [
       '🔥 Logging streaks — log on consecutive days and each confirmation shows your run, with a 🎉 every 7 days',
       "Evening-friendly: a streak that was alive through yesterday won't break until the day ends",
@@ -80,7 +80,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: '0.25.0',
-    date: '2026-10-29',
+    date: '2026-10-01',
     notes: [
       '🧑‍🍳 Ask your coach — send "/coach am I low on protein today?" and get a quick answer from your own logged data',
       'It reads your today/this-week totals vs your targets and replies in a sentence or two, on your own key',
@@ -90,7 +90,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: '0.24.0',
-    date: '2026-10-22',
+    date: '2026-10-01',
     notes: [
       '⚖️ Adaptive targets — log your weight ("/weight 72.5" or just "72.5 kg") and SnapBite learns your real daily burn',
       'Each week it compares what you ate to your weight trend and gently tunes your calorie goal to match',
@@ -100,7 +100,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: '0.23.0',
-    date: '2026-10-15',
+    date: '2026-10-01',
     notes: [
       '💬 Log a meal by text — no photo needed! Just describe it: "two eggs, sourdough toast, half an avocado"',
       'Start with "log …" (or "ate …"/"had …") to log a new meal; replying to a meal still edits that meal',
@@ -110,7 +110,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: '0.22.0',
-    date: '2026-10-08',
+    date: '2026-10-01',
     notes: [
       '🌾 Fiber is now tracked — SnapBite estimates dietary fiber per food and shows it on the meal and in the log reply',
       '📊 Goal progress on every log — if you’ve set a goal, each logged meal tells you where you are for the day (e.g. “96g protein today — 54g to your goal”)',
@@ -188,9 +188,9 @@ export const APP_VERSION: string = CHANGELOG[0]?.version ?? '0.0.0';
 export const CURRENT_CHANGELOG: ChangelogEntry | undefined = CHANGELOG[0];
 
 /**
- * Builds the user-facing update notification for a changelog entry. Frames it
- * as a beta with frequent updates, lists the notes, and stamps the version so
- * an edited-in-place message clearly shows the latest.
+ * Builds the user-facing update notification for a changelog entry. Lists the
+ * notes and stamps the version so an edited-in-place message clearly shows the
+ * latest, and invites feedback.
  */
 export function broadcastMessage(entry: ChangelogEntry): string {
   const bullets = entry.notes.map((n) => `• ${n}`).join('\n');
@@ -199,6 +199,6 @@ export function broadcastMessage(entry: ChangelogEntry): string {
     '',
     bullets,
     '',
-    "You're an early beta user, so expect frequent updates and improvements. Thanks for helping shape SnapBite! Send /feedback anytime.",
+    'Thanks for using SnapBite! Your feedback shapes what comes next — send /feedback anytime.',
   ].join('\n');
 }
