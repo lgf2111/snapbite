@@ -79,6 +79,12 @@ export interface Preferences {
   adaptive?: AdaptiveConfig;
   /** Opt-in weekly recap digest (a Sunday "week in review" DM). */
   recap?: RecapConfig;
+  /**
+   * Set when a user runs `/delete` and is awaiting confirmation. Only a confirm
+   * callback while this is true performs the destructive delete, so a bare
+   * `/delete` (or a stale callback) never deletes. Cleared on confirm/cancel.
+   */
+  pendingDelete?: boolean;
   updatedAt?: number;
 }
 
