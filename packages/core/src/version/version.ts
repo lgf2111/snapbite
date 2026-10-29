@@ -19,6 +19,17 @@ export interface ChangelogEntry {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.1',
+    date: '2026-10-29',
+    notes: [
+      '🔐 Your data, fully yours — send /export and I send you everything I hold about your log, as a file',
+      '🗑️ Changed your mind? /delete wipes your meals, profile, saved meals and your stored AI key',
+      '👋 A clearer first run: new users see the one-minute free-key path, and that logging by hand works with no key at all',
+      '📄 Privacy note and a free-key walkthrough, both linked from the bot — no ads, no trackers, nothing sold',
+      'Send /feedback anytime 💙',
+    ],
+  },
+  {
     version: '1.0.0',
     date: '2026-10-29',
     notes: [

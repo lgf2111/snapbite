@@ -127,7 +127,7 @@ describe('POST /webhook', () => {
     );
     expect(res.status).toBe(200);
     // Keyless photo now points at the free-key fast path + manual entry, not a dead-end.
-    expect(sent[0]?.reply.text).toContain('snapbite.leeguanfeng.com/free-key.html');
+    expect(sent[0]?.reply.text).toContain('snapbite.leeguanfeng.com/free-key');
     expect(sent[0]?.reply.text.toLowerCase()).toContain('by hand');
   });
 
@@ -1919,7 +1919,7 @@ describe('one-tap portion rescale (R6)', () => {
 });
 
 describe('first-run onboarding (/start without a key)', () => {
-  const FREE_KEY_URL = 'https://snapbite.leeguanfeng.com/free-key.html';
+  const FREE_KEY_URL = 'https://snapbite.leeguanfeng.com/free-key';
 
   it("a new user's /start includes the free-key link and the manual-entry option", async () => {
     const tgId = 12001;

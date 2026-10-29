@@ -37,7 +37,7 @@ const DESCRIPTION = `Send a photo — or just describe what you ate — and get 
 • Runs on your own AI key — a meal costs a fraction of a cent
 • Every value is an editable estimate; no ads, no trackers
 
-Free key in ~1 minute: snapbite.leeguanfeng.com/free-key.html`;
+Free key in ~1 minute: snapbite.leeguanfeng.com/free-key`;
 
 const ABOUT_MAX = 120;
 const DESCRIPTION_MAX = 512;

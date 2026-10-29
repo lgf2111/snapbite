@@ -158,7 +158,7 @@ export interface BotConfig {
  * by the first-run /start message and the "no key yet" prompts so there's one
  * canonical link to the fast path.
  */
-export const FREE_KEY_URL = 'https://snapbite.leeguanfeng.com/free-key.html';
+export const FREE_KEY_URL = 'https://snapbite.leeguanfeng.com/free-key';
 
 /**
  * First-run welcome for a brand-new user who hasn't saved an AI key yet. Unlike
