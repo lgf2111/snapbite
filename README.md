@@ -2,6 +2,11 @@
 
 A Telegram-native, low-friction, AI-assisted food & nutrition logging app.
 
+**Try it:** open [@SnapBiteAI_bot](https://t.me/SnapBiteAI_bot) in Telegram and press
+Start, then send a photo of your plate. Browse and edit your log in the
+[Mini App](https://snapbite.leeguanfeng.com). Bring your own AI key (Gemini,
+OpenAI or DeepSeek) and set it once in Settings.
+
 > Formerly **FoodLog**, now fully rebranded to **SnapBite** — including a new bot (`@SnapBiteAI_bot`) and renamed infrastructure (`snapbite-worker`, `snapbite` Pages, `snapbite-db`, `@snapbite/*` packages). Existing FoodLog users are migrated over.
 
 **One-line goal:** unlock phone → open SnapBite (or just send a photo to the bot) → AI analyzes it → confirm/correct → saved.
