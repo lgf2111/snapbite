@@ -39,7 +39,13 @@ import {
 } from '@snapbite/core';
 import { type Context, Hono } from 'hono';
 import { adminNotify } from '../adminNotify.js';
-import { createAccountDb, deleteAccount, exportUser, hasExportableData } from '../db/account.js';
+import {
+  EXPORT_LINK_THRESHOLD_MEALS,
+  createAccountDb,
+  deleteAccount,
+  exportUser,
+  hasExportableData,
+} from '../db/account.js';
 import { describeError, logError, recentErrors } from '../db/errors.js';
 import { type Favorite, createFavoritesDb, listFavorites } from '../db/favorites.js';
 import { recentFeedback, storeFeedback } from '../db/feedback.js';
@@ -795,35 +801,78 @@ function savedListText(favorites: Favorite[]): string {
  * check-ins, every meal (foods + per-food nutrition), and saved meals — never
  * the AI key or its ciphertext. If the user has no data, says so instead of
  * sending an empty file.
+ *
+ * To avoid the "silent /export" (a big N+1 export could blow past Telegram's
+ * webhook window with no visible reply), an acknowledgement is sent FIRST and
+ * then edited into the outcome. Exports larger than
+ * {@link EXPORT_LINK_THRESHOLD_MEALS} meals offer a download link instead of
+ * uploading a document to the chat.
  */
 async function handleExportCommand(
   c: Context<AppBindings>,
   bot: BotClient,
   parsed: ParsedCommand,
 ): Promise<void> {
-  const userDb = createDb(c.env.DB);
-  const user = await upsertUser(userDb, { id: parsed.fromId as number });
-  const accountDb = createAccountDb(c.env.DB);
-  const data = await exportUser(accountDb, user.id);
+  const miniAppUrl = c.env.MINI_APP_URL ?? '';
 
-  if (!data || !hasExportableData(data)) {
+  // Acknowledge BEFORE any database work so the user never sees silence, and
+  // capture the ack's id so every outcome below edits that same message.
+  const ackId = (
     await bot.sendMessage(parsed.chatId, {
-      text: "You don't have any data to export yet. Log a meal (or add one in the app) and try /export again.",
+      text: '📦 Preparing your export… this usually takes a few seconds.',
+    })
+  ).messageId;
+
+  try {
+    const userDb = createDb(c.env.DB);
+    const user = await upsertUser(userDb, { id: parsed.fromId as number });
+    const accountDb = createAccountDb(c.env.DB);
+    const data = await exportUser(accountDb, user.id);
+
+    if (!data || !hasExportableData(data)) {
+      await replyOrEdit(bot, parsed.chatId, ackId, {
+        text: "You don't have any data to export yet. Log a meal (or add one in the app) and try /export again.",
+      });
+      return;
+    }
+
+    // Large logs: offer a download link instead of uploading a file to chat.
+    if (data.meals.length > EXPORT_LINK_THRESHOLD_MEALS) {
+      const urlLine = miniAppUrl ? `\n\n${miniAppUrl}` : '';
+      await replyOrEdit(bot, parsed.chatId, ackId, {
+        text: `Your log is large, so here's the download instead — open SnapBite → Settings → Download my data${urlLine}`,
+        ...(miniAppUrl
+          ? {
+              replyMarkup: {
+                inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]],
+              },
+            }
+          : {}),
+      });
+      return;
+    }
+
+    const filename = `snapbite-export-${new Date().toISOString().slice(0, 10)}.json`;
+    const content = JSON.stringify(data, null, 2);
+    const ok = await bot.sendDocument?.(parsed.chatId, {
+      filename,
+      content,
+      mimeType: 'application/json',
+      caption:
+        'Here is your SnapBite data (meals, saved meals, weight check-ins). Your AI key is never included.',
     });
-    return;
-  }
-
-  const filename = `snapbite-export-${new Date().toISOString().slice(0, 10)}.json`;
-  const content = JSON.stringify(data, null, 2);
-  const ok = await bot.sendDocument?.(parsed.chatId, {
-    filename,
-    content,
-    mimeType: 'application/json',
-    caption:
-      'Here is your SnapBite data (meals, saved meals, weight check-ins). Your AI key is never included.',
-  });
-  if (!ok) {
-    await bot.sendMessage(parsed.chatId, {
+    if (ok) {
+      await replyOrEdit(bot, parsed.chatId, ackId, {
+        text: '✅ Your export is ready — file above.',
+      });
+    } else {
+      await replyOrEdit(bot, parsed.chatId, ackId, {
+        text: "Sorry — I couldn't send your export just now. Please try /export again in a moment.",
+      });
+    }
+  } catch {
+    // Even on an unexpected failure the ack must resolve into a visible outcome.
+    await replyOrEdit(bot, parsed.chatId, ackId, {
       text: "Sorry — I couldn't send your export just now. Please try /export again in a moment.",
     });
   }

@@ -8,6 +8,8 @@ import {
 } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
+import { EXPORT_LINK_THRESHOLD_MEALS } from '../db/account.js';
+import { createDb, upsertUser } from '../db/users.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
 
 const SECRET_HEADER = 'x-telegram-bot-api-secret-token';
@@ -66,6 +68,65 @@ function capture() {
   return { app, sent, docs, answers };
 }
 
+/** Ordered timeline of bot/db events, so tests can assert call ORDER. */
+type Event =
+  | { kind: 'send'; text: string }
+  | { kind: 'edit'; text: string }
+  | { kind: 'doc' }
+  | { kind: 'query' };
+
+/** A bot mock + a DB that both record into one timeline (for call-order tests). */
+function orderedCapture(opts: { sendDocumentOk?: boolean } = {}) {
+  const events: Event[] = [];
+  let nextId = 3000;
+  const bot = {
+    async sendMessage(_chatId: number, reply: BotReply) {
+      events.push({ kind: 'send', text: reply.text });
+      return { messageId: nextId++ };
+    },
+    async getFilePath() {
+      return 'photos/file_1.jpg';
+    },
+    async downloadFile() {
+      return { base64: 'QUJD', mimeType: 'image/jpeg' };
+    },
+    async editMessageText(_chatId: number, _messageId: number, reply: BotReply) {
+      events.push({ kind: 'edit', text: reply.text });
+      return true;
+    },
+    async deleteMessage() {
+      return true;
+    },
+    async answerCallbackQuery() {
+      return true;
+    },
+    async sendDocument() {
+      events.push({ kind: 'doc' });
+      return opts.sendDocumentOk ?? true;
+    },
+  };
+  const app = createApp({
+    botClientFactory: () => bot,
+    providerFactory: () => new MockAIProvider(),
+  });
+  // Record the first SQL statement of the run so we can prove the ack precedes
+  // any export query.
+  const db = new Proxy(env.DB, {
+    get(target, prop, receiver) {
+      if (prop === 'prepare') {
+        return (query: string) => {
+          events.push({ kind: 'query' });
+          return target.prepare(query);
+        };
+      }
+      const v = Reflect.get(target, prop, receiver);
+      return typeof v === 'function' ? v.bind(target) : v;
+    },
+  });
+  const envWithDb = { ...env, DB: db as D1Database };
+  return { app, envWithDb, events };
+}
+
 function post(body: unknown) {
   return {
     method: 'POST',
@@ -113,6 +174,26 @@ async function seedKeyAndMeal(tgId: number): Promise<void> {
     { method: 'POST', headers: h, body: JSON.stringify({ meal }) },
     env,
   );
+}
+
+/** Seeds `tgId`'s app user with `n` bare meals (batched inserts, no AI). */
+async function seedManyMeals(tgId: number, n: number): Promise<void> {
+  const user = await upsertUser(createDb(env.DB), { id: tgId });
+  const now = Date.now();
+  const BATCH = 20;
+  for (let start = 0; start < n; start += BATCH) {
+    const count = Math.min(BATCH, n - start);
+    const placeholders = Array.from({ length: count }, () => '(?, ?, ?, ?)').join(', ');
+    const binds: Array<string | number> = [];
+    for (let i = 0; i < count; i++) {
+      binds.push(`${user.id}-m${start + i}`, user.id, now, now);
+    }
+    await env.DB.prepare(
+      `INSERT INTO meals (id, user_id, created_at, logged_at) VALUES ${placeholders}`,
+    )
+      .bind(...binds)
+      .run();
+  }
 }
 
 /** Counts rows across every table a user touches, scoped by their app user id. */
@@ -191,6 +272,86 @@ describe('/export command', () => {
     );
     expect(docs).toHaveLength(0);
     expect(lastText(sent).toLowerCase()).toContain("don't have any data");
+  });
+
+  it('sends the acknowledgement BEFORE any export query runs, then edits it on success', async () => {
+    const tgId = 10010;
+    await seedKeyAndMeal(tgId);
+    const { app, envWithDb, events } = orderedCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/export', chat: { id: tgId }, from: { id: tgId } } }),
+      envWithDb,
+    );
+    // The very first event is the ack send; no query precedes it.
+    expect(events[0]).toEqual({
+      kind: 'send',
+      text: expect.stringContaining('Preparing your export'),
+    });
+    const firstQuery = events.findIndex((e) => e.kind === 'query');
+    expect(firstQuery).toBeGreaterThan(0);
+    // The ack is edited into the success outcome; the document is sent.
+    expect(events.some((e) => e.kind === 'doc')).toBe(true);
+    expect(events.some((e) => e.kind === 'edit' && e.text.includes('export is ready'))).toBe(true);
+  });
+
+  it('edits the ack into the empty-state message when there is no data', async () => {
+    const tgId = 10011;
+    const { app, envWithDb, events } = orderedCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/export', chat: { id: tgId }, from: { id: tgId } } }),
+      envWithDb,
+    );
+    expect(events[0]?.kind).toBe('send');
+    expect(events.some((e) => e.kind === 'doc')).toBe(false);
+    expect(
+      events.some((e) => e.kind === 'edit' && e.text.toLowerCase().includes("don't have any data")),
+    ).toBe(true);
+  });
+
+  it('edits the ack into the failure message when the document upload fails', async () => {
+    const tgId = 10012;
+    await seedKeyAndMeal(tgId);
+    const { app, envWithDb, events } = orderedCapture({ sendDocumentOk: false });
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/export', chat: { id: tgId }, from: { id: tgId } } }),
+      envWithDb,
+    );
+    expect(events[0]?.kind).toBe('send');
+    expect(
+      events.some(
+        (e) => e.kind === 'edit' && e.text.toLowerCase().includes("couldn't send your export"),
+      ),
+    ).toBe(true);
+  });
+
+  it('a user above the threshold gets a download link and NO document upload', async () => {
+    const tgId = 10013;
+    await seedManyMeals(tgId, EXPORT_LINK_THRESHOLD_MEALS + 1);
+    const { app, docs, sent } = capture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/export', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(docs).toHaveLength(0);
+    const text = lastText(sent);
+    expect(text.toLowerCase()).toContain('download');
+    expect(text).toContain('Download my data');
+  });
+
+  it('a small user still gets a document (below the threshold)', async () => {
+    const tgId = 10014;
+    await seedKeyAndMeal(tgId);
+    const { app, docs } = capture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/export', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(docs).toHaveLength(1);
   });
 });
 

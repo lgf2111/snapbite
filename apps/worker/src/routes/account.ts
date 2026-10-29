@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { createAccountDb, deleteAccount, exportUser } from '../db/account.js';
+import { createAccountDb, deleteAccount, streamUserExport } from '../db/account.js';
 import type { AppBindings } from '../env.js';
 
 /**
@@ -14,10 +14,10 @@ export function accountRoutes() {
   // a sensible filename instead of rendering it inline.
   app.get('/export', async (c) => {
     const db = createAccountDb(c.env.DB);
-    const data = await exportUser(db, c.get('userId'));
-    if (!data) return c.json({ error: 'Not found' }, 404);
+    const stream = await streamUserExport(db, c.get('userId'));
+    if (!stream) return c.json({ error: 'Not found' }, 404);
     const filename = `snapbite-export-${new Date().toISOString().slice(0, 10)}.json`;
-    return c.body(JSON.stringify(data, null, 2), 200, {
+    return c.body(stream, 200, {
       'content-type': 'application/json; charset=utf-8',
       'content-disposition': `attachment; filename="${filename}"`,
     });
