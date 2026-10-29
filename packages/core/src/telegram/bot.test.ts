@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DELETE_CANCEL_DATA,
+  DELETE_CONFIRM_DATA,
+  FREE_KEY_URL,
+  firstRunStartMessage,
   goalNudgeLine,
+  keylessAnalysisMessage,
   mealLoggedMessage,
   parseCallbackQuery,
+  parseDeleteCallback,
   parseUpdate,
   photoLoggedReply,
   replyForCommand,
@@ -222,5 +228,35 @@ describe('photoLoggedReply with a goal nudge', () => {
     expect(withNudge.text).toContain('120g to your goal');
     const without = photoLoggedReply(['eggs'], totals, CONFIG);
     expect(without.text).not.toContain('to your goal');
+  });
+});
+
+describe('first-run onboarding messages', () => {
+  it('firstRunStartMessage offers the free-key fast path, a no-key option, and /help', () => {
+    const msg = firstRunStartMessage();
+    expect(msg).toContain(FREE_KEY_URL);
+    expect(msg.toLowerCase()).toContain('free'); // free tier mentioned
+    expect(msg.toLowerCase()).toContain('by hand'); // manual-entry no-key path
+    expect(msg).toContain('/help');
+  });
+
+  it('keylessAnalysisMessage includes the free-key link and the manual option', () => {
+    const msg = keylessAnalysisMessage();
+    expect(msg).toContain(FREE_KEY_URL);
+    expect(msg.toLowerCase()).toContain('by hand');
+  });
+});
+
+describe('parseDeleteCallback', () => {
+  it('maps the two known payloads', () => {
+    expect(parseDeleteCallback(DELETE_CONFIRM_DATA)).toBe('confirm');
+    expect(parseDeleteCallback(DELETE_CANCEL_DATA)).toBe('cancel');
+  });
+
+  it('ignores anything else', () => {
+    expect(parseDeleteCallback(null)).toBeNull();
+    expect(parseDeleteCallback('')).toBeNull();
+    expect(parseDeleteCallback('rsz:0.5')).toBeNull();
+    expect(parseDeleteCallback('del:other')).toBeNull();
   });
 });
