@@ -1,0 +1,39 @@
+Copyright (c) 2026 Lee Guan Feng. All rights reserved.
+
+SnapBite — source-available, not open source
+============================================
+
+This repository is published so people can read how SnapBite works, verify what
+it does with their data, and learn from it. It is not licensed for reuse.
+
+You may:
+  - read, study and discuss this code;
+  - use the hosted SnapBite bot and Mini App as an end user, under their own
+    terms;
+  - quote short excerpts with attribution for review, teaching or commentary.
+
+You may not, without written permission from the copyright holder:
+  - copy this code into another project, in whole or in substantial part;
+  - modify it, or distribute modified or unmodified copies of it;
+  - deploy or host it as a service, free or paid;
+  - use the SnapBite name, logo or bot handle in a derivative product.
+
+No warranty: this software is provided "as is", without warranty of any kind,
+express or implied, including but not limited to the warranties of
+merchantability, fitness for a particular purpose and noninfringement. In no
+event shall the author be liable for any claim, damages or other liability
+arising from, out of or in connection with the software or its use.
+
+Nutrition values produced by SnapBite are estimates, not medical or dietary
+advice. Do not rely on them for a medical condition; consult a qualified
+professional.
+
+For permission, collaboration or a different licence: open an issue on
+https://github.com/lgf2111/snapbite or contact the author at
+https://leeguanfeng.com
+
+---
+
+Switching to a permissive licence (MIT, Apache-2.0) later is a one-line change
+to this file; it cannot be done the other way round for releases already
+published under a permissive one. That is why the default here is conservative.

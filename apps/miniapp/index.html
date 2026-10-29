@@ -99,6 +99,22 @@
 
       footer { text-align: center; color: var(--muted); font-size: 0.88rem; padding: 40px 0 56px; }
       footer a { color: var(--muted); }
+      footer .links { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; }
+
+      /* Screenshots */
+      .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; align-items: start; }
+      .shot { margin: 0; }
+      .shot img {
+        width: 100%; height: auto; display: block; border-radius: 18px;
+        border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      }
+      .shot figcaption { color: var(--muted); font-size: 0.88rem; text-align: center; margin-top: 8px; }
+      .examples { display: grid; gap: 8px; margin-top: 6px; }
+      .examples code {
+        display: block; background: var(--card); border: 1px solid var(--border);
+        border-radius: 10px; padding: 10px 12px; color: var(--text); font-size: 0.92rem;
+      }
+      .examples code span { color: var(--muted); }
 
       @media (max-width: 540px) {
         .hero { padding: 44px 0 28px; }
@@ -118,13 +134,14 @@
           <img class="logo" src="/icon.png" alt="SnapBite logo" width="96" height="96" />
           <h1>Snap a photo. Log your meal.</h1>
           <p class="tag">
-            SnapBite is a lightweight, Telegram-native food logger. Send a meal photo and get its
-            calories and macros back in seconds — every value an editable estimate.
+            SnapBite is a lightweight, Telegram-native food logger. Send a photo — or just describe
+            what you ate — and get calories, protein, carbs and fat back in seconds. Every value is an
+            editable estimate, and it runs on your own AI key.
           </p>
           <a class="cta" href="https://t.me/SnapBiteAI_bot" rel="noopener">
             Open in Telegram →
           </a>
-          <p class="cta-note">Free to use. Runs on your own AI key.</p>
+          <p class="cta-note">Free to use · no account · works on your own AI key</p>
         </header>
 
         <section>
@@ -136,8 +153,13 @@
               <p>Send a photo to the bot; a vision model identifies the foods, portions, and rough calories + protein / carbs / fat.</p>
             </div>
             <div class="feature">
+              <div class="ico">✍️</div>
+              <h3>No photo? Just describe it</h3>
+              <p>"Two eggs, sourdough, half an avocado" runs through the same pipeline. Logging shouldn't need a camera.</p>
+            </div>
+            <div class="feature">
               <div class="ico">🏷️</div>
-              <h3>Labels & barcodes</h3>
+              <h3>Labels &amp; barcodes</h3>
               <p>If the photo shows a nutrition label or barcode, SnapBite reads it and uses the exact values instead of guessing.</p>
             </div>
             <div class="feature">
@@ -146,20 +168,71 @@
               <p>Everything is an estimate you can correct — reply "add a coke" or "the rice was double" and it re-runs the numbers.</p>
             </div>
             <div class="feature">
+              <div class="ico">🍽️</div>
+              <h3>Shared a dish?</h3>
+              <p>Say "divide by 4 pax" and only your share is logged — the meal title shows the split, so the count stays honest.</p>
+            </div>
+            <div class="feature">
               <div class="ico">🎯</div>
-              <h3>Daily targets</h3>
-              <p>Set a goal by chat or in the app and get daily calorie + macro targets, computed deterministically (no AI cost).</p>
+              <h3>Targets that learn</h3>
+              <p>Daily calorie + macro targets, then adaptive goals: log your weight and SnapBite tunes your target to your real trend.</p>
+            </div>
+            <div class="feature">
+              <div class="ico">🔥</div>
+              <h3>Streaks &amp; weekly recap</h3>
+              <p>See your logging streak in every confirmation, and opt in to a short Sunday summary of your week.</p>
+            </div>
+            <div class="feature">
+              <div class="ico">🧑‍🍳</div>
+              <h3>Ask the coach</h3>
+              <p>"/coach am I low on protein today?" — answered in a sentence or two from your own logged data, on demand.</p>
+            </div>
+            <div class="feature">
+              <div class="ico">⭐</div>
+              <h3>Re-log a favourite</h3>
+              <p>Star a meal in the app, then send "/saved 1" to log it again. No photo, no AI call, no cost.</p>
             </div>
             <div class="feature">
               <div class="ico">⏰</div>
               <h3>Meal reminders</h3>
-              <p>Opt-in nudges for breakfast, lunch, and dinner at times you choose, in your own timezone.</p>
+              <p>Opt-in nudges for breakfast, lunch and dinner at times you choose, in your own timezone.</p>
+            </div>
+            <div class="feature">
+              <div class="ico">➕</div>
+              <h3>Add a meal by hand</h3>
+              <p>No photo, no AI, no key: type the name and macros in the app and it logs like any other meal.</p>
             </div>
             <div class="feature">
               <div class="ico">🔑</div>
               <h3>Bring your own key</h3>
-              <p>AI runs on your own provider key (Gemini, OpenAI, or DeepSeek). No per-request model cost to us, and no lock-in.</p>
+              <p>AI runs on your own provider key (Gemini, OpenAI, or DeepSeek) — a meal costs a fraction of a cent.</p>
             </div>
+          </div>
+
+          <h3 style="font-size:1.02rem; margin:22px 0 4px;">What it looks like in chat</h3>
+          <div class="examples">
+            <code><span>You:</span> two eggs, sourdough toast, half an avocado</code>
+            <code><span>SnapBite:</span> ~430 kcal · 22g protein · 38g carbs · 21g fat <span>— tap to edit</span></code>
+            <code><span>You:</span> the toast was double</code>
+            <code><span>SnapBite:</span> updated — ~560 kcal · 26g protein · 52g carbs · 24g fat</code>
+          </div>
+        </section>
+
+        <section>
+          <h2>Inside the app</h2>
+          <div class="shots">
+            <figure class="shot">
+              <img src="/shots/home.png" alt="Today's log with calorie and macro progress rings" loading="lazy" />
+              <figcaption>Your day against your targets</figcaption>
+            </figure>
+            <figure class="shot">
+              <img src="/shots/weekly.png" alt="Weekly view" loading="lazy" />
+              <figcaption>The week, at a glance</figcaption>
+            </figure>
+            <figure class="shot">
+              <img src="/shots/meal.png" alt="Editing a meal's foods and macros" loading="lazy" />
+              <figcaption>Every value editable, per food</figcaption>
+            </figure>
           </div>
         </section>
 
@@ -171,13 +244,14 @@
               <div>
                 <h3>Open the bot</h3>
                 <p>Start <a href="https://t.me/SnapBiteAI_bot" rel="noopener">@SnapBiteAI_bot</a> in Telegram and add your AI key in Settings.</p>
+                <p><a href="/free-key.html">Getting a free key takes about a minute →</a></p>
               </div>
             </div>
             <div class="step">
               <div class="n">2</div>
               <div>
-                <h3>Send a meal photo</h3>
-                <p>The bot analyzes it and logs the meal, editing its "Analyzing…" message into the result.</p>
+                <h3>Send a meal — photo or words</h3>
+                <p>The bot analyses it and logs the meal, editing its "Analyzing…" message into the result. Or add one by hand in the app, no key needed.</p>
               </div>
             </div>
             <div class="step">
@@ -196,14 +270,18 @@
             <p>AI analysis runs on your own provider key — SnapBite never takes on model cost for you, and your key is stored encrypted.</p>
             <p>Meal photos are kept only via Telegram's own file reference and shown back to you; image bytes aren't stored on our side.</p>
             <p>Nutrition numbers are estimates and stay fully editable — you're always in control of your log.</p>
+            <p>No ads, no third-party analytics, no selling your data. <a href="/privacy.html">Read the full privacy note →</a></p>
           </div>
         </section>
 
         <footer>
-          <p>
+          <div class="links">
             <a href="https://t.me/SnapBiteAI_bot" rel="noopener">Open SnapBite in Telegram</a>
-          </p>
-          <p>SnapBite · a lightweight Telegram food logger</p>
+            <a href="/free-key.html">Get a free AI key</a>
+            <a href="/privacy.html">Privacy</a>
+            <a href="https://github.com/lgf2111/snapbite" rel="noopener">GitHub</a>
+          </div>
+          <p>SnapBite · a lightweight Telegram food logger · an independent project, not affiliated with Telegram</p>
         </footer>
       </div>
     </div>

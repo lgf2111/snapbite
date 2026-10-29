@@ -1,11 +1,28 @@
 # SnapBite
 
+[![CI](https://github.com/lgf2111/snapbite/actions/workflows/ci.yml/badge.svg)](https://github.com/lgf2111/snapbite/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/lgf2111/snapbite)](https://github.com/lgf2111/snapbite/releases/latest)
+[![license](https://img.shields.io/badge/license-source--available-lightgrey)](LICENSE)
+
 A Telegram-native, low-friction, AI-assisted food & nutrition logging app.
 
 **Try it:** open [@SnapBiteAI_bot](https://t.me/SnapBiteAI_bot) in Telegram and press
 Start, then send a photo of your plate. Browse and edit your log in the
 [Mini App](https://snapbite.leeguanfeng.com). Bring your own AI key (Gemini,
-OpenAI or DeepSeek) and set it once in Settings.
+OpenAI or DeepSeek) and set it once in Settings — or log by hand with no key at all.
+[Getting a free key takes about a minute](https://snapbite.leeguanfeng.com/free-key.html).
+
+<p>
+  <img src="docs/screenshots/home.png" alt="Today's log with calorie and macro rings" width="240" />
+  <img src="docs/screenshots/weekly.png" alt="Weekly view" width="240" />
+  <img src="docs/screenshots/meal.png" alt="Editing a meal's foods" width="240" />
+</p>
+
+**What it does, honestly:** send a photo *or* describe the meal in words; the AI
+estimates calories, protein, carbs and fat (reads nutrition labels and barcodes
+for exact values); reply to correct it; set targets that adapt to your weight
+trend; keep a logging streak; ask `/coach` a question about your own data. A meal
+costs a fraction of a cent on your own key, and every number stays editable.
 
 > Formerly **FoodLog**, now fully rebranded to **SnapBite** — including a new bot (`@SnapBiteAI_bot`) and renamed infrastructure (`snapbite-worker`, `snapbite` Pages, `snapbite-db`, `@snapbite/*` packages). Existing FoodLog users are migrated over.
 
@@ -17,7 +34,7 @@ Nutrition is always shown as an **estimate** and is always **editable**. The AI 
 
 Send a photo of a meal to the Telegram bot. The Cloudflare Worker downloads it, calls a vision model (your key) to identify foods, portions, and rough nutrition, saves the meal (keeping the photo via its Telegram `file_id`), and replies. If the photo shows a **nutrition-facts label**, the model reads it and uses those exact values; if it can read a **product barcode**, the digits are looked up in [Open Food Facts](https://world.openfoodfacts.org/) and the product's exact per-100g nutrition (scaled to the serving) replaces the estimate; otherwise it estimates from appearance.
 
-**Beta update broadcasts:** an admin-only `/broadcast` command sends the current changelog (see `packages/core/src/version/version.ts`) to all users, framed as beta with frequent updates. To avoid spamming inactive users, if a user's previous update message is still within Telegram's ~48h edit window it's **edited in place** to the newest version instead of sending a new message.
+**Update broadcasts:** an admin-only `/broadcast` command sends the current changelog (see `packages/core/src/version/version.ts`) to all users. To avoid spamming inactive users, if a user's previous update message is still within Telegram's ~48h edit window it's **edited in place** to the newest version instead of sending a new message.
 
 **Admin alerts → group topics:** when `ADMIN_GROUP_CHAT_ID` (a negative supergroup id) is set, error/feedback/broadcast alerts post into that group's forum **Topics** (`ERRORS_THREAD_ID`, `FEEDBACK_THREAD_ID`, `BROADCAST_THREAD_ID`) instead of DMing the owner — keeping the owner's personal 1:1 chat for their own logging. Falls back to DMing `ADMIN_TELEGRAM_ID` when no group is configured. Add the bot to the group so it can post.
 
@@ -182,3 +199,16 @@ The Mini App (shadcn/ui + Tailwind v4, Telegram theming, native buttons + haptic
 **Portion confidence + one-tap rescale.** Independent evaluations put the weak point of AI calorie estimates on portion sizing, so rather than claim false precision SnapBite leans into its "always an editable estimate" stance. Each analysis already carries an overall `confidence`; when it's below a threshold (`isLowConfidence`, 0.75) the log confirmation gains an inline button row of portion multipliers (`¼× · ½× · 1× · 2×`, `core/portion`). Tapping one sends a tiny `callback_query` (`rsz:<factor>`) that the Worker handles deterministically — it finds the meal from the tapped message, rebuilds the stored `MealResult` from its absolute macros (`detailToMealResult`, no nutrition re-resolution), multiplies every food + the total by the factor (`rescaleMeal`), writes it back via `updateMeal`, and edits the confirmation in place with the buttons still attached so the user can keep nudging. Each tap is relative to the currently-shown meal (`½×` halves it, `2×` doubles it, `1×` is a no-op); confidence and per-value source tags are preserved. No AI re-call, no new weight — just arithmetic and one callback.
 
 **Provider & model selection.** In Settings, the **model** is a dropdown of each provider's known-good vision models (guards against typos and retired names), with a **Custom…** option that reveals a free-text field for brand-new model names. A **Custom (advanced)** provider option lets power users point at any OpenAI-compatible Chat Completions endpoint by base URL + model (with an image-`detail` toggle) — available for both the primary and fallback provider. When you send a photo, the bot shows an "Analyzing your meal…" acknowledgement while it works. Meal day-grouping follows your device's local time.
+
+## Privacy
+
+The user-facing policy lives at [snapbite.leeguanfeng.com/privacy.html](https://snapbite.leeguanfeng.com/privacy.html) (source: `apps/miniapp/public/privacy.html`). In short: no ads, no third-party analytics, meal photos are never stored (only Telegram's `file_id`), the AI key is encrypted at rest, and `/export` + `/delete` give users their data and a way out.
+
+The only telemetry is first-party and private: a small `metrics` table counting new users, meals logged and weekly actives, readable only by the owner via the admin `/stats` command.
+
+## Self-hosting
+
+SnapBite runs on Cloudflare (Worker + D1 + Pages). Copy `apps/worker/.env.example` to `.dev.vars`/secrets, create the D1 database and apply the migrations, then deploy. The step-by-step, including the Telegram bot setup and the Mini App URL, is in [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md).
+
+If you fork and run your own instance, use your own bot handle and your own domain — the SnapBite name and `@SnapBiteAI_bot` are not part of the licence (see [LICENSE](LICENSE)).
+
