@@ -150,6 +150,34 @@ export class TelegramBotClient {
     }
   }
 
+  /**
+   * Sends a file as a Telegram document (multipart upload). Used for the
+   * `/export` JSON download. Best-effort — returns false on any failure, never
+   * throws. Uses the raw global fetch so we can post FormData (the injectable
+   * {@link FetchLike} only models a string JSON body).
+   */
+  async sendDocument(
+    chatId: number,
+    doc: { filename: string; content: string; mimeType: string; caption?: string },
+  ): Promise<boolean> {
+    const globalFetch = (globalThis as { fetch?: typeof fetch }).fetch;
+    if (typeof globalFetch !== 'function') return false;
+    try {
+      const form = new FormData();
+      form.append('chat_id', String(chatId));
+      if (doc.caption) form.append('caption', doc.caption);
+      form.append('document', new Blob([doc.content], { type: doc.mimeType }), doc.filename);
+      const res = await globalFetch.call(
+        globalThis,
+        `https://api.telegram.org/bot${this.#token}/sendDocument`,
+        { method: 'POST', body: form },
+      );
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
   /** Resolves a file_id to a downloadable file_path via getFile. */
   async getFilePath(fileId: string): Promise<string | null> {
     const res = await this.#fetch(`https://api.telegram.org/bot${this.#token}/getFile`, {

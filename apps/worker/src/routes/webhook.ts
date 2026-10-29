@@ -1,6 +1,8 @@
 import {
   type BotReply,
   CURRENT_CHANGELOG,
+  DELETE_CANCEL_DATA,
+  DELETE_CONFIRM_DATA,
   FEEDBACK_MAX_LEN,
   FEEDBACK_PROMPT,
   FEEDBACK_THANKS,
@@ -15,9 +17,12 @@ import {
   createProvider,
   currentStreak,
   decryptSecret,
+  firstRunStartMessage,
   goalNudgeLine,
   isLowConfidence,
+  keylessAnalysisMessage,
   parseCallbackQuery,
+  parseDeleteCallback,
   parseRescaleCallback,
   parseUpdate,
   photoLoggedReply,
@@ -34,6 +39,7 @@ import {
 } from '@snapbite/core';
 import { type Context, Hono } from 'hono';
 import { adminNotify } from '../adminNotify.js';
+import { createAccountDb, deleteAccount, exportUser, hasExportableData } from '../db/account.js';
 import { describeError, logError, recentErrors } from '../db/errors.js';
 import { type Favorite, createFavoritesDb, listFavorites } from '../db/favorites.js';
 import { recentFeedback, storeFeedback } from '../db/feedback.js';
@@ -93,6 +99,11 @@ export interface BotClient {
   deleteMessage?(chatId: number, messageId: number): Promise<boolean>;
   /** Answer an inline-button tap (clears the spinner; optional toast). Best-effort. */
   answerCallbackQuery?(callbackId: string, text?: string): Promise<boolean>;
+  /** Send a file as a document (e.g. a JSON export). Best-effort (false on failure). */
+  sendDocument?(
+    chatId: number,
+    doc: { filename: string; content: string; mimeType: string; caption?: string },
+  ): Promise<boolean>;
 }
 
 /** Injectable bot-client factory so tests can supply a mock (no network). */
@@ -235,6 +246,14 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
       await handleCoachCommand(c, bot, providerFactory, parsed);
       return c.json({ ok: true });
     }
+    if (parsed.command === 'export' && parsed.fromId != null) {
+      await handleExportCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
+    if (parsed.command === 'delete' && parsed.fromId != null) {
+      await handleDeleteCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
     if (parsed.command === 'errors') {
       await handleErrorsCommand(c, bot, parsed);
       return c.json({ ok: true });
@@ -250,8 +269,25 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
     // /start creates the user row on first sight; count a new user exactly once
     // (a returning user pressing /start again is not re-counted).
     if (parsed.command === 'start' && parsed.fromId != null) {
-      const { created } = await upsertUserWithCreated(createDb(c.env.DB), { id: parsed.fromId });
+      const { user, created } = await upsertUserWithCreated(createDb(c.env.DB), {
+        id: parsed.fromId,
+      });
       if (created) await bumpCounter(c.env.DB, 'user_started');
+      const settings = await getSettings(createSettingsDb(c.env.DB), user.id);
+      const hasKey = Boolean(settings?.apiKeyCiphertext && settings?.apiKeyIv);
+      // A user with no saved key — whether brand-new or returning without one —
+      // gets the first-run onboarding (one extra message, no drip). A user who
+      // already has a key keeps the short returning-user /start below.
+      if (!hasKey) {
+        const launch: BotReply['replyMarkup'] = miniAppUrl
+          ? { inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]] }
+          : undefined;
+        await bot.sendMessage(parsed.chatId, {
+          text: firstRunStartMessage(),
+          ...(launch ? { replyMarkup: launch } : {}),
+        });
+        return c.json({ ok: true });
+      }
       // Fall through to the normal /start reply below.
     }
     // Conversational profile setup by chat.
@@ -754,6 +790,118 @@ function savedListText(favorites: Favorite[]): string {
 }
 
 /**
+ * `/export` — sends the caller their own data as a single JSON document via
+ * Telegram sendDocument. Includes profile/provider preference, weight
+ * check-ins, every meal (foods + per-food nutrition), and saved meals — never
+ * the AI key or its ciphertext. If the user has no data, says so instead of
+ * sending an empty file.
+ */
+async function handleExportCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const userDb = createDb(c.env.DB);
+  const user = await upsertUser(userDb, { id: parsed.fromId as number });
+  const accountDb = createAccountDb(c.env.DB);
+  const data = await exportUser(accountDb, user.id);
+
+  if (!data || !hasExportableData(data)) {
+    await bot.sendMessage(parsed.chatId, {
+      text: "You don't have any data to export yet. Log a meal (or add one in the app) and try /export again.",
+    });
+    return;
+  }
+
+  const filename = `snapbite-export-${new Date().toISOString().slice(0, 10)}.json`;
+  const content = JSON.stringify(data, null, 2);
+  const ok = await bot.sendDocument?.(parsed.chatId, {
+    filename,
+    content,
+    mimeType: 'application/json',
+    caption:
+      'Here is your SnapBite data (meals, saved meals, weight check-ins). Your AI key is never included.',
+  });
+  if (!ok) {
+    await bot.sendMessage(parsed.chatId, {
+      text: "Sorry — I couldn't send your export just now. Please try /export again in a moment.",
+    });
+  }
+}
+
+/**
+ * `/delete` — step one of a two-step, destructive-but-safe account wipe. Marks
+ * the caller as awaiting confirmation (so a bare /delete never deletes) and
+ * shows a warning with inline "Delete everything" / "Cancel" buttons. The
+ * actual delete happens only in the confirm callback (see
+ * {@link handleDeleteCallback}).
+ */
+async function handleDeleteCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const userDb = createDb(c.env.DB);
+  const user = await upsertUser(userDb, { id: parsed.fromId as number });
+  const settingsDb = createSettingsDb(c.env.DB);
+  await mergePreferences(settingsDb, user.id, { pendingDelete: true });
+
+  await bot.sendMessage(parsed.chatId, {
+    text: '⚠️ This permanently deletes everything SnapBite stores for you — all meals, saved meals, weight check-ins, your settings and your saved AI key. This cannot be undone.\n\nAre you sure?',
+    replyMarkup: {
+      inline_keyboard: [
+        [{ text: '🗑️ Delete everything', callback_data: DELETE_CONFIRM_DATA }],
+        [{ text: 'Cancel', callback_data: DELETE_CANCEL_DATA }],
+      ],
+    },
+  });
+}
+
+/**
+ * Handles the confirm/cancel tap of a `/delete`. Only deletes when the caller's
+ * own `pendingDelete` flag is set, so a stale callback (e.g. a second tap after
+ * deletion, or one from another user who has no pending delete) is a no-op. The
+ * delete is scoped to the caller's rows only. Always answers the callback so
+ * the client spinner clears.
+ */
+async function handleDeleteCallback(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  callback: { callbackId: string; fromId: number; chatId: number; messageId: number; data: string },
+  decision: 'confirm' | 'cancel',
+): Promise<void> {
+  const userDb = createDb(c.env.DB);
+  const user = await upsertUser(userDb, { id: callback.fromId });
+  const settingsDb = createSettingsDb(c.env.DB);
+
+  if (decision === 'cancel') {
+    await mergePreferences(settingsDb, user.id, { pendingDelete: undefined });
+    await bot.answerCallbackQuery?.(callback.callbackId, 'Cancelled — nothing was deleted.');
+    await replyOrEdit(bot, callback.chatId, callback.messageId, {
+      text: '👍 Cancelled — your data is safe and nothing was changed.',
+    });
+    return;
+  }
+
+  // Confirm: only act if THIS user is actually awaiting a delete.
+  const pending =
+    parsePreferences((await getSettings(settingsDb, user.id))?.preferencesJson).pendingDelete ===
+    true;
+  if (!pending) {
+    // A stale/second confirm — do nothing destructive.
+    await bot.answerCallbackQuery?.(callback.callbackId, 'Nothing to delete.');
+    return;
+  }
+
+  const accountDb = createAccountDb(c.env.DB);
+  await deleteAccount(accountDb, user.id);
+  await bot.answerCallbackQuery?.(callback.callbackId, 'Deleted.');
+  await replyOrEdit(bot, callback.chatId, callback.messageId, {
+    text: '✅ Done — all your SnapBite data has been permanently deleted.\n\nSend /start anytime to begin again with a fresh, empty account.',
+  });
+}
+
+/**
  * `/ping` — ADMIN-only self-test: routes a sample alert through `adminNotify`
  * (as an `error` kind, so it lands in the errors Topic / owner DM) so the owner
  * can confirm alerts are actually being delivered end-to-end. Non-admins get the
@@ -1011,7 +1159,7 @@ async function handleTextRevise(
   const settings = await getSettings(settingsDb, user.id);
   if (!c.env.ENCRYPTION_KEY || !settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
     await bot.sendMessage(chatId, {
-      text: 'Send me a meal photo to log it, or open SnapBite to add your AI key and review your history.',
+      text: keylessAnalysisMessage(),
       ...(miniAppUrl
         ? {
             replyMarkup: {
@@ -1153,11 +1301,11 @@ async function logTextMeal(
   const miniAppUrl = c.env.MINI_APP_URL ?? '';
   if (!c.env.ENCRYPTION_KEY || !settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
     await bot.sendMessage(chatId, {
-      text: 'Add your AI key first: open SnapBite → Settings, then describe your meal again.',
+      text: keylessAnalysisMessage(),
       ...(miniAppUrl
         ? {
             replyMarkup: {
-              inline_keyboard: [[{ text: '⚙️ Open SnapBite', web_app: { url: miniAppUrl } }]],
+              inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]],
             },
           }
         : {}),
@@ -1563,6 +1711,14 @@ async function handleCallbackQuery(
   callback: { callbackId: string; fromId: number; chatId: number; messageId: number; data: string },
 ): Promise<void> {
   const miniAppUrl = c.env.MINI_APP_URL ?? '';
+
+  // A /delete confirm/cancel tap (destructive — gated on the caller's pending flag).
+  const deleteDecision = parseDeleteCallback(callback.data);
+  if (deleteDecision) {
+    await handleDeleteCallback(c, bot, callback, deleteDecision);
+    return;
+  }
+
   const factor = parseRescaleCallback(callback.data);
   if (factor == null) {
     // Unknown/!rescale callback — just clear the spinner.
@@ -1644,11 +1800,11 @@ async function handlePhoto(
   const settings = await getSettings(settingsDb, user.id);
   if (!settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
     await bot.sendMessage(chatId, {
-      text: 'Add your AI key first: open SnapBite → Settings, then send the photo again.',
+      text: keylessAnalysisMessage(),
       ...(miniAppUrl
         ? {
             replyMarkup: {
-              inline_keyboard: [[{ text: '⚙️ Open SnapBite', web_app: { url: miniAppUrl } }]],
+              inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]],
             },
           }
         : {}),

@@ -31,6 +31,8 @@ const COMMANDS = [
   { command: 'weight', description: 'Log your weight (for adaptive targets)' },
   { command: 'coach', description: 'Ask about your nutrition' },
   { command: 'settings', description: 'Add or update your AI key' },
+  { command: 'export', description: 'Download all your data as JSON' },
+  { command: 'delete', description: 'Permanently delete your account & data' },
   { command: 'feedback', description: 'Report a problem or send an idea' },
   { command: 'help', description: 'How SnapBite works' },
 ];

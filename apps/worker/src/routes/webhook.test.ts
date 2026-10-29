@@ -126,7 +126,9 @@ describe('POST /webhook', () => {
       env,
     );
     expect(res.status).toBe(200);
-    expect(sent[0]?.reply.text).toContain('Add your AI key');
+    // Keyless photo now points at the free-key fast path + manual entry, not a dead-end.
+    expect(sent[0]?.reply.text).toContain('snapbite.leeguanfeng.com/free-key.html');
+    expect(sent[0]?.reply.text.toLowerCase()).toContain('by hand');
   });
 
   it('auto-logs a photo when the user has a key', async () => {
@@ -1913,5 +1915,68 @@ describe('one-tap portion rescale (R6)', () => {
       env,
     );
     expect(res.status).toBe(200);
+  });
+});
+
+describe('first-run onboarding (/start without a key)', () => {
+  const FREE_KEY_URL = 'https://snapbite.leeguanfeng.com/free-key.html';
+
+  it("a new user's /start includes the free-key link and the manual-entry option", async () => {
+    const tgId = 12001;
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/start', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    const text = lastText(sent);
+    expect(text).toContain(FREE_KEY_URL);
+    // Manual-entry path is offered so it never dead-ends on "add your key".
+    expect(text.toLowerCase()).toContain('by hand');
+    expect(text).toContain('/help');
+  });
+
+  it('a returning user WITH a saved key does not get the onboarding text again', async () => {
+    const tgId = 12002;
+    // Save a key via the authed API, then press /start.
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'sk-test-key', aiProvider: 'gemini' }),
+      },
+      env,
+    );
+
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: '/start', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    const text = lastText(sent);
+    // The short returning-user welcome, not the first-run onboarding wall.
+    expect(text).not.toContain(FREE_KEY_URL);
+    expect(text).toContain('Welcome to SnapBite');
+  });
+
+  it('a photo from a keyless user replies with the free-key link and manual option', async () => {
+    const tgId = 12003;
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { photo: [{ file_id: 'f1' }], chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    const text = lastText(sent);
+    expect(text).toContain(FREE_KEY_URL);
+    expect(text.toLowerCase()).toContain('by hand');
   });
 });
