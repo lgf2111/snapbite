@@ -1,4 +1,12 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 /** Application users, keyed to a Telegram user id. */
 export const users = sqliteTable(
@@ -208,3 +216,41 @@ export const pendingPhotoRetries = sqliteTable(
 );
 
 export type PendingPhotoRetryRow = typeof pendingPhotoRetries.$inferSelect;
+
+/**
+ * First-party product counters (no third-party analytics). One row per
+ * (day, name) holding a running count, bumped via an UPSERT. Day is a local
+ * 'YYYY-MM-DD'; name is an event like 'user_started' | 'first_meal' |
+ * 'meal_logged'. Written best-effort — a metrics failure never fails a user
+ * action.
+ */
+export const metrics = sqliteTable(
+  'metrics',
+  {
+    day: text('day').notNull(),
+    name: text('name').notNull(),
+    count: integer('count').notNull().default(0),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.day, t.name] }),
+  }),
+);
+
+/**
+ * Idempotent record that a user was active in a given ISO week ('YYYY-Www'),
+ * so weekly-active-user counts don't need to scan meals. Inserted with INSERT
+ * OR IGNORE, so repeat activity in the same week is a no-op.
+ */
+export const userActivity = sqliteTable(
+  'user_activity',
+  {
+    userId: integer('user_id').notNull(),
+    week: text('week').notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.week] }),
+  }),
+);
+
+export type MetricsRow = typeof metrics.$inferSelect;
+export type UserActivityRow = typeof userActivity.$inferSelect;
