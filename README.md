@@ -10,7 +10,7 @@ A Telegram-native, low-friction, AI-assisted food & nutrition logging app.
 Start, then send a photo of your plate. Browse and edit your log in the
 [Mini App](https://snapbite.leeguanfeng.com). Bring your own AI key (Gemini,
 OpenAI or DeepSeek) and set it once in Settings — or log by hand with no key at all.
-[Getting a free key takes about a minute](https://snapbite.leeguanfeng.com/free-key.html).
+[Getting a free key takes about a minute](https://snapbite.leeguanfeng.com/free-key).
 
 <p>
   <img src="docs/screenshots/home.png" alt="Today's log with calorie and macro rings" width="240" />
