@@ -37,8 +37,10 @@ describe('local backend (no VITE_WORKER_URL)', () => {
     // Local calendar day (matches how the backend now buckets days).
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const dates = await backend.mealDates();
+    const { dates, streak } = await backend.mealDates();
     expect(dates).toContain(today);
+    // A single logged day is not a streak yet (matches the bot's 2+ threshold).
+    expect(streak).toBeNull();
     const meals = await backend.mealsByDate(today);
     expect(meals).toHaveLength(2);
     expect(await backend.mealsByDate('1999-01-01')).toEqual([]);

@@ -1918,6 +1918,207 @@ describe('one-tap portion rescale (R6)', () => {
   });
 });
 
+describe('day streak revival', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const seedMeal = {
+    foods: [
+      {
+        food: { name: 'x', estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
+        nutrition: {
+          energyKcal: 300,
+          proteinG: 20,
+          carbsG: 30,
+          fatG: 10,
+          source: 'ai_estimate' as const,
+        },
+      },
+    ],
+    total: {
+      energyKcal: 300,
+      proteinG: 20,
+      carbsG: 30,
+      fatG: 10,
+      source: 'ai_estimate' as const,
+    },
+    confidence: 0.9,
+    needsConfirmation: false,
+  };
+
+  async function saveKey(tgId: number): Promise<void> {
+    const user = JSON.stringify({ id: tgId, first_name: 'Ada' });
+    const authDate = String(Math.floor(Date.now() / 1000));
+    const initData = await signInitData(
+      { user, auth_date: authDate },
+      '123456:LOCAL-DEV-BOT-TOKEN',
+    );
+    await createApp().request(
+      '/api/settings',
+      {
+        method: 'PUT',
+        headers: { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' },
+        body: JSON.stringify({ apiKey: 'sk-test-key' }),
+      },
+      env,
+    );
+  }
+
+  /** Seeds meals on the given day-offsets and returns the app user id. */
+  async function seedPriorRun(tgId: number, daysAgo: number[]): Promise<string> {
+    const { createDb, upsertUser } = await import('../db/users.js');
+    const { createMealsDb, saveMeal } = await import('../db/meals.js');
+    const user = await upsertUser(createDb(env.DB), { id: tgId });
+    const mealsDb = createMealsDb(env.DB);
+    for (const days of daysAgo) {
+      await saveMeal(mealsDb, {
+        userId: user.id,
+        meal: seedMeal,
+        loggedAt: Date.now() - days * DAY,
+      });
+    }
+    return user.id;
+  }
+
+  it('offers a one-tap revive after a single missed day, then restores the run', async () => {
+    const tgId = 8700;
+    await saveKey(tgId);
+    const userId = await seedPriorRun(tgId, [2, 3]); // 2-day run, yesterday missing.
+    const { app, sent } = appWithCapture();
+
+    await app.request(
+      '/webhook',
+      post({ message: { text: 'log an apple', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    const confirmation = sent[sent.length - 1]?.reply;
+    expect(confirmation?.text).toContain('2-day logging streak was broken');
+    expect(confirmation?.replyMarkup?.inline_keyboard[0]?.[0]).toMatchObject({
+      text: '🔥 Revive 2-day streak',
+      callback_data: 'rv',
+    });
+
+    // Tap the revive button (the text confirmation is message id 1000).
+    await app.request(
+      '/webhook',
+      post({
+        callback_query: {
+          id: 'cb-revive',
+          data: 'rv',
+          from: { id: tgId },
+          message: {
+            message_id: 1000,
+            chat: { id: tgId },
+            text: confirmation?.text ?? '',
+            reply_markup: confirmation?.replyMarkup,
+          },
+        },
+      }),
+      env,
+    );
+
+    // The message is edited in place: offer → restored run, revive button gone.
+    const edited = sent[sent.length - 1]?.reply;
+    expect(edited?.text).toContain('4-day logging streak revived!');
+    expect(edited?.text).not.toContain('was broken');
+    const buttons = (edited?.replyMarkup?.inline_keyboard ?? []).flat();
+    expect(buttons.some((b) => b.callback_data === 'rv')).toBe(false);
+    expect(buttons.some((b) => b.web_app?.url)).toBe(true);
+
+    // The bridged day is persisted (and is not a fake meal).
+    const { createSettingsDb, getSettings, parsePreferences } = await import('../db/settings.js');
+    const prefs = parsePreferences(
+      (await getSettings(createSettingsDb(env.DB), userId))?.preferencesJson,
+    );
+    expect(prefs.streakRevival?.revivedDays).toHaveLength(1);
+    expect(prefs.streakRevival?.lastRevivedAt).toBeTypeOf('number');
+
+    // A later log the same day counts the revived day in the run.
+    await app.request(
+      '/webhook',
+      post({ message: { text: 'log a pear', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(lastText(sent)).toContain('4-day logging streak');
+  });
+
+  it('offers a revive for a recent one-day gap, not just the first day back', async () => {
+    const tgId = 8702;
+    await saveKey(tgId);
+    // 2-day prior run, gap 4 days ago, then a 3-day run up to yesterday.
+    await seedPriorRun(tgId, [1, 2, 3, 5, 6]);
+    const { app, sent } = appWithCapture();
+
+    await app.request(
+      '/webhook',
+      post({ message: { text: 'log an apple', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    const confirmation = sent[sent.length - 1]?.reply;
+    expect(confirmation?.text).toContain('4-day logging streak');
+    expect(confirmation?.text).toContain('2-day logging streak was broken');
+    expect(confirmation?.replyMarkup?.inline_keyboard[0]?.[0]).toMatchObject({
+      text: '🔥 Revive 2-day streak',
+      callback_data: 'rv',
+    });
+
+    await app.request(
+      '/webhook',
+      post({
+        callback_query: {
+          id: 'cb-revive-late',
+          data: 'rv',
+          from: { id: tgId },
+          message: {
+            message_id: 1000,
+            chat: { id: tgId },
+            text: confirmation?.text ?? '',
+            reply_markup: confirmation?.replyMarkup,
+          },
+        },
+      }),
+      env,
+    );
+    // 4 current days + the bridged day + the 2-day prior run.
+    expect(lastText(sent)).toContain('7-day logging streak revived!');
+  });
+
+  it('does not offer a revive once the gap is older than the grace window', async () => {
+    const tgId = 8703;
+    await saveKey(tgId);
+    // 2-day prior run, gap 8 days ago, then a 7-day run up to yesterday.
+    await seedPriorRun(tgId, [1, 2, 3, 4, 5, 6, 7, 9, 10]);
+    const { app, sent } = appWithCapture();
+
+    await app.request(
+      '/webhook',
+      post({ message: { text: 'log an apple', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(lastText(sent)).not.toContain('was broken');
+    const buttons = (sent[sent.length - 1]?.reply.replyMarkup?.inline_keyboard ?? []).flat();
+    expect(buttons.some((b) => b.callback_data === 'rv')).toBe(false);
+  });
+
+  it('does not offer a revive while the 30-day cooldown is active', async () => {
+    const tgId = 8701;
+    await saveKey(tgId);
+    const userId = await seedPriorRun(tgId, [2, 3]);
+    const { createSettingsDb, mergePreferences } = await import('../db/settings.js');
+    await mergePreferences(createSettingsDb(env.DB), userId, {
+      streakRevival: { revivedDays: [], lastRevivedAt: Date.now() },
+    });
+
+    const { app, sent } = appWithCapture();
+    await app.request(
+      '/webhook',
+      post({ message: { text: 'log an apple', chat: { id: tgId }, from: { id: tgId } } }),
+      env,
+    );
+    expect(lastText(sent)).not.toContain('was broken');
+    const buttons = (sent[sent.length - 1]?.reply.replyMarkup?.inline_keyboard ?? []).flat();
+    expect(buttons.some((b) => b.callback_data === 'rv')).toBe(false);
+  });
+});
+
 describe('first-run onboarding (/start without a key)', () => {
   const FREE_KEY_URL = 'https://snapbite.leeguanfeng.com/free-key';
 

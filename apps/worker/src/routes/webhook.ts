@@ -7,6 +7,7 @@ import {
   FEEDBACK_PROMPT,
   FEEDBACK_THANKS,
   GOAL_LABELS,
+  type InlineKeyboardButton,
   type OnboardingState,
   type ParsedCommand,
   type TelegramUpdate,
@@ -20,6 +21,7 @@ import {
   firstRunStartMessage,
   goalNudgeLine,
   isLowConfidence,
+  isStreakReviveCallback,
   keylessAnalysisMessage,
   parseCallbackQuery,
   parseDeleteCallback,
@@ -32,10 +34,15 @@ import {
   rescaleMeal,
   rescaleNote,
   resolveMeal,
+  revivableStreak,
+  revivedStreakLine,
+  shiftDayKey,
   startOnboarding,
   streakLine,
+  streakReviveOfferLine,
   weightTrend,
   withPortionButtons,
+  withStreakReviveButton,
 } from '@snapbite/core';
 import { type Context, Hono } from 'hono';
 import { adminNotify } from '../adminNotify.js';
@@ -160,8 +167,8 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
       try {
         await handleCallbackQuery(c, bot, callback);
       } catch (err) {
-        // A rescale failing shouldn't leave the user's button spinning.
-        await bot.answerCallbackQuery?.(callback.callbackId, "Couldn't adjust that — try again.");
+        // A button action failing shouldn't leave the user's button spinning.
+        await bot.answerCallbackQuery?.(callback.callbackId, "Couldn't do that — try again.");
         await logError(c.env.DB, {
           telegramUserId: callback.fromId,
           source: 'webhook',
@@ -1380,8 +1387,11 @@ async function logTextMeal(
     const foods = meal.foods.map((f) => f.food.name);
     const [goalNudge, streak] = await Promise.all([
       buildGoalNudge(c, settingsDb, userId, settings, meal),
-      settings ? buildStreakLine(c, settings, userId) : Promise.resolve(null),
+      settings
+        ? buildStreakFooter(c, settings, userId)
+        : Promise.resolve<StreakFooter>({ line: null, revival: null }),
     ]);
+    const offer = streak.revival ? streakReviveOfferLine(streak.revival.priorStreak) : null;
     const baseReply = photoLoggedReply(
       foods,
       {
@@ -1392,10 +1402,16 @@ async function logTextMeal(
         fiberG: meal.total.fiberG,
       },
       { miniAppUrl },
-      [goalNudge, streak],
+      [goalNudge, streak.line, offer],
     );
     // Low confidence → offer one-tap portion correction (deterministic rescale).
-    const reply = isLowConfidence(meal.confidence) ? withPortionButtons(baseReply) : baseReply;
+    const withPortions = isLowConfidence(meal.confidence)
+      ? withPortionButtons(baseReply)
+      : baseReply;
+    // A broken streak can be revived with one tap (no AI, no invented meal).
+    const reply = streak.revival
+      ? withStreakReviveButton(withPortions, streak.revival.priorStreak)
+      : withPortions;
     const confirmMessageId = await replyOrEdit(bot, chatId, ack.messageId, reply);
     const isFirstMeal = (await countMealsSince(mealsDb, userId, 0)) === 0;
     await saveMeal(mealsDb, {
@@ -1719,34 +1735,172 @@ async function buildGoalNudge(
   }
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** How far back streak math looks (plenty for any realistic current run). */
+const STREAK_WINDOW_DAYS = 60;
+const STREAK_WINDOW_MS = STREAK_WINDOW_DAYS * DAY_MS;
+
+/** A broken streak can be revived once per this window. */
+const STREAK_REVIVAL_COOLDOWN_MS = 30 * DAY_MS;
+
+/** How recently the single missed day must have happened to be revivable. */
+const STREAK_REVIVAL_GRACE_DAYS = 7;
+
+/** Whether a one-day gap is recent enough to offer/apply a revival. */
+function isWithinRevivalGrace(missedDayKey: string, todayKey: string): boolean {
+  return missedDayKey >= shiftDayKey(todayKey, -STREAK_REVIVAL_GRACE_DAYS);
+}
+
+interface StreakFooter {
+  /** The normal "🔥 N-day" line, when the run is 2+ days. */
+  line: string | null;
+  /** A recent one-day gap that can be bridged, when a revival is worthwhile. */
+  revival: { priorStreak: number } | null;
+}
+
 /**
- * Builds the "🔥 N-day logging streak" footer line for a just-logged meal, or
- * null below 2 days. Buckets the user's recent meals into local day-keys (using
- * their stored tz when set) and counts consecutive days. Best-effort → null.
+ * Builds the streak footer for a just-logged meal: the "🔥 N-day logging
+ * streak" line (null below 2 days) and, when the user missed exactly one day
+ * recently, a revival offer. Buckets recent meals into local day-keys (using
+ * the stored tz) and merges previously revived days. The offer is limited to
+ * the grace window and to one revival per cooldown window. Best-effort → empty
+ * footer.
  */
-async function buildStreakLine(
+async function buildStreakFooter(
   c: Context<AppBindings>,
   settings: SettingsRow,
   userId: string,
-): Promise<string | null> {
+): Promise<StreakFooter> {
   try {
     const prefs = parsePreferences(settings.preferencesJson);
     const tz = prefs.adaptive?.tzOffsetMinutes ?? prefs.reminders?.tzOffsetMinutes ?? 0;
     const now = Date.now();
     const mealsDb = createMealsDb(c.env.DB);
-    // 60-day window is plenty to measure any current streak cheaply.
-    const rows = await mealRowsSince(mealsDb, userId, now - 60 * 24 * 60 * 60 * 1000);
+    const rows = await mealRowsSince(mealsDb, userId, now - STREAK_WINDOW_MS);
     const dayKeys = new Set(rows.map((r) => localDayKey(r.loggedAt, tz)));
+    const revivedDays = Array.isArray(prefs.streakRevival?.revivedDays)
+      ? prefs.streakRevival.revivedDays
+      : [];
+    for (const day of revivedDays) dayKeys.add(day);
     // The just-logged meal isn't saved yet — include today so the streak counts it.
-    dayKeys.add(localDayKey(now, tz));
-    return streakLine(currentStreak(dayKeys, localDayKey(now, tz)));
+    const todayKey = localDayKey(now, tz);
+    dayKeys.add(todayKey);
+
+    const line = streakLine(currentStreak(dayKeys, todayKey));
+    const revival = revivableStreak(dayKeys, todayKey);
+    const lastRevivedAt = prefs.streakRevival?.lastRevivedAt;
+    const cooldownOk =
+      typeof lastRevivedAt !== 'number' || now - lastRevivedAt >= STREAK_REVIVAL_COOLDOWN_MS;
+    // Keep offering while the single missed day is still recent, so a user who
+    // didn't tap the first time (or only noticed later) can still revive it.
+    if (!revival || !cooldownOk || !isWithinRevivalGrace(revival.missedDayKey, todayKey)) {
+      return { line, revival: null };
+    }
+    return { line, revival: { priorStreak: revival.priorStreak } };
   } catch {
-    return null;
+    return { line: null, revival: null };
   }
 }
 
 /**
- * Handles an inline-button tap. Currently just the one-tap portion rescale: a
+ * Handles the "🔥 Revive streak" tap. Bridges the single missed day in the
+ * user's streak by storing it in preferences (not as a fake meal), then edits
+ * the confirmation in place to show the restored run and drops the button.
+ * Recomputes the gap server-side and enforces the cooldown, so a stale or
+ * crafted callback can't revive an old streak. Deterministic — no AI.
+ */
+async function handleStreakReviveCallback(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  callback: {
+    callbackId: string;
+    fromId: number;
+    chatId: number;
+    messageId: number;
+    messageText: string | null;
+    inlineKeyboard: InlineKeyboardButton[][] | null;
+  },
+): Promise<void> {
+  const userDb = createDb(c.env.DB);
+  const user = await upsertUser(userDb, { id: callback.fromId });
+  const settingsDb = createSettingsDb(c.env.DB);
+  const settings = await getSettings(settingsDb, user.id);
+  if (!settings) {
+    await bot.answerCallbackQuery?.(callback.callbackId, 'That streak offer has expired.');
+    return;
+  }
+
+  const prefs = parsePreferences(settings.preferencesJson);
+  const tz = prefs.adaptive?.tzOffsetMinutes ?? prefs.reminders?.tzOffsetMinutes ?? 0;
+  const now = Date.now();
+  const todayKey = localDayKey(now, tz);
+  const lastRevivedAt = prefs.streakRevival?.lastRevivedAt;
+  if (typeof lastRevivedAt === 'number' && now - lastRevivedAt < STREAK_REVIVAL_COOLDOWN_MS) {
+    await bot.answerCallbackQuery?.(
+      callback.callbackId,
+      'You can revive one streak every 30 days.',
+    );
+    return;
+  }
+
+  // The button belongs to one of the user's meal confirmations. The message may
+  // be a few days old (grace window), so freshness is judged by the recomputed
+  // gap below rather than by the message's date.
+  const mealsDb = createMealsDb(c.env.DB);
+  const ref = await findMealByMessageId(mealsDb, user.id, callback.messageId);
+  if (!ref) {
+    await bot.answerCallbackQuery?.(callback.callbackId, 'That streak offer has expired.');
+    return;
+  }
+
+  const rows = await mealRowsSince(mealsDb, user.id, now - STREAK_WINDOW_MS);
+  const dayKeys = new Set(rows.map((r) => localDayKey(r.loggedAt, tz)));
+  const priorRevivals = Array.isArray(prefs.streakRevival?.revivedDays)
+    ? prefs.streakRevival.revivedDays
+    : [];
+  for (const day of priorRevivals) dayKeys.add(day);
+
+  const revival = revivableStreak(dayKeys, todayKey);
+  // Same rule as the offer: only a recent single-day gap is revivable.
+  if (!revival || !isWithinRevivalGrace(revival.missedDayKey, todayKey)) {
+    await bot.answerCallbackQuery?.(callback.callbackId, 'That streak is too old to revive.');
+    return;
+  }
+
+  const offerLine = streakReviveOfferLine(revival.priorStreak);
+  const revivedLine = revivedStreakLine(revival.revivedStreak);
+  if (!offerLine || !revivedLine || !callback.messageText?.includes(offerLine)) {
+    await bot.answerCallbackQuery?.(
+      callback.callbackId,
+      "Couldn't revive that streak — try again.",
+    );
+    return;
+  }
+
+  // Persist the bridged day (pruned to the streak window so prefs stay small).
+  const windowStartKey = shiftDayKey(todayKey, -STREAK_WINDOW_DAYS);
+  const revivedDays = [...new Set([...priorRevivals, revival.missedDayKey])].filter(
+    (day) => day >= windowStartKey,
+  );
+  await mergePreferences(settingsDb, user.id, {
+    streakRevival: { revivedDays, lastRevivedAt: now },
+  });
+
+  // Edit in place: swap the offer for the restored run and drop the revive
+  // button, keeping the portion/launch buttons below it.
+  const remaining = (callback.inlineKeyboard ?? []).filter(
+    (row) => !row.some((button) => isStreakReviveCallback(button.callback_data)),
+  );
+  await replyOrEdit(bot, callback.chatId, callback.messageId, {
+    text: callback.messageText.replace(offerLine, revivedLine),
+    replyMarkup: { inline_keyboard: remaining },
+  });
+  await bot.answerCallbackQuery?.(callback.callbackId, '🔥 Streak revived!');
+}
+
+/**
+ * Handles an inline-button tap. Currently the one-tap portion rescale: a
  * `rsz:<factor>` payload scales the just-logged meal (the one the tapped
  * confirmation message belongs to) by `factor` — deterministically, with NO AI
  * re-call — persists it, and edits the confirmation in place (keeping the
@@ -1757,7 +1911,15 @@ async function buildStreakLine(
 async function handleCallbackQuery(
   c: Context<AppBindings>,
   bot: BotClient,
-  callback: { callbackId: string; fromId: number; chatId: number; messageId: number; data: string },
+  callback: {
+    callbackId: string;
+    fromId: number;
+    chatId: number;
+    messageId: number;
+    data: string;
+    messageText: string | null;
+    inlineKeyboard: InlineKeyboardButton[][] | null;
+  },
 ): Promise<void> {
   const miniAppUrl = c.env.MINI_APP_URL ?? '';
 
@@ -1765,6 +1927,13 @@ async function handleCallbackQuery(
   const deleteDecision = parseDeleteCallback(callback.data);
   if (deleteDecision) {
     await handleDeleteCallback(c, bot, callback, deleteDecision);
+    return;
+  }
+
+  // A one-tap streak revival. Recomputes the gap server-side (never trusts the
+  // payload) and stores the bridged day in preferences.
+  if (isStreakReviveCallback(callback.data)) {
+    await handleStreakReviveCallback(c, bot, callback);
     return;
   }
 
@@ -1959,8 +2128,11 @@ async function handlePhoto(
   // Deterministic footer (no AI): goal-progress nudge + logging streak.
   const [goalNudge, streak] = await Promise.all([
     buildGoalNudge(c, settingsDb, user.id, settings, meal),
-    settings ? buildStreakLine(c, settings, user.id) : Promise.resolve(null),
+    settings
+      ? buildStreakFooter(c, settings, user.id)
+      : Promise.resolve<StreakFooter>({ line: null, revival: null }),
   ]);
+  const offer = streak.revival ? streakReviveOfferLine(streak.revival.priorStreak) : null;
   const baseReply = photoLoggedReply(
     foods,
     {
@@ -1971,12 +2143,16 @@ async function handlePhoto(
       fiberG: meal.total.fiberG,
     },
     { miniAppUrl },
-    [goalNudge, streak],
+    [goalNudge, streak.line, offer],
   );
   // Portion sizing is the weak point of AI estimates. When overall confidence
   // is low, offer one-tap multipliers (¼/½/1×/2×) that rescale deterministically
   // (no AI re-call) so the user can correct the portion in a tap.
-  const reply = isLowConfidence(meal.confidence) ? withPortionButtons(baseReply) : baseReply;
+  const withPortions = isLowConfidence(meal.confidence) ? withPortionButtons(baseReply) : baseReply;
+  // A broken streak can be revived with one tap (no AI, no invented meal).
+  const reply = streak.revival
+    ? withStreakReviveButton(withPortions, streak.revival.priorStreak)
+    : withPortions;
 
   // Edit the "Analyzing…" message into the result (single transforming message).
   // If the edit fails or we never got an id, fall back to sending a new message

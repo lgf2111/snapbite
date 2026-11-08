@@ -10,6 +10,7 @@ import {
 } from './db/settings.js';
 import { createDb, upsertUser } from './db/users.js';
 import { isLocalSunday, recapUser, runWeeklyRecaps } from './recap.js';
+import { localDayKey } from './routes/meals.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -101,6 +102,39 @@ describe('recapUser', () => {
       SUNDAY,
     );
     expect(again).toBeNull();
+  });
+
+  it('counts a revived day in the recap streak line', async () => {
+    const tgId = 11003;
+    const user = await upsertUser(createDb(env.DB), { id: tgId });
+    await mergePreferences(createSettingsDb(env.DB), user.id, {
+      recap: { enabled: true, tzOffsetMinutes: 0 },
+      // Friday missed, bridged by a revival; Sat + Thu + Wed are real meals.
+      streakRevival: {
+        revivedDays: [localDayKey(SUNDAY - 2 * DAY, 0)],
+        lastRevivedAt: SUNDAY,
+      },
+    });
+    const mealsDb = createMealsDb(env.DB);
+    for (const d of [1, 3, 4]) {
+      await saveMeal(mealsDb, {
+        userId: user.id,
+        meal: meal(2000, 140),
+        loggedAt: SUNDAY - d * DAY,
+      });
+    }
+
+    const sent: Array<{ chatId: number; reply: BotReply }> = [];
+    const prefs = JSON.stringify(
+      parsePreferences((await getSettings(createSettingsDb(env.DB), user.id))?.preferencesJson),
+    );
+    await recapUser(
+      env,
+      bot(sent),
+      { userId: user.id, telegramUserId: tgId, preferencesJson: prefs },
+      SUNDAY,
+    );
+    expect(sent.find((s) => s.chatId === tgId)?.reply.text).toContain('4-day streak going');
   });
 
   it('does nothing on a non-Sunday', async () => {

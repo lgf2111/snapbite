@@ -26,7 +26,7 @@ export interface TelegramUpdate {
     /** The message this one replies to (Telegram populates it on a reply). */
     reply_to_message?: { message_id?: number };
   };
-  /** An inline-button tap (we use these for one-tap portion rescaling). */
+  /** An inline-button tap (we use these for portion rescaling + streak revival). */
   callback_query?: {
     id?: string;
     data?: string;
@@ -34,6 +34,10 @@ export interface TelegramUpdate {
     message?: {
       message_id?: number;
       chat?: { id: number };
+      /** The tapped message's text, so a handler can edit it in place. */
+      text?: string;
+      /** The tapped message's inline keyboard, so a handler can rewrite/remove it. */
+      reply_markup?: { inline_keyboard?: InlineKeyboardButton[][] };
     };
   };
 }
@@ -50,6 +54,10 @@ export interface ParsedCallback {
   messageId: number;
   /** The opaque callback_data payload (e.g. "rsz:0.5"). */
   data: string;
+  /** The tapped message's text (null when Telegram doesn't include it). */
+  messageText: string | null;
+  /** The tapped message's inline keyboard (null when absent). */
+  inlineKeyboard: InlineKeyboardButton[][] | null;
 }
 
 /**
@@ -73,6 +81,8 @@ export function parseCallbackQuery(update: TelegramUpdate): ParsedCallback | nul
     chatId: cq.message.chat.id,
     messageId: cq.message.message_id,
     data: cq.data ?? '',
+    messageText: cq.message.text ?? null,
+    inlineKeyboard: cq.message.reply_markup?.inline_keyboard ?? null,
   };
 }
 
@@ -300,6 +310,49 @@ export function streakLine(streak: number): string | null {
   if (!Number.isFinite(streak) || streak < 2) return null;
   const milestone = streak % 7 === 0 ? ' 🎉' : '';
   return `🔥 ${streak}-day logging streak${milestone}`;
+}
+
+/** callback_data for the one-tap streak-revival button. */
+export const STREAK_REVIVE_CALLBACK = 'rv';
+
+/** Whether a callback_data payload is the streak-revival button. */
+export function isStreakReviveCallback(data: string | null | undefined): boolean {
+  return data === STREAK_REVIVE_CALLBACK;
+}
+
+/**
+ * The "your run slipped" line shown on the first log after a one-day miss, or
+ * null for runs below 2 days. Paired with the revive button (see
+ * {@link withStreakReviveButton}).
+ */
+export function streakReviveOfferLine(priorStreak: number): string | null {
+  if (!Number.isFinite(priorStreak) || priorStreak < 2) return null;
+  return `💔 Your ${priorStreak}-day logging streak was broken — tap below to revive it.`;
+}
+
+/** The celebration line after a revival, or null below 2 days. */
+export function revivedStreakLine(streak: number): string | null {
+  if (!Number.isFinite(streak) || streak < 2) return null;
+  const milestone = streak % 7 === 0 ? ' 🎉' : '';
+  return `🔥 ${streak}-day logging streak revived!${milestone}`;
+}
+
+/**
+ * Adds the one-tap revive button above an existing reply's inline keyboard.
+ * The prior run length is shown so the offer is specific. Returns a NEW reply.
+ */
+export function withStreakReviveButton(reply: BotReply, priorStreak: number): BotReply {
+  const label =
+    Number.isFinite(priorStreak) && priorStreak >= 2
+      ? `🔥 Revive ${priorStreak}-day streak`
+      : '🔥 Revive streak';
+  const existing = reply.replyMarkup?.inline_keyboard ?? [];
+  return {
+    ...reply,
+    replyMarkup: {
+      inline_keyboard: [[{ text: label, callback_data: STREAK_REVIVE_CALLBACK }], ...existing],
+    },
+  };
 }
 
 /** The macro/energy totals shown in the detailed photo-logged reply. */

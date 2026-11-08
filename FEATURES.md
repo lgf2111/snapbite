@@ -20,6 +20,10 @@ shown as an **estimate** and is always **editable**.
   logging streak"), with a 🎉 milestone every 7 days. Counting is forgiving: a streak that ran
   through yesterday is still alive until the day ends, so logging in the evening never "breaks" it.
   Pure date math from your logged days, no AI; it only appears once you're at 2+ days.
+- **Streak revival** — miss a single day and a log within the next week offers a one-tap **Revive**
+  button: it bridges the gap so the run continues (a 5-day run + 1 missed day + today = 7 days). The
+  missed day is stored as revived, never as a fake meal, and you can revive once every 30 days. The
+  Mini App Home header shows the current streak too. Still no AI — just date math.
 - **Add a meal by hand** — in the Mini App, log a meal manually (name + macros) with no photo and no
   AI key required.
 - **Save meals to reuse** — from a meal's detail view, tap the **star** to save it as a reusable

@@ -5,6 +5,7 @@ import {
   FREE_KEY_URL,
   firstRunStartMessage,
   goalNudgeLine,
+  isStreakReviveCallback,
   keylessAnalysisMessage,
   mealLoggedMessage,
   parseCallbackQuery,
@@ -12,6 +13,10 @@ import {
   parseUpdate,
   photoLoggedReply,
   replyForCommand,
+  revivedStreakLine,
+  streakLine,
+  streakReviveOfferLine,
+  withStreakReviveButton,
 } from './bot.js';
 
 const CONFIG = { miniAppUrl: 'https://app.example.com' };
@@ -86,7 +91,29 @@ describe('parseCallbackQuery', () => {
       chatId: 7,
       messageId: 99,
       data: 'rsz:0.5',
+      messageText: null,
+      inlineKeyboard: null,
     });
+  });
+
+  it('carries the tapped message text + keyboard when Telegram includes them', () => {
+    const parsed = parseCallbackQuery({
+      callback_query: {
+        id: 'cb2',
+        data: 'rv',
+        from: { id: 42 },
+        message: {
+          message_id: 99,
+          chat: { id: 7 },
+          text: 'Your streak was broken',
+          reply_markup: {
+            inline_keyboard: [[{ text: 'Revive', callback_data: 'rv' }]],
+          },
+        },
+      },
+    });
+    expect(parsed?.messageText).toBe('Your streak was broken');
+    expect(parsed?.inlineKeyboard?.[0]?.[0]?.callback_data).toBe('rv');
   });
 
   it('returns null for a non-callback update or incomplete fields', () => {
@@ -213,6 +240,43 @@ describe('goalNudgeLine', () => {
       goalNudgeLine({ todayKcal: 500, todayProteinG: 20, target: { energyKcal: 0, proteinG: 0 } }),
     ).toBeNull();
     expect(goalNudgeLine(null)).toBeNull();
+  });
+});
+
+describe('streak revival helpers', () => {
+  it('offers a revive only for a 2+ day run', () => {
+    expect(streakReviveOfferLine(1)).toBeNull();
+    expect(streakReviveOfferLine(5)).toContain('5-day logging streak was broken');
+  });
+
+  it('celebrates a revived streak and marks weekly milestones', () => {
+    expect(revivedStreakLine(1)).toBeNull();
+    expect(revivedStreakLine(6)).toBe('🔥 6-day logging streak revived!');
+    expect(revivedStreakLine(7)).toContain('🎉');
+  });
+
+  it('recognizes only the revive callback', () => {
+    expect(isStreakReviveCallback('rv')).toBe(true);
+    expect(isStreakReviveCallback('rsz:0.5')).toBe(false);
+    expect(isStreakReviveCallback(null)).toBe(false);
+  });
+
+  it('adds the revive button above the existing keyboard', () => {
+    const base = photoLoggedReply(
+      ['oats'],
+      { energyKcal: 300, proteinG: 12, carbsG: 40, fatG: 8 },
+      CONFIG,
+    );
+    const reply = withStreakReviveButton(base, 5);
+    const rows = reply.replyMarkup?.inline_keyboard ?? [];
+    expect(rows[0]?.[0]).toMatchObject({ text: '🔥 Revive 5-day streak', callback_data: 'rv' });
+    // The original launch button is preserved below it.
+    expect(rows[1]?.[0]?.web_app?.url).toBe(CONFIG.miniAppUrl);
+  });
+
+  it('uses the same 2+ day threshold as the normal streak line', () => {
+    expect(streakLine(2)).toBe('🔥 2-day logging streak');
+    expect(revivedStreakLine(2)).toBe('🔥 2-day logging streak revived!');
   });
 });
 

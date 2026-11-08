@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { Backend, RecentMeal } from '@/lib/backend';
+import type { Backend, MealDates, RecentMeal } from '@/lib/backend';
 import { cacheKey } from '@/lib/cache';
 import { hapticNotify } from '@/lib/telegram';
 import { useCachedData } from '@/lib/useCachedData';
@@ -101,12 +101,13 @@ export function HomeScreen({
   );
   const meals = mealsLoading ? null : (mealsData ?? []);
 
-  // Logged days for the calendar dots (cached).
-  const { data: loggedDatesData, refresh: refreshDates } = useCachedData<string[]>(
+  // Logged days for the calendar dots + the current streak (cached).
+  const { data: datesData, refresh: refreshDates } = useCachedData<MealDates>(
     cacheKey.mealDates(),
     () => backend.mealDates(),
   );
-  const loggedDates = loggedDatesData ?? [];
+  const loggedDates = datesData?.dates ?? [];
+  const streak = datesData?.streak ?? null;
 
   const refresh = useCallback(() => {
     refreshMeals();
@@ -213,7 +214,12 @@ export function HomeScreen({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">SnapBite</h1>
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold">SnapBite</h1>
+          {streak != null && (
+            <p className="text-muted-foreground text-xs">🔥 {streak}-day logging streak</p>
+          )}
+        </div>
         <div className="flex items-center gap-1.5">
           <Button
             variant="ghost"
