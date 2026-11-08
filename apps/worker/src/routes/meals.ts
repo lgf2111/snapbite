@@ -4,6 +4,7 @@ import {
   type MealImage,
   MealResult,
   createProvider,
+  currentStreak,
   decryptSecret,
   mealLoggedMessage,
   resolveMeal,
@@ -272,16 +273,29 @@ export function mealsRoutes(
   });
 
   // GET /api/meals/dates — distinct days (YYYY-MM-DD) that have meals, so the
-  // calendar can dot logged days without fetching every meal. `?tz=` is the
-  // client's UTC offset in minutes so days align to the user's local time.
+  // calendar can dot logged days without fetching every meal, plus the current
+  // logging streak for the Home header. `?tz=` is the client's UTC offset in
+  // minutes so days align to the user's local time.
   app.get('/dates', async (c) => {
+    const userId = c.get('userId');
     const db = createMealsDb(c.env.DB);
     const tz = parseTzOffset(c.req.query('tz'));
-    const summaries = await listMeals(db, c.get('userId'), 500);
+    const summaries = await listMeals(db, userId, 500);
     const dates = [...new Set(summaries.map((m) => localDayKey(m.loggedAt, tz)))].sort((a, b) =>
       a < b ? 1 : -1,
     );
-    return c.json({ dates });
+    // Revived days count toward the streak, but never appear as logged dates.
+    const prefs = parsePreferences(
+      (await getSettings(createSettingsDb(c.env.DB), userId))?.preferencesJson,
+    );
+    const dayKeys = new Set(dates);
+    for (const day of Array.isArray(prefs.streakRevival?.revivedDays)
+      ? prefs.streakRevival.revivedDays
+      : []) {
+      dayKeys.add(day);
+    }
+    const streak = currentStreak(dayKeys, localDayKey(Date.now(), tz));
+    return c.json({ dates, streak: streak >= 2 ? streak : null });
   });
 
   // GET /api/meals/:id — full detail for one owned meal.

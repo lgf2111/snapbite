@@ -1,7 +1,10 @@
 import { env } from 'cloudflare:test';
-import { type AIFoodAnalysis, MockAIProvider, signInitData } from '@snapbite/core';
+import { type AIFoodAnalysis, type MealResult, MockAIProvider, signInitData } from '@snapbite/core';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
+import { createMealsDb, saveMeal } from '../db/meals.js';
+import { createSettingsDb, mergePreferences } from '../db/settings.js';
+import { createDb, upsertUser } from '../db/users.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
 import { groupByDay, localDayKey } from './meals.js';
 
@@ -247,7 +250,7 @@ describe('POST /api/meals/:id/revise', () => {
 });
 
 describe('GET /api/meals?date= and /api/meals/dates', () => {
-  const meal = {
+  const meal: MealResult = {
     foods: [
       {
         food: { name: 'oats', estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
@@ -269,9 +272,40 @@ describe('GET /api/meals?date= and /api/meals/dates', () => {
     );
     const res = await app.request('/api/meals/dates', { headers: await headers(tgId) }, env);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { dates: string[] };
+    const body = (await res.json()) as { dates: string[]; streak: number | null };
     expect(body.dates.length).toBeGreaterThanOrEqual(1);
     expect(body.dates[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // One day alone isn't a streak (same 2+ day rule as the bot).
+    expect(body.streak).toBeNull();
+  });
+
+  it('returns the current streak, counting revived days but not as logged dates', async () => {
+    const tgId = 4103;
+    const app = createApp();
+    const user = await upsertUser(createDb(env.DB), { id: tgId });
+    const mealsDb = createMealsDb(env.DB);
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    // Today + yesterday, a one-day gap, then a two-day prior run.
+    for (const offset of [0, 1, 3, 4]) {
+      await saveMeal(mealsDb, { userId: user.id, meal, loggedAt: now - offset * day });
+    }
+    const missed = localDayKey(now - 2 * day, 0);
+    await mergePreferences(createSettingsDb(env.DB), user.id, {
+      streakRevival: { revivedDays: [missed], lastRevivedAt: now },
+    });
+
+    const res = await app.request(
+      '/api/meals/dates?tz=0',
+      {
+        headers: await headers(tgId),
+      },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { dates: string[]; streak: number | null };
+    expect(body.streak).toBe(5);
+    expect(body.dates).not.toContain(missed);
   });
 
   it('filters by date (an unrelated day returns nothing)', async () => {

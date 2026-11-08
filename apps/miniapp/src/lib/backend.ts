@@ -3,6 +3,7 @@ import {
   type MealResult,
   type UserProfile,
   computeTargets,
+  currentStreak,
 } from '@snapbite/core';
 import {
   ApiClient,
@@ -30,7 +31,7 @@ import {
   updateSavedMeal,
 } from './store.js';
 import { getRawInitData } from './telegram.js';
-import { dayKeyFromMs } from './weekPrefs.js';
+import { dayKeyFromMs, todayKey } from './weekPrefs.js';
 
 /** A unified recent-meal shape the home screen renders, from either source. */
 export interface RecentMeal {
@@ -43,6 +44,12 @@ export interface RecentMeal {
   aiProvider: string | null;
   when: number;
   previewUrl?: string;
+}
+
+/** Logged days for the calendar, plus the current streak (2+ days, else null). */
+export interface MealDates {
+  dates: string[];
+  streak: number | null;
 }
 
 /**
@@ -66,8 +73,8 @@ export interface Backend {
   mealsByDate(date: string): Promise<RecentMeal[]>;
   /** Meals within an inclusive local-day range (YYYY-MM-DD), newest first. */
   mealsInRange(startKey: string, endKey: string): Promise<RecentMeal[]>;
-  /** Distinct days (YYYY-MM-DD) that have meals, for the calendar. */
-  mealDates(): Promise<string[]>;
+  /** Distinct days (YYYY-MM-DD) that have meals, plus the current streak. */
+  mealDates(): Promise<MealDates>;
   detail(id: string): Promise<MealDetail>;
   /** Saved meals ("favorites") the user can re-log with one tap. */
   listFavorites(): Promise<Favorite[]>;
@@ -155,9 +162,8 @@ export function createBackend(): Backend {
         const { meals } = await api.mealsInRange(startKey, endKey);
         return meals.map((m) => toRecent(m, (id) => api.photoUrl(id)));
       },
-      async mealDates() {
-        const { dates } = await api.mealDates();
-        return dates;
+      mealDates() {
+        return api.mealDates();
       },
       detail(id) {
         return api.getMeal(id);
@@ -279,9 +285,11 @@ export function createBackend(): Backend {
         .map(fromSaved);
     },
     async mealDates() {
-      return [...new Set(loadMeals().map((m) => localDayKey(new Date(m.savedAt).getTime())))].sort(
-        (a, b) => (a < b ? 1 : -1),
-      );
+      const dates = [
+        ...new Set(loadMeals().map((m) => localDayKey(new Date(m.savedAt).getTime()))),
+      ].sort((a, b) => (a < b ? 1 : -1));
+      const streak = currentStreak(new Set(dates), todayKey());
+      return { dates, streak: streak >= 2 ? streak : null };
     },
     async detail(id) {
       const saved = loadMeals().find((m) => m.id === id);

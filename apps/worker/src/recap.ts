@@ -136,7 +136,13 @@ export async function recapUser(
 
   const parsedProfile = prefs.profile ? UserProfile.safeParse(prefs.profile) : undefined;
   const targets = parsedProfile?.success ? computeTargets(parsedProfile.data) : null;
-  const streak = currentStreak(new Set(byDay.keys()), localDayKey(nowMs, tz));
+  // Revived days count toward the streak line, but never as logged days/meals.
+  const dayKeys = new Set(byDay.keys());
+  const revivedDays = Array.isArray(prefs.streakRevival?.revivedDays)
+    ? prefs.streakRevival.revivedDays
+    : [];
+  for (const day of revivedDays) dayKeys.add(day);
+  const streak = currentStreak(dayKeys, localDayKey(nowMs, tz));
   const summary = summarizeWeek({
     days,
     target: targets ? { energyKcal: targets.energyKcal, proteinG: targets.proteinG } : null,

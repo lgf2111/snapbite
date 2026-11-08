@@ -57,6 +57,59 @@ export function currentStreak(loggedDayKeys: Iterable<string>, todayKey: string)
   return streak;
 }
 
+/** A single missed day that can be bridged to keep a streak alive. */
+export interface RevivableStreak {
+  /** The missing local day-key between the prior run and the current run. */
+  missedDayKey: string;
+  /** Consecutive days ending today (or yesterday when today isn't logged yet). */
+  currentStreak: number;
+  /** The consecutive run immediately before the missed day. */
+  priorStreak: number;
+  /** What the streak becomes once the missed day is bridged. */
+  revivedStreak: number;
+}
+
+/**
+ * Finds a one-day gap that can be revived: the current run ends today (or
+ * yesterday when today isn't logged yet), the day before that run has no log,
+ * and the run before the gap is at least 2 days long. Returns the pieces needed
+ * to offer/apply a revival, or null when there's nothing worth reviving. Pure
+ * date math on day-keys.
+ */
+export function revivableStreak(
+  loggedDayKeys: Iterable<string>,
+  todayKey: string,
+): RevivableStreak | null {
+  const set = loggedDayKeys instanceof Set ? loggedDayKeys : new Set(loggedDayKeys);
+  if (keyToMs(todayKey) == null) return null;
+
+  const current = currentStreak(set, todayKey);
+  if (current === 0) return null;
+
+  // Walk back from the end of the current run (today, or yesterday when today
+  // isn't logged yet) to find where that run actually started.
+  const end = set.has(todayKey) ? todayKey : shiftDayKey(todayKey, -1);
+  const missedDayKey = shiftDayKey(end, -current);
+  if (set.has(missedDayKey)) return null; // No gap — the run is intact.
+
+  // Count the run immediately before the missed day.
+  let priorStreak = 0;
+  let cursor = shiftDayKey(missedDayKey, -1);
+  while (set.has(cursor)) {
+    priorStreak += 1;
+    cursor = shiftDayKey(cursor, -1);
+  }
+  // A 1-day "run" isn't worth reviving (and wouldn't show as a streak anyway).
+  if (priorStreak < 2) return null;
+
+  return {
+    missedDayKey,
+    currentStreak: current,
+    priorStreak,
+    revivedStreak: current + 1 + priorStreak,
+  };
+}
+
 /** Per-day totals for the recap window (one entry per day that had meals). */
 export interface DayTotal {
   dayKey: string;

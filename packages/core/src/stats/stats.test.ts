@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { type DayTotal, currentStreak, shiftDayKey, summarizeWeek } from './stats.js';
+import {
+  type DayTotal,
+  currentStreak,
+  revivableStreak,
+  shiftDayKey,
+  summarizeWeek,
+} from './stats.js';
 
 describe('shiftDayKey', () => {
   it('shifts across month boundaries', () => {
@@ -38,6 +44,66 @@ describe('currentStreak', () => {
   it('accepts a Set and ignores duplicates/order', () => {
     const keys = new Set(['2026-06-10', '2026-06-09', '2026-06-09']);
     expect(currentStreak(keys, today)).toBe(2);
+  });
+});
+
+describe('revivableStreak', () => {
+  const today = '2026-06-10';
+
+  it('bridges a one-day gap and adds both runs plus the missed day', () => {
+    // 4,5,6 logged · 7 missing · 8,9,10 logged → current 3 + missed 1 + prior 3.
+    const keys = [
+      '2026-06-04',
+      '2026-06-05',
+      '2026-06-06',
+      '2026-06-08',
+      '2026-06-09',
+      '2026-06-10',
+    ];
+    expect(revivableStreak(keys, today)).toEqual({
+      missedDayKey: '2026-06-07',
+      currentStreak: 3,
+      priorStreak: 3,
+      revivedStreak: 7,
+    });
+  });
+
+  it('works on the first log after the miss (current run of 1)', () => {
+    // 6,7,8 logged · 9 missing · 10 logged → current 1 + missed 1 + prior 3.
+    const keys = ['2026-06-06', '2026-06-07', '2026-06-08', '2026-06-10'];
+    expect(revivableStreak(keys, today)).toEqual({
+      missedDayKey: '2026-06-09',
+      currentStreak: 1,
+      priorStreak: 3,
+      revivedStreak: 5,
+    });
+  });
+
+  it('stays available from yesterday when today is not logged yet', () => {
+    // 3,4 logged · 5 missing · 6,7 logged; today (8) not logged but run alive.
+    const keys = ['2026-06-03', '2026-06-04', '2026-06-06', '2026-06-07'];
+    expect(revivableStreak(keys, '2026-06-08')).toMatchObject({
+      missedDayKey: '2026-06-05',
+      currentStreak: 2,
+      priorStreak: 2,
+      revivedStreak: 5,
+    });
+  });
+
+  it('returns null when the run has no gap', () => {
+    expect(revivableStreak(['2026-06-08', '2026-06-09', '2026-06-10'], today)).toBeNull();
+  });
+
+  it('returns null when the gap is longer than one day', () => {
+    expect(revivableStreak(['2026-06-05', '2026-06-06', '2026-06-10'], today)).toBeNull();
+  });
+
+  it('returns null when the prior run is shorter than 2 days', () => {
+    expect(revivableStreak(['2026-06-08', '2026-06-10'], today)).toBeNull();
+  });
+
+  it('returns null when there is no current run', () => {
+    expect(revivableStreak(['2026-06-01', '2026-06-02'], today)).toBeNull();
   });
 });
 

@@ -32,7 +32,7 @@ function stubBackend(over: Partial<Backend> = {}): Backend {
     mode: 'local' as const,
     mealsByDate: vi.fn(async () => [] as RecentMeal[]),
     mealsInRange: vi.fn(async () => [] as RecentMeal[]),
-    mealDates: vi.fn(async () => [] as string[]),
+    mealDates: vi.fn(async () => ({ dates: [], streak: null })),
     remove: vi.fn(async () => {}),
     photoUrl: () => null,
     ...over,
@@ -79,6 +79,15 @@ describe('HomeScreen', () => {
     render(<HomeScreen {...props(backend)} />);
 
     await waitFor(() => expect(screen.getByText('No meals this day')).toBeInTheDocument());
+  });
+
+  it('shows the current logging streak when the backend reports one', async () => {
+    const backend = stubBackend({
+      mealDates: vi.fn(async () => ({ dates: ['2026-09-15'], streak: 5 })),
+    });
+    render(<HomeScreen {...props(backend)} />);
+
+    await waitFor(() => expect(screen.getByText('🔥 5-day logging streak')).toBeInTheDocument());
   });
 
   it('prompts to set a goal when no targets are configured', async () => {

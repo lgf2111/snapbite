@@ -274,9 +274,11 @@ export class ApiClient {
     return this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>(`/api/meals?${params}`);
   }
 
-  /** Distinct days (YYYY-MM-DD) that have meals — for calendar dots. */
-  mealDates(): Promise<{ dates: string[] }> {
-    return this.#request<{ dates: string[] }>(`/api/meals/dates?tz=${tzOffsetMinutes()}`);
+  /** Distinct logged days for calendar dots, plus the current streak (2+ days). */
+  mealDates(): Promise<{ dates: string[]; streak: number | null }> {
+    return this.#request<{ dates: string[]; streak: number | null }>(
+      `/api/meals/dates?tz=${tzOffsetMinutes()}`,
+    );
   }
 
   getMeal(id: string): Promise<MealDetail> {

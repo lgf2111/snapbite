@@ -79,6 +79,8 @@ export interface Preferences {
   adaptive?: AdaptiveConfig;
   /** Opt-in weekly recap digest (a Sunday "week in review" DM). */
   recap?: RecapConfig;
+  /** Streak-revival state: bridged day-keys + the last revival (cooldown gate). */
+  streakRevival?: StreakRevivalPrefs;
   /**
    * Set when a user runs `/delete` and is awaiting confirmation. Only a confirm
    * callback while this is true performs the destructive delete, so a bare
@@ -97,6 +99,17 @@ export interface RecapConfig {
   enabled: boolean;
   tzOffsetMinutes: number;
   lastRecapKey?: string;
+}
+
+/**
+ * Streak-revival state. `revivedDays` are local `YYYY-MM-DD` keys treated as
+ * logged when counting a streak (never as real meals); the array is pruned to
+ * the streak window when written. `lastRevivedAt` gates revivals to one per
+ * cooldown window, so streaks stay meaningful.
+ */
+export interface StreakRevivalPrefs {
+  revivedDays: string[];
+  lastRevivedAt: number;
 }
 
 /** A single bodyweight check-in stored in preferences. `ts` ms, `kg` canonical. */
