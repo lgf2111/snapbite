@@ -54,7 +54,8 @@ export function AccountCard() {
     const status = new URLSearchParams(window.location.search).get('auth');
     if (!status) return;
     if (status === 'ok') setNotice('Signed in — this account now works on any device.');
-    else if (status === 'expired') setError('That sign-in link expired or was already used. Request a new one.');
+    else if (status === 'expired')
+      setError('That sign-in link expired or was already used. Request a new one.');
     else if (status === 'state') setError('The sign-in was interrupted. Please try again.');
     else if (status === 'unverified') setError('That email is not verified with the provider.');
     else if (status === 'conflict') setError('That address already belongs to another account.');

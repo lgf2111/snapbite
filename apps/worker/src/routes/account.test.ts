@@ -219,9 +219,8 @@ describe('GET /api/account/export streams byte-identical JSON', () => {
     // the buffered builder omits the key, so drop it from the streamed copy.
     const normalized = { ...buffered, exportedAt: 'X' } as Record<string, unknown>;
     const streamedForCompare = { ...streamed, exportedAt: 'X' } as Record<string, unknown>;
-    const user = { ...(streamedForCompare.user as Record<string, unknown>) };
-    if (user.email === null) delete user.email;
-    streamedForCompare.user = user;
+    const { email, ...rest } = streamedForCompare.user as Record<string, unknown>;
+    streamedForCompare.user = email === null ? rest : { ...rest, email };
     expect(streamedForCompare).toEqual(normalized);
 
     // No key material leaked through the stream.

@@ -1,7 +1,4 @@
 import { Button } from '@/components/ui/button';
-import { KeyHelp } from './KeyHelp.js';
-import { LinkifiedHint } from './LinkifiedHint.js';
-import { markKeyDecision } from '../lib/onboarding.js';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Backend } from '@/lib/backend';
@@ -12,6 +9,9 @@ import {
   type UserProfile,
 } from '@snapbite/core';
 import { useEffect, useState } from 'react';
+import { markKeyDecision } from '../lib/onboarding.js';
+import { KeyHelp } from './KeyHelp.js';
+import { LinkifiedHint } from './LinkifiedHint.js';
 import { ProfileForm } from './ProfileForm.js';
 
 type ToastKind = 'success' | 'error' | 'info';
@@ -67,7 +67,13 @@ function writeResume(state: ResumeState | null): void {
   }
 }
 
-export function OnboardingScreen({ backend, onDone, onSkip, onToast, startAtKeyStep }: OnboardingScreenProps) {
+export function OnboardingScreen({
+  backend,
+  onDone,
+  onSkip,
+  onToast,
+  startAtKeyStep,
+}: OnboardingScreenProps) {
   const [step, setStep] = useState<'profile' | 'apikey'>(() => {
     const resume = readResume();
     // A saved profile (passed in) outranks a stale resume record.
@@ -165,7 +171,10 @@ export function OnboardingScreen({ backend, onDone, onSkip, onToast, startAtKeyS
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
           />
-          <LinkifiedHint text={PROVIDER_PRESETS[provider].keyHint} className="text-muted-foreground text-xs" />
+          <LinkifiedHint
+            text={PROVIDER_PRESETS[provider].keyHint}
+            className="text-muted-foreground text-xs"
+          />
         </div>
 
         <KeyHelp />

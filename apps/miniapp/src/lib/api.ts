@@ -237,7 +237,12 @@ export class ApiClient {
   /* ---------------- auth (optional) ---------------- */
 
   /** Who this browser is: anonymous, signed in, or a Telegram user. */
-  authMe(): Promise<{ signedIn: boolean; via: string | null; email: string | null; userId: string | null }> {
+  authMe(): Promise<{
+    signedIn: boolean;
+    via: string | null;
+    email: string | null;
+    userId: string | null;
+  }> {
     return this.#request('/api/auth/me');
   }
 
@@ -261,7 +266,10 @@ export class ApiClient {
     });
   }
 
-  saveMeal(meal: MealResult, photo?: { base64: string; mimeType: string }): Promise<{ id: string }> {
+  saveMeal(
+    meal: MealResult,
+    photo?: { base64: string; mimeType: string },
+  ): Promise<{ id: string }> {
     return this.#request<{ id: string }>('/api/meals', {
       method: 'POST',
       body: JSON.stringify(photo ? { meal, photo } : { meal }),

@@ -62,10 +62,7 @@ export interface Backend {
   /** Manually log a meal (no AI/photo). Works without an API key. */
   logManual(meal: MealResult): Promise<void>;
   /** Logs a meal the AI just analysed in-app, with the photo it came from. */
-  logWithPhoto(
-    meal: MealResult,
-    photo: { base64: string; mimeType: string },
-  ): Promise<void>;
+  logWithPhoto(meal: MealResult, photo: { base64: string; mimeType: string }): Promise<void>;
   update(id: string, meal: MealResult): Promise<void>;
   /**
    * AI-revise a meal from a plain-language instruction. Returns a DRAFT

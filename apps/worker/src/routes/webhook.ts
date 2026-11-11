@@ -54,6 +54,14 @@ import {
   hasExportableData,
 } from '../db/account.js';
 import {
+  attachEmailToUser,
+  createAuthDb,
+  findUserByEmail,
+  looksLikeEmail,
+  mealsNeedingPhotoBackfill,
+  normalizeEmail,
+} from '../db/auth.js';
+import {
   createDeviceToken,
   createDeviceTokensDb,
   hashDeviceToken,
@@ -62,17 +70,8 @@ import {
 } from '../db/deviceTokens.js';
 import { describeError, logError, recentErrors } from '../db/errors.js';
 import { type Favorite, createFavoritesDb, listFavorites } from '../db/favorites.js';
-import { setMealPhoto, setMealPhotoById } from '../db/meals.js';
-import {
-  attachEmailToUser,
-  createAuthDb,
-  findUserByEmail,
-  looksLikeEmail,
-  mealsNeedingPhotoBackfill,
-  normalizeEmail,
-} from '../db/auth.js';
 import { recentFeedback, storeFeedback } from '../db/feedback.js';
-import { photoKey, r2Store } from '../storage/photos.js';
+import { setMealPhoto, setMealPhotoById } from '../db/meals.js';
 import {
   type MealTelegramRef,
   countMealsSince,
@@ -108,6 +107,7 @@ import {
 import { type AppBindings, parseAdminId, parseChatId } from '../env.js';
 import { lookupBarcode } from '../openfoodfacts.js';
 import { enqueuePhotoRetry } from '../photoRetry.js';
+import { photoKey, r2Store } from '../storage/photos.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
 import {
   type ProviderFactory,
@@ -667,7 +667,9 @@ async function handleLinkEmailCommand(
   const owner = await findUserByEmail(createAuthDb(c.env.DB), email);
   if (owner && owner.id !== user.id) {
     await bot.sendMessage(parsed.chatId, {
-      text: `That address is already used by a different account, so I did not link it.\n\nSign in on the web with that address to reach that account instead, or pick another email.`,
+      text:
+        'That address is already used by a different account, so I did not link it.\n\n' +
+        'Sign in on the web with that address to reach that account instead, or pick another email.',
     });
     return;
   }
@@ -682,11 +684,11 @@ async function handleLinkEmailCommand(
 
   const base = c.env.APP_ORIGIN ?? c.env.MINI_APP_URL ?? '';
   await bot.sendMessage(parsed.chatId, {
-    text:
-      `✅ ${email} is now linked to this SnapBite account.\n\n` +
-      (base
+    text: `✅ ${email} is now linked to this SnapBite account.\n\n${
+      base
         ? `Open ${base} and sign in with that address to see your meals on the web.`
-        : 'Sign in with that address on the web app to see your meals there.'),
+        : 'Sign in with that address on the web app to see your meals there.'
+    }`,
   });
 }
 
@@ -1164,14 +1166,18 @@ async function handleBackfillPhotosCommand(
   }
   const store = r2Store(c.env.PHOTOS);
   if (!store) {
-    await bot.sendMessage(parsed.chatId, { text: 'No photo storage is configured (PHOTOS binding).' });
+    await bot.sendMessage(parsed.chatId, {
+      text: 'No photo storage is configured (PHOTOS binding).',
+    });
     return;
   }
 
   const limit = Math.min(Math.max(Number.parseInt(parsed.args.trim(), 10) || 20, 1), 50);
   const rows = await mealsNeedingPhotoBackfill(c.env.DB, limit);
   if (rows.length === 0) {
-    await bot.sendMessage(parsed.chatId, { text: 'Nothing to backfill — every meal with a photo is already stored.' });
+    await bot.sendMessage(parsed.chatId, {
+      text: 'Nothing to backfill — every meal with a photo is already stored.',
+    });
     return;
   }
 
@@ -1181,9 +1187,15 @@ async function handleBackfillPhotosCommand(
   for (const row of rows) {
     try {
       const path = await bot.getFilePath(row.telegramFileId);
-      if (!path) { failed++; continue; }
+      if (!path) {
+        failed++;
+        continue;
+      }
       const file = await bot.downloadFile(path);
-      if (!file) { failed++; continue; }
+      if (!file) {
+        failed++;
+        continue;
+      }
       const bytes = Uint8Array.from(atob(file.base64), (ch) => ch.charCodeAt(0));
       const key = photoKey(row.id);
       await store.put(key, bytes, file.mimeType);

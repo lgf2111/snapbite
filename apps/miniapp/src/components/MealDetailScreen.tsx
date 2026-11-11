@@ -508,7 +508,9 @@ export function MealDetailScreen({
               aria-pressed={savedFavId !== null}
               onClick={onToggleFavorite}
             >
-              <Star className={cn('size-4', savedFavId !== null && 'fill-current text-primary-text')} />
+              <Star
+                className={cn('size-4', savedFavId !== null && 'fill-current text-primary-text')}
+              />
               {savedFavId !== null ? 'Saved' : 'Save meal'}
             </Button>
             <Button

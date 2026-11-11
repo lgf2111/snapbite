@@ -353,7 +353,6 @@ export function HomeScreen({
         </div>
       )}
 
-
       {meals && meals.length > 0 && (
         <div className="flex flex-col gap-2">
           {meals.map((m) => (

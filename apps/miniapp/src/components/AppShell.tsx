@@ -1,6 +1,6 @@
+import { cn } from '@/lib/utils';
 import { Camera, Home, Settings as SettingsIcon } from 'lucide-react';
 import type * as React from 'react';
-import { cn } from '@/lib/utils';
 
 export type ShellTab = 'home' | 'settings';
 

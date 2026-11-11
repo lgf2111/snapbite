@@ -32,12 +32,16 @@ interface CookieOptions {
  * so a SameSite=Lax cookie is never sent on cross-site fetches. They differ only
  * by scheme in local dev, where cross-site does not apply.
  */
-export function cookieOptions(env: { PAGE_ORIGIN?: string } | undefined, httpOnly: boolean): CookieOptions {
+export function cookieOptions(
+  env: { PAGE_ORIGIN?: string } | undefined,
+  httpOnly: boolean,
+): CookieOptions {
   const crossSite = Boolean(env?.PAGE_ORIGIN);
   return {
     httpOnly,
     sameSite: crossSite ? 'None' : 'Lax',
-    secure: crossSite || undefined ? true : false,
+    // SameSite=None requires Secure, so a cross-site cookie is always Secure.
+    secure: crossSite,
     path: COOKIE_PATH,
   };
 }
