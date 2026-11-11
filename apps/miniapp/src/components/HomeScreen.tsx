@@ -25,6 +25,14 @@ import { MealThumb } from './MealThumb.js';
 import { ProgressRing } from './ProgressRing.js';
 import { SwipeableRow } from './SwipeableRow.js';
 import { ReviseWithAiDialog } from './UpdateWithAi.js';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog.js';
 
 type ToastKind = 'success' | 'error' | 'info';
 
@@ -87,6 +95,7 @@ export function HomeScreen({
   const [refreshing, setRefreshing] = useState(false);
   /** The meal being edited with AI inline from Home (null = dialog closed). */
   const [aiMeal, setAiMeal] = useState<RecentMeal | null>(null);
+  const [streakOpen, setStreakOpen] = useState(false);
   /** Rows hidden immediately on swipe-delete, while their undo toast is live. */
   const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(() => new Set());
   /** Deletions waiting out their undo window: id → its timer and toast. */
@@ -303,14 +312,22 @@ export function HomeScreen({
 
   return (
     <div className="flex flex-col gap-5">
-      <header className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-title">SnapBite</h1>
-          {streak != null && (
-            <p className="text-muted-foreground text-caption">🔥 {streak}-day streak</p>
+      <header className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <h1 className="text-title min-w-0 truncate">SnapBite</h1>
+          {streak != null && streak > 0 && (
+            <button
+              type="button"
+              aria-label={`${streak}-day logging streak`}
+              onClick={() => setStreakOpen(true)}
+              className="bg-secondary text-foreground text-caption inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full px-3 font-medium"
+            >
+              <span aria-hidden>🔥</span>
+              <span className="tabular">{streak}</span>
+            </button>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           <Button
             variant="ghost"
             size="icon"
@@ -504,6 +521,28 @@ export function HomeScreen({
           {...(onToast ? { onToast } : {})}
         />
       )}
+
+      <Dialog open={streakOpen} onOpenChange={setStreakOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Logging streak</DialogTitle>
+            <DialogDescription>A day counts when you log at least one meal.</DialogDescription>
+          </DialogHeader>
+          <ul className="text-muted-foreground flex list-disc flex-col gap-2 pl-4 text-sm">
+            <li>
+              Today or yesterday keeps the run alive — logging in the evening never breaks it.
+            </li>
+            <li>A whole day with no meals ends the streak.</li>
+            <li>
+              Miss a day and your next log within the week can revive it, once every 30 days.
+              Revived days count toward the streak, not toward your logged days.
+            </li>
+          </ul>
+          <DialogFooter>
+            <Button onClick={() => setStreakOpen(false)}>Got it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
