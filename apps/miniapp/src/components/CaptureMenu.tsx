@@ -4,13 +4,22 @@ import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 're
 
 export type CaptureAction = 'saved' | 'manual' | 'upload' | 'photo';
 
+/** Titles, hints and icons for the four actions; the menu and the fan both draw from this. */
+export const CAPTURE_ACTIONS: Record<
+  CaptureAction,
+  { title: string; hint: string; Icon: LucideIcon }
+> = {
+  saved: { title: 'Use saved meals', hint: 'Re-log a favourite', Icon: Star },
+  manual: { title: 'Manually log', hint: 'Type it in', Icon: Keyboard },
+  upload: { title: 'Upload image', hint: 'From your photos', Icon: ImageIcon },
+  photo: { title: 'Take photo', hint: 'Use the camera', Icon: Camera },
+};
+
 /** Reading order is DOM order: top-left, top-right, bottom-left, bottom-right. */
-const CARDS: Array<{ id: CaptureAction; title: string; hint: string; Icon: LucideIcon }> = [
-  { id: 'saved', title: 'Use saved meals', hint: 'Re-log a favourite', Icon: Star },
-  { id: 'manual', title: 'Manually log', hint: 'Type it in', Icon: Keyboard },
-  { id: 'upload', title: 'Upload image', hint: 'From your photos', Icon: ImageIcon },
-  { id: 'photo', title: 'Take photo', hint: 'Use the camera', Icon: Camera },
-];
+const CARDS = (['saved', 'manual', 'upload', 'photo'] as const).map((id) => ({
+  id,
+  ...CAPTURE_ACTIONS[id],
+}));
 
 const OPEN_MS = 220;
 const OPEN_STAGGER_MS = 25;

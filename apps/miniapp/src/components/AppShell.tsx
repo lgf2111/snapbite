@@ -61,12 +61,19 @@ export function AppShell({
               type="button"
               ref={captureRef}
               onClick={onToggleMenu}
-              aria-label={menuOpen ? 'Close add-meal menu' : 'Log a meal'}
+              aria-label={
+                menuOpen
+                  ? 'Close add-meal menu'
+                  : 'Add a meal — tap for options, hold and slide to choose'
+              }
               aria-expanded={menuOpen}
               aria-haspopup="true"
               className={cn(
                 'absolute -top-5 flex size-16 items-center justify-center rounded-full shadow-xl ring-4 ring-background transition-[transform,box-shadow,background-color,color] duration-[160ms] ease-[var(--ease-spring)] hover:shadow-2xl',
                 'active:scale-90 motion-reduce:transition-none motion-reduce:active:scale-100',
+                // Press-and-hold-and-slide lives on this button only: no page pan, text
+                // selection or iOS callout from the long press.
+                'touch-none select-none [-webkit-touch-callout:none]',
                 'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
                 // Open: a quiet ×, not a second loud button.
                 menuOpen

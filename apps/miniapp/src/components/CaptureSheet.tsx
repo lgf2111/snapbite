@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { type RefObject, useRef, useState } from 'react';
 import type { Backend } from '../lib/backend.js';
 import { compressPhoto } from '../lib/compress.js';
+import { CaptureFan } from './CaptureFan.js';
 import { type CaptureAction, CaptureMenu } from './CaptureMenu.js';
 import { ManualMealDialog } from './ManualMealDialog.js';
 import { Button } from './ui/button';
@@ -146,6 +147,8 @@ export function CaptureSheet({
         onPick={pick}
         triggerRef={triggerRef}
       />
+      {/* Hold the button and slide: the same four actions, for the thumb. */}
+      <CaptureFan triggerRef={triggerRef} enabled={!open} onPick={pick} />
 
       <Dialog
         open={stage !== 'idle'}

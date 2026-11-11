@@ -37,23 +37,6 @@ describe('Toaster placement', () => {
   });
 });
 
-// jsdom ships no PointerEvent. React and sonner only read the event type, the
-// pointer id and the coordinates, so a MouseEvent carrying a pointer id will do.
-if (typeof globalThis.PointerEvent === 'undefined') {
-  class PointerEventShim extends MouseEvent {
-    readonly pointerId: number;
-    readonly pointerType: string;
-    readonly isPrimary: boolean;
-    constructor(type: string, init: MouseEventInit & Partial<PointerEvent> = {}) {
-      super(type, init);
-      this.pointerId = init.pointerId ?? 0;
-      this.pointerType = init.pointerType ?? 'mouse';
-      this.isPrimary = init.isPrimary ?? true;
-    }
-  }
-  vi.stubGlobal('PointerEvent', PointerEventShim);
-}
-
 describe('Toaster dismissal gestures', () => {
   // jsdom has no pointer capture; sonner calls it on pointerdown.
   Element.prototype.setPointerCapture ??= () => {};

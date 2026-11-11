@@ -23,9 +23,11 @@ function setup(menuOpen: boolean) {
 }
 
 describe('AppShell camera button', () => {
-  it('is the "Log a meal" button while closed, and exposes itself as the origin ref', () => {
+  it('is the add-a-meal button while closed, and exposes itself as the origin ref', () => {
     const { onToggleMenu, captureRef } = setup(false);
-    const button = screen.getByRole('button', { name: 'Log a meal' });
+    const button = screen.getByRole('button', {
+      name: /add a meal — tap for options, hold and slide to choose/i,
+    });
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(captureRef.current).toBe(button);
     fireEvent.click(button);
