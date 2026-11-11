@@ -187,6 +187,18 @@ describe('HomeScreen', () => {
     Reflect.deleteProperty(navigator, 'maxTouchPoints');
   });
 
+  it('slides the Daily/Weekly highlight rather than swapping it', async () => {
+    const backend = stubBackend();
+    const { rerender } = render(<HomeScreen {...props(backend)} />);
+    const pill = () =>
+      document.querySelector<HTMLElement>('[data-slot="toggle-group-indicator"]') as HTMLElement;
+    expect(pill().style.transform).toBe('translateX(0%)');
+
+    rerender(<HomeScreen {...props(backend, { view: 'weekly' })} />);
+    expect(pill().style.transform).toBe('translateX(100%)');
+    await waitFor(() => expect(backend.mealsInRange).toHaveBeenCalled());
+  });
+
   it('fires onOpenMeal when a meal row is tapped', async () => {
     const onOpenMeal = vi.fn();
     const backend = stubBackend({

@@ -3,6 +3,7 @@ import { Collapsible } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import {
   type ActivityLevel,
@@ -45,32 +46,33 @@ const ACTIVITIES: Array<{ value: ActivityLevel; label: string }> = [
   { value: 'very_active', label: 'Very active' },
 ];
 
-/** A segmented single-choice control. */
+/** A segmented single-choice control: the shared ToggleGroup, so it slides like every other one. */
 function Segmented<T extends string>({
   value,
   options,
   onChange,
+  label,
 }: {
   value: T;
   options: Array<{ value: T; label: string }>;
   onChange: (v: T) => void;
+  label: string;
 }) {
   return (
-    <div className="bg-muted flex flex-wrap gap-1 rounded-md p-1">
+    <ToggleGroup
+      type="single"
+      value={value}
+      // A single group can be emptied by tapping the selected item; a form field cannot.
+      onValueChange={(v) => v && onChange(v as T)}
+      block
+      aria-label={label}
+    >
       {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          onClick={() => onChange(o.value)}
-          className={cn(
-            'flex-1 rounded px-2 py-1.5 text-sm whitespace-nowrap transition-colors',
-            value === o.value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
-          )}
-        >
+        <ToggleGroupItem key={o.value} value={o.value}>
           {o.label}
-        </button>
+        </ToggleGroupItem>
       ))}
-    </div>
+    </ToggleGroup>
   );
 }
 
@@ -185,6 +187,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
       <div className="flex flex-col gap-1.5">
         <Label>Units</Label>
         <Segmented
+          label="Units"
           value={units}
           onChange={setUnits}
           options={[
@@ -196,7 +199,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
 
       <div className="flex flex-col gap-1.5">
         <Label>Sex</Label>
-        <Segmented value={sex} onChange={setSex} options={SEXES} />
+        <Segmented label="Sex" value={sex} onChange={setSex} options={SEXES} />
       </div>
 
       <div className="flex flex-col gap-1.5">
