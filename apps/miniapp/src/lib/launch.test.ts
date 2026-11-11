@@ -20,13 +20,6 @@ function stubShareCache(response?: Response) {
 
 const go = (url: string) => window.history.replaceState({}, '', url);
 
-// jsdom's File does not recognise a Blob created by Node's Response: it calls
-// toString() on it, so the shared photo arrived as the 13-character string
-// "[object Blob]". Use Node's own File for this file's tests only.
-beforeEach(() => {
-  vi.stubGlobal('File', NodeFile);
-});
-
 afterEach(() => {
   resetLaunchIntent();
   vi.unstubAllGlobals();
