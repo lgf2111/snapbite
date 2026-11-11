@@ -1,12 +1,14 @@
 /**
- * The shareable iOS Shortcut.
+ * The signed iOS Shortcut template, served from this app (public/shortcut/).
  *
- * Paste the iCloud link of the published template here (https://www.icloud.com/shortcuts/…).
- * While it is empty the One-tap logging card shows only the manual steps; once it is
- * set the card offers an "Add the Shortcut" button above them.
- *
- * The link carries the action list only. A token must never be in it: each person
- * creates their own in Settings and pastes it once, when Shortcuts asks at import
- * (see "Share it with someone else" in docs/action-button-shortcut.md).
+ * It holds the four actions (Take Photo, Convert Image to JPEG, Get Contents of URL,
+ * Show Notification) and the header `Authorization: Bearer PASTE_YOUR_TOKEN_HERE`.
+ * No token is ever in the file: each person creates their own in Settings and pastes
+ * it over PASTE_YOUR_TOKEN_HERE after adding it. It is linked with a plain anchor so
+ * iOS itself hands it to Shortcuts; do not fetch it or wrap it in a blob.
  */
-export const SHORTCUT_TEMPLATE_URL = '';
+export const SHORTCUT_TEMPLATE_URL = '/shortcut/snapbite-log-meal.shortcut';
+
+/** What the person has to replace in the shortcut, and where. Shown verbatim in the card. */
+export const SHORTCUT_TOKEN_FIELD = 'Authorization';
+export const SHORTCUT_TOKEN_PLACEHOLDER = 'PASTE_YOUR_TOKEN_HERE';

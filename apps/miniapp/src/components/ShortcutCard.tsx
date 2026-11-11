@@ -3,7 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CreatedDeviceToken, DeviceTokenInfo } from '../lib/api.js';
 import type { Backend } from '../lib/backend.js';
 import { readConfig } from '../lib/config.js';
-import { SHORTCUT_TEMPLATE_URL } from '../lib/shortcut.js';
+import { isStandalone } from '../lib/install.js';
+import {
+  SHORTCUT_TEMPLATE_URL,
+  SHORTCUT_TOKEN_FIELD,
+  SHORTCUT_TOKEN_PLACEHOLDER,
+} from '../lib/shortcut.js';
 import { Button } from './ui/button.js';
 import { Card, CardContent } from './ui/card.js';
 import {
@@ -15,7 +20,8 @@ import {
   DialogTitle,
 } from './ui/dialog.js';
 
-const STEPS = [
+/** The by-hand route, for a phone where adding the file does not work. */
+const HAND_STEPS = [
   'Shortcuts → new shortcut → Take Photo → Convert Image (JPEG).',
   'Add Get Contents of URL: Method POST, Request Body Form.',
   'Add field photo, type File, value Converted Image.',
@@ -152,18 +158,36 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
     }
   }
 
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <KeyRound className="text-primary-text size-5" aria-hidden />
-          <span className="font-medium">One-tap photo logging</span>
-        </div>
+  const standalone = useState(isStandalone)[0];
+  const hasToken = tokens != null && tokens.length > 0;
+  // Three steps, visible. Once there is a token the person has been through them, so
+  // they fold into one line (and only then).
+  const collapse = hasToken && !fresh;
+
+  const steps = (
+    <ol className="flex flex-col gap-4">
+      <li className="flex flex-col gap-1.5">
+        <p className="font-medium">1. Get the shortcut</p>
+        <Button asChild>
+          {/* A plain link: iOS opens it in Shortcuts. No fetch, no blob, no new tab. */}
+          <a href={SHORTCUT_TEMPLATE_URL}>Add the Shortcut</a>
+        </Button>
+        <p className="text-muted-foreground text-caption">It opens Shortcuts — tap Add Shortcut.</p>
+      </li>
+
+      <li className="flex flex-col gap-1.5">
+        <p className="font-medium">2. Put your token in it</p>
+        <p className="text-caption">
+          Open the shortcut → tap the {SHORTCUT_TOKEN_FIELD} field → replace{' '}
+          <code className="font-mono">{SHORTCUT_TOKEN_PLACEHOLDER}</code> with your token (keep the
+          word Bearer and the space after it) → tap Done.
+        </p>
         <p className="text-muted-foreground text-caption">
-          Log a meal from the Action Button or Lock Screen — no app to open.
+          Your token is the text that starts with <code className="font-mono">sb_</code>. It is
+          shown only once, so copy it first.
         </p>
 
-        {fresh && (
+        {fresh ? (
           <div className="flex flex-col gap-2 rounded-md border border-border p-3">
             <code
               ref={tokenRef}
@@ -181,51 +205,74 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
             <p className="text-destructive text-caption" role="alert">
               Copy it now — it will not be shown again.
             </p>
-
-            {SHORTCUT_TEMPLATE_URL && (
-              <div className="flex flex-col gap-1">
-                <Button asChild>
-                  <a href={SHORTCUT_TEMPLATE_URL} target="_blank" rel="noopener noreferrer">
-                    Add the Shortcut
-                  </a>
-                </Button>
-                <p className="text-muted-foreground text-caption">
-                  You'll paste your token once when you add it.
-                </p>
-              </div>
-            )}
-
-            <p className="text-muted-foreground text-caption">
-              {SHORTCUT_TEMPLATE_URL ? 'Or set it up by hand:' : 'Set it up in Shortcuts:'}
-            </p>
-            <ol className="text-caption flex list-decimal flex-col gap-1 pl-5">
-              {STEPS.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
-
-            <div className="flex flex-col gap-1">
-              <code
-                ref={urlRef}
-                className="text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
-              >
-                {endpoint}
-              </code>
-              <CopyButton text={endpoint} target={urlRef} label="Copy URL" />
-            </div>
           </div>
-        )}
-
-        {!fresh && (
+        ) : (
           <Button
             type="button"
-            variant={tokens && tokens.length > 0 ? 'outline' : 'default'}
+            variant={hasToken ? 'outline' : 'default'}
             disabled={busy}
             onClick={() => void create()}
           >
             Create Shortcut token
           </Button>
         )}
+      </li>
+
+      <li className="flex flex-col gap-1.5">
+        <p className="font-medium">3. Point the Action Button at it</p>
+        <p className="text-caption">
+          Open Settings → Action Button → Shortcut → SnapBite Log Meal.
+        </p>
+      </li>
+    </ol>
+  );
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <KeyRound className="text-primary-text size-5" aria-hidden />
+          <span className="font-medium">One-tap photo logging</span>
+        </div>
+        <p className="text-muted-foreground text-caption">
+          Hold the Action Button, take a photo, and the notification says what was logged.
+        </p>
+
+        {!standalone && (
+          <p className="text-muted-foreground text-caption">
+            Add SnapBite to your Home Screen first — the shortcut works without it, but the
+            notification is easier to reach.
+          </p>
+        )}
+
+        {collapse ? (
+          <details className="group rounded-md border border-border p-3">
+            <summary className="cursor-pointer text-caption font-medium">How it works</summary>
+            <div className="pt-3">{steps}</div>
+          </details>
+        ) : (
+          steps
+        )}
+
+        <details className="text-caption">
+          <summary className="text-muted-foreground cursor-pointer">
+            Can't add it? Set it up by hand
+          </summary>
+          <div className="flex flex-col gap-2 pt-2">
+            <ol className="flex list-decimal flex-col gap-1 pl-5">
+              {HAND_STEPS.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <code
+              ref={urlRef}
+              className="font-mono select-all break-words [overflow-wrap:anywhere]"
+            >
+              {endpoint}
+            </code>
+            <CopyButton text={endpoint} target={urlRef} label="Copy URL" />
+          </div>
+        </details>
 
         {error && (
           <p className="text-destructive text-caption" role="alert">

@@ -5,14 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DeviceTokenInfo } from '../lib/api.js';
 import { ShortcutCard } from './ShortcutCard.js';
 
-// The template link is a module constant; let each test choose it.
-const template = vi.hoisted(() => ({ url: '' }));
-vi.mock('../lib/shortcut.js', () => ({
-  get SHORTCUT_TEMPLATE_URL() {
-    return template.url;
-  },
-}));
-
 const RAW = 'sb_TEST-RAW-TOKEN-VALUE';
 
 function stub(initial: DeviceTokenInfo[] = []) {
@@ -52,7 +44,7 @@ const OLD: DeviceTokenInfo = {
 
 afterEach(() => {
   cleanup();
-  template.url = '';
+  Reflect.deleteProperty(window, 'matchMedia');
 });
 
 describe('ShortcutCard', () => {
@@ -127,57 +119,114 @@ describe('ShortcutCard', () => {
   });
 });
 
-describe('ShortcutCard template link', () => {
-  const TEMPLATE = 'https://www.icloud.com/shortcuts/0123456789abcdef';
+describe('ShortcutCard: the three steps', () => {
+  const HREF = '/shortcut/snapbite-log-meal.shortcut';
 
-  async function createToken() {
+  it('shows all three steps, in order, before there is any token', () => {
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
+
+    const headings = [
+      '1. Get the shortcut',
+      '2. Put your token in it',
+      '3. Point the Action Button at it',
+    ].map((t) => screen.getByText(t));
+    for (let i = 1; i < headings.length; i++) {
+      expect(
+        (headings[i - 1] as HTMLElement).compareDocumentPosition(headings[i] as HTMLElement) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    // Visible by default: not folded away behind "How it works".
+    expect(screen.queryByText('How it works')).toBeNull();
+  });
+
+  it('step 1 is a plain link to the file: no new tab, no download attribute, no token', async () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    const link = screen.getByRole('link', { name: 'Add the Shortcut' });
+    expect(link.getAttribute('href')).toBe(HREF);
+    expect(link.hasAttribute('target')).toBe(false);
+    expect(link.hasAttribute('download')).toBe(false);
+    expect(screen.getByText('It opens Shortcuts — tap Add Shortcut.')).toBeTruthy();
+
     await userEvent.click(screen.getByRole('button', { name: 'Create Shortcut token' }));
     await screen.findByText(RAW);
-  }
-
-  it('with no template link there is no "Add the Shortcut" control, only the manual steps', async () => {
-    template.url = '';
-    await createToken();
-
-    expect(screen.queryByRole('link', { name: 'Add the Shortcut' })).toBeNull();
-    expect(screen.queryByText(/paste your token once/i)).toBeNull();
-    expect(screen.getByText(/Take Photo → Convert Image/)).toBeTruthy();
-    expect(screen.getByText('Set it up in Shortcuts:')).toBeTruthy();
-  });
-
-  it('with a template link: a new-tab link above the manual steps, which stay as the fallback', async () => {
-    template.url = TEMPLATE;
-    await createToken();
-
-    const link = screen.getByRole('link', { name: 'Add the Shortcut' });
-    expect(link.getAttribute('href')).toBe(TEMPLATE);
-    // Opens Shortcuts rather than navigating the installed app away.
-    expect(link.getAttribute('target')).toBe('_blank');
-    expect(link.getAttribute('rel')).toContain('noopener');
-    expect(screen.getByText("You'll paste your token once when you add it.")).toBeTruthy();
-
-    // The four actions are still there, underneath, now read as the fallback.
-    expect(screen.getByText('Or set it up by hand:')).toBeTruthy();
-    const firstStep = screen.getByText(/Take Photo → Convert Image/);
-    expect(firstStep).toBeTruthy();
-    expect(link.compareDocumentPosition(firstStep) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getAllByRole('listitem').length).toBeGreaterThanOrEqual(4);
-  });
-
-  it('never puts the token in the link', async () => {
-    template.url = TEMPLATE;
-    await createToken();
     expect(
       screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href'),
     ).not.toContain(RAW);
   });
 
-  it('shows no link before a token exists to paste', () => {
-    template.url = TEMPLATE;
+  it('step 2 names the field and the text to replace exactly, and says the token is shown once', () => {
+    const { backend } = stub();
+    const { container } = render(<ShortcutCard backend={backend} />);
+    const text = container.textContent ?? '';
+    expect(text).toContain('tap the Authorization field');
+    expect(screen.getByText('PASTE_YOUR_TOKEN_HERE')).toBeTruthy();
+    expect(text).toContain('replace PASTE_YOUR_TOKEN_HERE with your token');
+    expect(text).toContain('sb_');
+    expect(text).toMatch(/shown only once/i);
+  });
+
+  it('step 3 gives the Action Button path in order, and the card says why', () => {
+    const { backend } = stub();
+    const { container } = render(<ShortcutCard backend={backend} />);
+    expect(container.textContent).toContain(
+      'Settings → Action Button → Shortcut → SnapBite Log Meal',
+    );
+    expect(
+      screen.getByText(
+        'Hold the Action Button, take a photo, and the notification says what was logged.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('folds into one "How it works" line only once the person has a token', async () => {
+    const { backend } = stub([OLD]);
+    render(<ShortcutCard backend={backend} />);
+
+    const summary = await screen.findByText('How it works');
+    const details = summary.closest('details') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(details.contains(screen.getByText('1. Get the shortcut'))).toBe(true);
+
+    // Making a new token brings the steps back into view.
+    await userEvent.click(screen.getByRole('button', { name: 'Create Shortcut token' }));
+    await screen.findByText(RAW);
+    expect(screen.queryByText('How it works')).toBeNull();
+  });
+
+  it('keeps the by-hand route for a phone that cannot add the file', () => {
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
-    expect(screen.queryByRole('link', { name: 'Add the Shortcut' })).toBeNull();
+    expect(screen.getByText("Can't add it? Set it up by hand")).toBeTruthy();
+    expect(screen.getByText(/Take Photo → Convert Image/)).toBeTruthy();
+  });
+
+  it('tells a browser visitor to add SnapBite to the Home Screen first, but not the installed app', () => {
+    const { backend } = stub();
+    const note = /Add SnapBite to your Home Screen first/;
+
+    const browser = render(<ShortcutCard backend={backend} />);
+    expect(screen.getByText(note)).toBeTruthy();
+    browser.unmount();
+
+    window.matchMedia = ((q: string) => ({
+      matches: q.includes('standalone'),
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    })) as unknown as typeof window.matchMedia;
+    render(<ShortcutCard backend={backend} />);
+    expect(screen.queryByText(note)).toBeNull();
+  });
+
+  it('starts every step with a verb, in plain words', () => {
+    const { backend } = stub();
+    const { container } = render(<ShortcutCard backend={backend} />);
+    for (const word of ['Get', 'Put', 'Point']) {
+      expect(container.textContent).toMatch(new RegExp(`\\d\\. ${word} `));
+    }
+    expect(container.textContent).not.toMatch(/configure|authenticate/i);
   });
 });
