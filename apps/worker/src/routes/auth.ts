@@ -15,7 +15,7 @@ import {
   createSession,
   deleteSession,
   findOrCreateDeviceUser,
-  findSessionUser,
+  findSession,
   findUserByEmail,
   issueLoginToken,
   looksLikeEmail,
@@ -79,9 +79,9 @@ export function authRoutes() {
   /** The account behind this request, if any (session first, then device). */
   async function currentUser(c: Context<AppBindings>) {
     const jar = readCookies(c.req.header('cookie'));
-    const sessionUser = await findSessionUser(db(c), jar[cookies.session] ?? '');
-    if (sessionUser) return { user: sessionUser, via: 'session' as const };
-    return { user: null, via: null };
+    const session = await findSession(db(c), jar[cookies.session] ?? '');
+    if (session) return { user: session.user, via: 'session' as const, method: session.method };
+    return { user: null, via: null, method: null };
   }
 
   /** Which sign-in methods this deployment can actually offer. */
@@ -159,7 +159,7 @@ export function authRoutes() {
       userId = user.id;
     }
 
-    const sessionRaw = await createSession(authDb, userId);
+    const sessionRaw = await createSession(authDb, userId, 'google');
     const opts = cookieOptionsFor(c);
     c.header(
       'set-cookie',
@@ -169,11 +169,15 @@ export function authRoutes() {
   });
 
   app.get('/me', async (c) => {
-    const { user, via } = await currentUser(c);
-    if (!user) return c.json({ signedIn: false, via: null, email: null, userId: null });
+    const { user, via, method } = await currentUser(c);
+    if (!user) {
+      return c.json({ signedIn: false, via: null, method: null, email: null, userId: null });
+    }
     return c.json({
       signedIn: via === 'session',
       via,
+      // 'google' | 'email' | null (null for sessions opened before it was recorded).
+      method,
       email: user.email ?? null,
       userId: user.id,
       telegramLinked: user.telegramUserId != null,
@@ -249,7 +253,7 @@ export function authRoutes() {
       userId = user.id;
     }
 
-    const sessionRaw = await createSession(db(c), userId);
+    const sessionRaw = await createSession(db(c), userId, 'email');
     const opts = cookieOptionsFor(c);
     c.header(
       'set-cookie',

@@ -277,6 +277,8 @@ export const sessions = sqliteTable(
     createdAt: integer('created_at').notNull(),
     expiresAt: integer('expires_at').notNull(),
     lastUsedAt: integer('last_used_at'),
+    /** 'google' | 'email'; null for sessions opened before this was recorded. */
+    method: text('method'),
   },
   (t) => ({
     tokenIdx: uniqueIndex('sessions_token_idx').on(t.tokenHash),

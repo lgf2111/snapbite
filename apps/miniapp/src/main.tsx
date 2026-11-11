@@ -9,6 +9,8 @@
  * application code is a dynamic import so this entry stays tiny.
  */
 
+import { readConfig } from './lib/config.js';
+
 async function mountMiniApp(): Promise<void> {
   const [{ StrictMode }, { createRoot }, { App }, telegram] = await Promise.all([
     import('react'),
@@ -58,7 +60,7 @@ void (async () => {
   // Telegram Mini App and plain browser both mount the same React app. In a
   // browser it runs in demo mode until sessions land (see lib/backend.ts), but
   // the shell, capture and compression are real.
-  const workerUrl = (import.meta.env.VITE_WORKER_URL ?? '').trim();
+  const workerUrl = readConfig().workerUrl;
   const token = new URLSearchParams(window.location.search).get('token');
   if (window.location.pathname === '/verify' && token && workerUrl) {
     await completeSignIn(token, workerUrl);

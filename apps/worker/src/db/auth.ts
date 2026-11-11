@@ -120,7 +120,13 @@ export async function consumeLoginToken(db: AuthDb, raw: string): Promise<string
 }
 
 /** Creates a session row and returns the raw cookie token. */
-export async function createSession(db: AuthDb, userId: string): Promise<string> {
+export type SessionMethod = 'google' | 'email';
+
+export async function createSession(
+  db: AuthDb,
+  userId: string,
+  method?: SessionMethod,
+): Promise<string> {
   const raw = randomToken(32);
   const now = Date.now();
   await db.insert(sessions).values({
@@ -129,16 +135,27 @@ export async function createSession(db: AuthDb, userId: string): Promise<string>
     tokenHash: await sha256Hex(raw),
     createdAt: now,
     expiresAt: now + SESSION_TTL_MS,
+    method: method ?? null,
   });
   return raw;
 }
 
 /** Resolves a session token to its user, or null when unknown/expired. */
 export async function findSessionUser(db: AuthDb, raw: string) {
+  return (await findSession(db, raw))?.user ?? null;
+}
+
+/** Like `findSessionUser`, plus how the session was opened. */
+export async function findSession(db: AuthDb, raw: string) {
   if (!raw) return null;
   const hash = await sha256Hex(raw);
   const rows = await db
-    .select({ user: users, expiresAt: sessions.expiresAt, sessionId: sessions.id })
+    .select({
+      user: users,
+      expiresAt: sessions.expiresAt,
+      sessionId: sessions.id,
+      method: sessions.method,
+    })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
     .where(eq(sessions.tokenHash, hash))
@@ -149,7 +166,7 @@ export async function findSessionUser(db: AuthDb, raw: string) {
     await db.delete(sessions).where(eq(sessions.id, row.sessionId));
     return null;
   }
-  return row.user;
+  return { user: row.user, method: row.method as SessionMethod | null };
 }
 
 export async function deleteSession(db: AuthDb, raw: string): Promise<void> {

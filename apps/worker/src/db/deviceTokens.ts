@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { deviceTokens, users } from './schema.js';
 
@@ -109,21 +109,24 @@ export async function listDeviceTokens(
   userId: string,
   opts: { includeRevoked?: boolean } = {},
 ): Promise<DeviceTokenSummary[]> {
-  return db
-    .select({
-      id: deviceTokens.id,
-      label: deviceTokens.label,
-      createdAt: deviceTokens.createdAt,
-      lastUsedAt: deviceTokens.lastUsedAt,
-      revokedAt: deviceTokens.revokedAt,
-    })
-    .from(deviceTokens)
-    .where(
-      opts.includeRevoked
-        ? eq(deviceTokens.userId, userId)
-        : and(eq(deviceTokens.userId, userId), isNull(deviceTokens.revokedAt)),
-    )
-    .orderBy(desc(deviceTokens.createdAt));
+  return (
+    db
+      .select({
+        id: deviceTokens.id,
+        label: deviceTokens.label,
+        createdAt: deviceTokens.createdAt,
+        lastUsedAt: deviceTokens.lastUsedAt,
+        revokedAt: deviceTokens.revokedAt,
+      })
+      .from(deviceTokens)
+      .where(
+        opts.includeRevoked
+          ? eq(deviceTokens.userId, userId)
+          : and(eq(deviceTokens.userId, userId), isNull(deviceTokens.revokedAt)),
+      )
+      // rowid breaks ties between tokens made in the same millisecond.
+      .orderBy(desc(deviceTokens.createdAt), desc(sql`rowid`))
+  );
 }
 
 /**

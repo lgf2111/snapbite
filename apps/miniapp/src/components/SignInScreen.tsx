@@ -1,12 +1,12 @@
 import { ArrowLeft } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { AccountCard } from './AccountCard.js';
+import { AccountCard, type Me } from './AccountCard.js';
 import { Button } from './ui/button.js';
 
 interface Props {
   onBack: () => void;
   /** The account behind this browser changed from anonymous to signed in. */
-  onSignedIn: () => void;
+  onSignedIn: (me: Me) => void;
 }
 
 /**
