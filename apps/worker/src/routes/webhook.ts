@@ -53,9 +53,26 @@ import {
   exportUser,
   hasExportableData,
 } from '../db/account.js';
+import {
+  createDeviceToken,
+  createDeviceTokensDb,
+  hashDeviceToken,
+  mintDeviceToken,
+  revokeAllDeviceTokens,
+} from '../db/deviceTokens.js';
 import { describeError, logError, recentErrors } from '../db/errors.js';
 import { type Favorite, createFavoritesDb, listFavorites } from '../db/favorites.js';
+import { setMealPhoto, setMealPhotoById } from '../db/meals.js';
+import {
+  attachEmailToUser,
+  createAuthDb,
+  findUserByEmail,
+  looksLikeEmail,
+  mealsNeedingPhotoBackfill,
+  normalizeEmail,
+} from '../db/auth.js';
 import { recentFeedback, storeFeedback } from '../db/feedback.js';
+import { photoKey, r2Store } from '../storage/photos.js';
 import {
   type MealTelegramRef,
   countMealsSince,
@@ -255,6 +272,14 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
       await handleWeightCommand(c, bot, parsed);
       return c.json({ ok: true });
     }
+    if (parsed.command === 'linkemail' && parsed.fromId != null) {
+      await handleLinkEmailCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
+    if (parsed.command === 'token' && parsed.fromId != null) {
+      await handleTokenCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
     if (parsed.command === 'coach' && parsed.fromId != null) {
       await handleCoachCommand(c, bot, providerFactory, parsed);
       return c.json({ ok: true });
@@ -273,6 +298,10 @@ export function webhookRoutes(deps: WebhookDeps = {}) {
     }
     if (parsed.command === 'broadcast') {
       await handleBroadcastCommand(c, bot, parsed);
+      return c.json({ ok: true });
+    }
+    if (parsed.command === 'backfillphotos') {
+      await handleBackfillPhotosCommand(c, bot, parsed);
       return c.json({ ok: true });
     }
     if (parsed.command === 'stats') {
@@ -615,6 +644,90 @@ function round1(n: number): number {
 }
 
 /** `/weight [value]` — record a bodyweight check-in (value may omit the unit → kg). */
+/**
+ * `/linkemail you@example.com` — attaches an email to THIS Telegram account, so
+ * the same person can sign in on the web and see these meals. The address is
+ * only trusted once the sign-in link has been followed, which is why the command
+ * just records the intent and the token carries the address.
+ */
+async function handleLinkEmailCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const email = normalizeEmail(parsed.args.trim());
+  if (!looksLikeEmail(email)) {
+    await bot.sendMessage(parsed.chatId, {
+      text: 'Send it like this: /linkemail you@example.com — then open the sign-in link I send to that address.',
+    });
+    return;
+  }
+
+  const user = await upsertUser(createDb(c.env.DB), { id: parsed.fromId as number });
+  const owner = await findUserByEmail(createAuthDb(c.env.DB), email);
+  if (owner && owner.id !== user.id) {
+    await bot.sendMessage(parsed.chatId, {
+      text: `That address is already used by a different account, so I did not link it.\n\nSign in on the web with that address to reach that account instead, or pick another email.`,
+    });
+    return;
+  }
+
+  // Store the claim on the row now; the magic link is what proves the person
+  // owns the mailbox. Signing in later finds this row by email.
+  const linked = await attachEmailToUser(createAuthDb(c.env.DB), user.id, email);
+  if (!linked.ok) {
+    await bot.sendMessage(parsed.chatId, { text: 'Could not link that address. Try another one.' });
+    return;
+  }
+
+  const base = c.env.APP_ORIGIN ?? c.env.MINI_APP_URL ?? '';
+  await bot.sendMessage(parsed.chatId, {
+    text:
+      `✅ ${email} is now linked to this SnapBite account.\n\n` +
+      (base
+        ? `Open ${base} and sign in with that address to see your meals on the web.`
+        : 'Sign in with that address on the web app to see your meals there.'),
+  });
+}
+
+async function handleTokenCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  // Never mint a credential into a group chat.
+  if (parsed.chatId !== parsed.fromId) {
+    await bot.sendMessage(parsed.chatId, {
+      text: 'Send /token in a private chat with me — a token posted in a group is a leak.',
+    });
+    return;
+  }
+
+  const user = await upsertUser(createDb(c.env.DB), { id: parsed.fromId as number });
+  const tokensDb = createDeviceTokensDb(c.env.DB);
+
+  if (parsed.args.trim().toLowerCase() === 'revoke') {
+    const n = await revokeAllDeviceTokens(tokensDb, user.id);
+    await bot.sendMessage(parsed.chatId, {
+      text:
+        n === 0
+          ? 'No active device tokens.'
+          : `Revoked ${n} device token${n === 1 ? '' : 's'}. Any Shortcut using them stops working.`,
+    });
+    return;
+  }
+
+  const token = mintDeviceToken();
+  await createDeviceToken(tokensDb, {
+    userId: user.id,
+    tokenHash: await hashDeviceToken(token),
+    label: 'iOS Shortcut',
+  });
+  await bot.sendMessage(parsed.chatId, {
+    text: `Device token (shown once, copy the whole line):\n${token}\n\nPaste it into the SnapBite Shortcut as:\nAuthorization: Bearer <token>\n\n/token revoke kills every token on this account.`,
+  });
+}
+
 async function handleWeightCommand(
   c: Context<AppBindings>,
   bot: BotClient,
@@ -950,7 +1063,12 @@ async function handleDeleteCallback(
   }
 
   const accountDb = createAccountDb(c.env.DB);
-  await deleteAccount(accountDb, user.id);
+  const photoKeys = await deleteAccount(accountDb, user.id);
+  // Purge stored photo bytes too — D1 rows alone would leave the images behind.
+  const photoStore = r2Store(c.env.PHOTOS);
+  if (photoStore && photoKeys) {
+    for (const key of photoKeys) await photoStore.delete(key).catch(() => {});
+  }
   await bot.answerCallbackQuery?.(callback.callbackId, 'Deleted.');
   await replyOrEdit(bot, callback.chatId, callback.messageId, {
     text: '✅ Done — all your SnapBite data has been permanently deleted.\n\nSend /start anytime to begin again with a fresh, empty account.',
@@ -1028,6 +1146,60 @@ async function handleErrorsCommand(
  * analytics). Non-admins get the normal fallback reply, so the command is
  * invisible to them and returns no data.
  */
+/**
+ * `/backfillphotos [n]` — ADMIN only. Copies up to `n` (default 20) Telegram-held
+ * photos into R2 so meals logged before storage existed render in the web app.
+ * Batched on purpose: the Bot API throttles file downloads, so this is meant to
+ * be run a few times rather than for thousands of meals at once.
+ */
+async function handleBackfillPhotosCommand(
+  c: Context<AppBindings>,
+  bot: BotClient,
+  parsed: ParsedCommand,
+): Promise<void> {
+  const adminId = parseAdminId(c.env.ADMIN_TELEGRAM_ID);
+  if (adminId == null || parsed.fromId !== adminId) {
+    await bot.sendMessage(parsed.chatId, { text: 'Admin only.' });
+    return;
+  }
+  const store = r2Store(c.env.PHOTOS);
+  if (!store) {
+    await bot.sendMessage(parsed.chatId, { text: 'No photo storage is configured (PHOTOS binding).' });
+    return;
+  }
+
+  const limit = Math.min(Math.max(Number.parseInt(parsed.args.trim(), 10) || 20, 1), 50);
+  const rows = await mealsNeedingPhotoBackfill(c.env.DB, limit);
+  if (rows.length === 0) {
+    await bot.sendMessage(parsed.chatId, { text: 'Nothing to backfill — every meal with a photo is already stored.' });
+    return;
+  }
+
+  const db = createMealsDb(c.env.DB);
+  let moved = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      const path = await bot.getFilePath(row.telegramFileId);
+      if (!path) { failed++; continue; }
+      const file = await bot.downloadFile(path);
+      if (!file) { failed++; continue; }
+      const bytes = Uint8Array.from(atob(file.base64), (ch) => ch.charCodeAt(0));
+      const key = photoKey(row.id);
+      await store.put(key, bytes, file.mimeType);
+      await setMealPhotoById(c.env.DB, row.id, key, file.mimeType);
+      moved++;
+    } catch (err) {
+      failed++;
+      console.error('[backfill] photo failed', row.id, err);
+    }
+  }
+
+  await bot.sendMessage(parsed.chatId, {
+    text: `Backfill: ${moved} photo${moved === 1 ? '' : 's'} stored, ${failed} failed. Run again for the next batch.`,
+  });
+}
+
 async function handleStatsCommand(
   c: Context<AppBindings>,
   bot: BotClient,
@@ -2076,6 +2248,9 @@ async function handlePhoto(
 
   const provider = providerFactory(primaryProviderChoice(settings, apiKey));
   const image = { base64: file.base64, mimeType: file.mimeType as 'image/jpeg' };
+  // Captured for the archive step below (the bytes are already downloaded).
+  const photoBytes = Uint8Array.from(atob(file.base64), (ch) => ch.charCodeAt(0));
+  const photoMime = file.mimeType ?? 'image/jpeg';
   const opts = caption ? { hint: caption } : {};
 
   // Analyze on the primary, retrying transient 503s a few times, then fall over
@@ -2170,8 +2345,19 @@ async function handlePhoto(
     telegramChatId: chatId,
     telegramMessageId: confirmMessageId,
   });
-  // (mealId retained for symmetry / future use.)
-  void mealId;
+  // Archive the bytes we already downloaded, so the photo outlives the bot and
+  // the app can serve it without a Bot API round trip. Best effort: a storage
+  // failure must never lose an otherwise-logged meal.
+  const photoStore = r2Store(c.env.PHOTOS);
+  if (photoStore) {
+    try {
+      const key = photoKey(mealId);
+      await photoStore.put(key, photoBytes, photoMime);
+      await setMealPhoto(mealsDb, mealId, user.id, key, photoMime);
+    } catch (err) {
+      console.error('[webhook] photo archive failed', err);
+    }
+  }
   // First-party counters — best-effort, never fails the save (§metrics).
   await recordMealSave(c.env.DB, fromId, isFirstMeal).catch(() => {});
 }

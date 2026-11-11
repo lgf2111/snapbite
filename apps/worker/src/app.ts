@@ -1,12 +1,15 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { AppBindings } from './env.js';
+import { accountAuth } from './middleware/account.js';
 import { telegramAuth } from './middleware/auth.js';
+import { authRoutes } from './routes/auth.js';
 import { accountRoutes } from './routes/account.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { feedbackRoutes } from './routes/feedback.js';
 import { type ProviderFactory, mealPhotoRoutes, mealsRoutes } from './routes/meals.js';
 import { settingsRoutes } from './routes/settings.js';
+import { shortcutRoutes } from './routes/shortcut.js';
 import { type BotClientFactory, webhookRoutes } from './routes/webhook.js';
 
 export interface CreateAppOptions {
@@ -20,7 +23,17 @@ export interface CreateAppOptions {
 export function createApp(opts: CreateAppOptions = {}) {
   const app = new Hono<AppBindings>();
 
-  app.use('*', cors());
+  // Credentials matter: the session cookie is HttpOnly and, when the PWA is on a
+  // different site than the API, SameSite=None requires an explicit origin.
+  app.use(
+    '*',
+    cors({
+      origin: (origin) => origin ?? '*',
+      credentials: true,
+      allowHeaders: ['content-type', 'authorization', 'x-telegram-init-data'],
+      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    }),
+  );
 
   // Health check — unauthenticated.
   app.get('/api/health', (c) => c.json({ ok: true }));
@@ -37,17 +50,29 @@ export function createApp(opts: CreateAppOptions = {}) {
   // Photo proxy — verifies initData via query param (an <img> can't send headers).
   app.route('/api/meal-photo', mealPhotoRoutes(opts.botClientFactory));
 
-  // Everything under /api (except health) requires a valid Telegram session.
+  // Sign-in (optional) — unauthenticated by design; it mints a session cookie.
+  app.route('/api/auth', authRoutes());
+
+  // Shortcut capture — bearer device token instead of initData. Mounted before
+  // the initData-guarded /api app so it wins the match.
+  app.route('/api/shortcut', shortcutRoutes(opts.providerFactory));
+
+  // Everything under /api needs an account — but not necessarily Telegram.
+  // `accountAuth` resolves initData, a handheld device token, or a session
+  // cookie; a request with none of them gets an anonymous account rather than a
+  // 401, because signing in is optional.
   const api = new Hono<AppBindings>();
-  api.use('*', telegramAuth());
+  api.use('*', accountAuth());
 
   api.get('/me', (c) => {
     const tgUser = c.get('telegramUser');
     return c.json({
       userId: c.get('userId'),
-      telegramUserId: tgUser.id,
-      firstName: tgUser.first_name ?? null,
-      username: tgUser.username ?? null,
+      telegramUserId: tgUser?.id ?? null,
+      firstName: tgUser?.first_name ?? null,
+      username: tgUser?.username ?? null,
+      // True when this browser is authenticated by a session cookie.
+      signedIn: c.req.header('cookie')?.includes('sb_session=') ?? false,
     });
   });
 

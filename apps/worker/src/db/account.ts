@@ -39,7 +39,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 export interface UserExport {
   exportedAt: string;
-  user: { telegramUserId: number; createdAt: number };
+  user: { telegramUserId: number | null; email?: string | null; createdAt: number };
   settings: { aiProvider: string; aiModel: string | null } | null;
   /** Bodyweight check-ins (canonical kg), oldest→newest. */
   weights: Array<{ ts: number; kg: number }>;
@@ -196,7 +196,12 @@ export async function exportUser(db: AccountDb, userId: string): Promise<UserExp
 
   return {
     exportedAt: new Date().toISOString(),
-    user: { telegramUserId: user.telegramUserId, createdAt: user.createdAt },
+    user: {
+      telegramUserId: user.telegramUserId ?? null,
+      // Only present for email accounts, so Telegram-only exports stay identical.
+      ...(user.email ? { email: user.email } : {}),
+      createdAt: user.createdAt,
+    },
     settings: s ? { aiProvider: s.aiProvider, aiModel: s.aiModel } : null,
     weights,
     meals: mealRows.map((m) => assembleMeal(m, foodsByMeal, nutritionByMeal)),
@@ -278,18 +283,23 @@ export function hasExportableData(data: UserExport): boolean {
  * if foreign-key cascades are off: food_items + nutrition (by the user's meal
  * ids) → meals → saved_meals → pending_photo_retries → settings → the user row.
  * The weight check-ins live in settings.preferences_json, so they go with the
- * settings row. Returns false if the user didn't exist.
+ * settings row. Returns the R2 photo keys that were attached to their meals
+ * (callers purge the objects), or null when the user did not exist.
  */
-export async function deleteAccount(db: AccountDb, userId: string): Promise<boolean> {
+export async function deleteAccount(db: AccountDb, userId: string): Promise<string[] | null> {
   const userRows = await db
     .select({ id: users.id })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
-  if (userRows.length === 0) return false;
+  if (userRows.length === 0) return null;
 
-  const mealIdRows = await db.select({ id: meals.id }).from(meals).where(eq(meals.userId, userId));
-  const mealIds = mealIdRows.map((r) => r.id);
+  const mealRows = await db
+    .select({ id: meals.id, photoKey: meals.photoKey })
+    .from(meals)
+    .where(eq(meals.userId, userId));
+  const mealIds = mealRows.map((r) => r.id);
+  const photoKeys = mealRows.map((r) => r.photoKey).filter((k): k is string => Boolean(k));
 
   if (mealIds.length > 0) {
     await db.delete(foodItems).where(inArray(foodItems.mealId, mealIds));
@@ -300,5 +310,5 @@ export async function deleteAccount(db: AccountDb, userId: string): Promise<bool
   await db.delete(pendingPhotoRetries).where(eq(pendingPhotoRetries.userId, userId));
   await db.delete(settings).where(eq(settings.userId, userId));
   await db.delete(users).where(eq(users.id, userId));
-  return true;
+  return photoKeys;
 }

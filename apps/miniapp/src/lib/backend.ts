@@ -61,6 +61,11 @@ export interface Backend {
   readonly mode: 'worker' | 'local';
   /** Manually log a meal (no AI/photo). Works without an API key. */
   logManual(meal: MealResult): Promise<void>;
+  /** Logs a meal the AI just analysed in-app, with the photo it came from. */
+  logWithPhoto(
+    meal: MealResult,
+    photo: { base64: string; mimeType: string },
+  ): Promise<void>;
   update(id: string, meal: MealResult): Promise<void>;
   /**
    * AI-revise a meal from a plain-language instruction. Returns a DRAFT
@@ -89,6 +94,11 @@ export interface Backend {
     aiModel?: string,
     custom?: CustomProviderInput,
   ): Promise<SettingsView>;
+  /**
+   * Analyzes a photo (AI, needs a saved key) and returns a DRAFT meal the caller
+   * reviews or logs straight away. `hint` may carry a local date/time note.
+   */
+  analyze(base64: string, mimeType: string, hint?: string): Promise<MealResult>;
   /** Stores the user's profile + goal; returns the computed daily targets. */
   saveProfile(profile: UserProfile): Promise<DailyTargets>;
   /** Stores/replaces the fallback provider + key (enabled). Returns fresh settings. */
@@ -136,6 +146,18 @@ export function createBackend(): Backend {
       async logManual(meal) {
         await api.saveMeal(meal);
         invalidate(cacheKey.mealsPrefix);
+      },
+      async logWithPhoto(meal, photo) {
+        await api.saveMeal(meal, photo);
+        invalidate(cacheKey.mealsPrefix);
+      },
+      analyze(base64, mimeType, hint) {
+        const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
+        type Allowed = (typeof allowed)[number];
+        const mime: Allowed = (allowed as readonly string[]).includes(mimeType)
+          ? (mimeType as Allowed)
+          : 'image/jpeg';
+        return api.analyze({ base64, mimeType: mime }, hint);
       },
       async update(id, meal) {
         await api.updateMeal(id, meal);
@@ -255,6 +277,19 @@ export function createBackend(): Backend {
     mode: 'local',
     async logManual(meal) {
       saveMealLocal(meal);
+    },
+    async logWithPhoto(meal) {
+      // Local/demo mode has no object storage; the meal is logged without a photo.
+      saveMealLocal(meal);
+    },
+    async analyze() {
+      // Demo mode: canned analysis, no key and no network (same as the bot mock).
+      const { MockAIProvider, resolveMeal } = await import('@snapbite/core');
+      const analysis = await new MockAIProvider().analyzeMeal({
+        base64: '',
+        mimeType: 'image/jpeg',
+      });
+      return resolveMeal(analysis);
     },
     async update(id, meal) {
       updateSavedMeal(id, meal);

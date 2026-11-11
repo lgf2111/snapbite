@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { createAccountDb, deleteAccount, streamUserExport } from '../db/account.js';
 import type { AppBindings } from '../env.js';
+import { r2Store } from '../storage/photos.js';
 
 /**
  * Account/data-control routes. All owner-scoped via the auth middleware's
@@ -26,7 +27,15 @@ export function accountRoutes() {
   // DELETE /api/account — permanently delete the user and all their data.
   app.delete('/', async (c) => {
     const db = createAccountDb(c.env.DB);
-    await deleteAccount(db, c.get('userId'));
+    const userId = c.get('userId');
+    // Collect object keys before the rows vanish, then purge the bytes.
+    const keys = await deleteAccount(db, userId);
+    const store = r2Store(c.env.PHOTOS);
+    if (store && keys) {
+      for (const key of keys) {
+        await store.delete(key).catch(() => {});
+      }
+    }
     return c.json({ ok: true });
   });
 

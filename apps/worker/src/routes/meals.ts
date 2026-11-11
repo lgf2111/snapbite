@@ -20,6 +20,7 @@ import {
   getMealDetail,
   listMeals,
   saveMeal,
+  setMealPhoto,
   updateMeal,
 } from '../db/meals.js';
 import { recordMealSave } from '../db/metrics.js';
@@ -28,6 +29,7 @@ import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.
 import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
+import { photoKey, r2Store } from '../storage/photos.js';
 import type { BotClientFactory } from './webhook.js';
 
 const defaultBotClientFactory: BotClientFactory = (token) => new TelegramBotClient(token);
@@ -46,7 +48,7 @@ export interface ProviderChoice {
 /** Injectable provider factory so tests can supply a mock. */
 export type ProviderFactory = (choice: ProviderChoice) => AIProvider;
 
-const defaultProviderFactory: ProviderFactory = ({
+export const defaultProviderFactory: ProviderFactory = ({
   apiKey,
   provider,
   model,
@@ -78,7 +80,7 @@ export function primaryProviderChoice(row: SettingsRow, apiKey: string): Provide
   return choice;
 }
 
-const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+export const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
 /**
  * Best-effort extraction of a human message from a provider's error body. Both
@@ -217,6 +219,7 @@ export function mealsRoutes(
     }
 
     const telegramFileId = (body as { telegramFileId?: unknown })?.telegramFileId;
+    const photo = (body as { photo?: { base64?: unknown; mimeType?: unknown } })?.photo;
     const db = createMealsDb(c.env.DB);
     const userId = c.get('userId');
     const isFirstMeal = (await countMealsSince(db, userId, 0)) === 0;
@@ -225,16 +228,39 @@ export function mealsRoutes(
       meal: parsed.data,
       ...(typeof telegramFileId === 'string' ? { telegramFileId } : {}),
     });
+
+    // Optional photo captured in the app: store the bytes so the meal renders
+    // an image. Best effort — a storage failure must not lose the meal.
+    if (
+      photo &&
+      typeof photo.base64 === 'string' &&
+      typeof photo.mimeType === 'string' &&
+      ALLOWED_MIME.has(photo.mimeType)
+    ) {
+      const store = r2Store(c.env.PHOTOS);
+      if (store) {
+        try {
+          const key = photoKey(id);
+          const bytes = Uint8Array.from(atob(photo.base64), (ch) => ch.charCodeAt(0));
+          await store.put(key, bytes, photo.mimeType);
+          await setMealPhoto(db, id, userId, key, photo.mimeType);
+        } catch (err) {
+          console.error('[meals] photo store failed', err);
+        }
+      }
+    }
     // First-party counters — best-effort, never fails the save (§metrics).
-    await recordMealSave(c.env.DB, c.get('telegramUser').id, isFirstMeal).catch(() => {});
+    const tg = c.get('telegramUser');
+    if (tg) await recordMealSave(c.env.DB, tg.id, isFirstMeal).catch(() => {});
 
     // Best-effort "logged" feed message to the user's bot chat. Never blocks or
     // fails the save.
-    if (botClientFactory && c.env.TELEGRAM_BOT_TOKEN) {
+    const tgUser = c.get('telegramUser');
+    if (botClientFactory && c.env.TELEGRAM_BOT_TOKEN && tgUser) {
       try {
         const bot = botClientFactory(c.env.TELEGRAM_BOT_TOKEN);
         const foods = parsed.data.foods.map((f) => f.food.name);
-        await bot.sendMessage(c.get('telegramUser').id, {
+        await bot.sendMessage(tgUser.id, {
           text: mealLoggedMessage(foods, parsed.data.total.energyKcal),
         });
       } catch {
@@ -490,8 +516,28 @@ export function mealPhotoRoutes(botClientFactory: BotClientFactory = defaultBotC
     const user = await upsertUser(db, verified.data.user);
     const mealsDb = createMealsDb(c.env.DB);
     const detail = await getMealDetail(mealsDb, c.req.param('id'), user.id);
-    if (!detail?.telegramFileId) return c.text('Not found', 404);
+    if (!detail) return c.text('Not found', 404);
 
+    // The PWA renders photos from a different origin than the API (Pages vs
+    // workers.dev), so an <img> needs this header to be allowed at all.
+    const cacheHeaders = {
+      'cache-control': 'private, max-age=86400',
+      'access-control-allow-origin': '*',
+    } as const;
+
+    // 1) Bytes we own (Shortcut / PWA uploads).
+    const store = r2Store(c.env.PHOTOS);
+    if (store && detail.photoKey) {
+      const stored = await store.get(detail.photoKey);
+      if (stored) {
+        return new Response(stored.bytes, {
+          headers: { 'content-type': stored.mime ?? 'image/jpeg', ...cacheHeaders },
+        });
+      }
+    }
+
+    // 2) Legacy fallback: bytes still live on Telegram behind a file_id.
+    if (!detail.telegramFileId || !c.env.TELEGRAM_BOT_TOKEN) return c.text('Not found', 404);
     const bot = botClientFactory(c.env.TELEGRAM_BOT_TOKEN);
     const filePath = await bot.getFilePath(detail.telegramFileId);
     if (!filePath) return c.text('Not found', 404);
@@ -500,10 +546,7 @@ export function mealPhotoRoutes(botClientFactory: BotClientFactory = defaultBotC
 
     const bytes = Uint8Array.from(atob(file.base64), (ch) => ch.charCodeAt(0));
     return new Response(bytes, {
-      headers: {
-        'content-type': file.mimeType,
-        'cache-control': 'private, max-age=86400',
-      },
+      headers: { 'content-type': file.mimeType, ...cacheHeaders },
     });
   });
 

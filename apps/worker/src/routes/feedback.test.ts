@@ -89,13 +89,13 @@ describe('POST /api/feedback', () => {
     expect(res.status).toBe(400);
   });
 
-  it('requires auth', async () => {
+  it('rejects a bad device token (sign-in itself is optional)', async () => {
     const app = createApp();
     const res = await app.request(
       '/api/feedback',
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', authorization: 'Bearer sb_bogus' },
         body: JSON.stringify({ message: 'hi' }),
       },
       env,

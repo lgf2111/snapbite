@@ -13,7 +13,10 @@ export default defineWorkersConfig(async () => {
       poolOptions: {
         workers: {
           singleWorker: true,
-          isolatedStorage: true,
+          // Isolated R2 storage is unsupported by this vitest-pool-workers
+          // version (it trips over the bucket's -shm file). Photo tests handle
+          // their own object keys.
+          isolatedStorage: false,
           wrangler: { configPath: './wrangler.toml' },
           miniflare: {
             bindings: {

@@ -42,10 +42,13 @@ async function loadRecapUsers(db: D1Database): Promise<RecapUser[]> {
     .innerJoin(users, eq(settings.userId, users.id));
   const out: RecapUser[] = [];
   for (const r of rows) {
+    if (r.telegramUserId == null) continue;
     if (parsePreferences(r.preferencesJson).recap?.enabled) {
       out.push({
         userId: r.userId,
-        telegramUserId: r.telegramUserId,
+        // Skip accounts with no Telegram identity (email/device accounts):
+        // every one of these jobs delivers through the bot.
+        telegramUserId: r.telegramUserId as number,
         preferencesJson: r.preferencesJson,
       });
     }

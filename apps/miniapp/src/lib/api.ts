@@ -192,7 +192,8 @@ export class ApiClient {
 
   async #request<T>(path: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<T> {
     const headers = new Headers(init.headers);
-    headers.set(INIT_DATA_HEADER, this.#getInitData());
+    const initData = this.#getInitData();
+    if (initData) headers.set(INIT_DATA_HEADER, initData);
     if (init.body && !headers.has('content-type')) {
       headers.set('content-type', 'application/json');
     }
@@ -203,7 +204,14 @@ export class ApiClient {
     const timer = setTimeout(() => ac.abort(), timeoutMs);
     let res: Response;
     try {
-      res = await this.#fetch(`${this.#baseUrl}${path}`, { ...init, headers, signal: ac.signal });
+      res = await this.#fetch(`${this.#baseUrl}${path}`, {
+        ...init,
+        headers,
+        // Send/receive the session + anonymous device cookies. Required for a
+        // browser (non-Telegram) client; harmless inside the Mini App.
+        credentials: 'include',
+        signal: ac.signal,
+      });
     } catch (err) {
       if (ac.signal.aborted) {
         throw new ApiError(0, 'Request timed out. Please try again.');
@@ -226,6 +234,25 @@ export class ApiClient {
     return (await res.json()) as T;
   }
 
+  /* ---------------- auth (optional) ---------------- */
+
+  /** Who this browser is: anonymous, signed in, or a Telegram user. */
+  authMe(): Promise<{ signedIn: boolean; via: string | null; email: string | null; userId: string | null }> {
+    return this.#request('/api/auth/me');
+  }
+
+  /** Requests a sign-in link. Returns the link only when email is unconfigured. */
+  requestLogin(email: string): Promise<{ ok: boolean; delivered: boolean; link?: string }> {
+    return this.#request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  logout(): Promise<{ ok: boolean }> {
+    return this.#request('/api/auth/logout', { method: 'POST' });
+  }
+
   analyze(image: MealImage, hint?: string): Promise<MealResult> {
     return this.#request<MealResult>('/api/meals/analyze', {
       method: 'POST',
@@ -234,10 +261,11 @@ export class ApiClient {
     });
   }
 
-  saveMeal(meal: MealResult): Promise<{ id: string }> {
+  saveMeal(meal: MealResult, photo?: { base64: string; mimeType: string }): Promise<{ id: string }> {
     return this.#request<{ id: string }>('/api/meals', {
       method: 'POST',
-      body: JSON.stringify({ meal }),
+      body: JSON.stringify(photo ? { meal, photo } : { meal }),
+      timeoutMs: photo ? AI_TIMEOUT_MS : undefined,
     });
   }
 
@@ -321,10 +349,15 @@ export class ApiClient {
     return res.meal;
   }
 
-  /** Builds a photo URL for a meal (initData in the query — used as an <img> src). */
+  /**
+   * Builds a photo URL for a meal. Inside Telegram the initData rides in the
+   * query (an <img> cannot send headers); in a browser the cookies do the work,
+   * so no credential ever appears in a URL there.
+   */
   photoUrl(id: string): string {
-    const initData = encodeURIComponent(this.#getInitData());
-    return `${this.#baseUrl}/api/meal-photo/${encodeURIComponent(id)}?initData=${initData}`;
+    const initData = this.#getInitData();
+    const base = `${this.#baseUrl}/api/meal-photo/${encodeURIComponent(id)}`;
+    return initData ? `${base}?initData=${encodeURIComponent(initData)}` : base;
   }
 
   getSettings(): Promise<SettingsView> {

@@ -17,3 +17,9 @@ binding = "DB"
 database_name = "snapbite-db"
 database_id = "6c331800-c9a5-4c32-b5b4-17190c23dd6c"
 migrations_dir = "migrations"
+
+# Meal photo bytes (R2). Without this binding no photos are stored and the app
+# falls back to Telegram's file_id proxy. Bucket: snapbite-photos.
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "snapbite-photos"

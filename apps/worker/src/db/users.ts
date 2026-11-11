@@ -1,5 +1,5 @@
 import type { TelegramUser } from '@snapbite/core';
-import { eq } from 'drizzle-orm';
+import { eq, isNotNull } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { type UserRow, settings, users } from './schema.js';
 
@@ -50,6 +50,8 @@ export async function upsertUserWithCreated(
   const row: UserRow = {
     id: crypto.randomUUID(),
     telegramUserId: tgUser.id,
+    email: null,
+    emailVerifiedAt: null,
     createdAt: now,
     lastBroadcastChatId: null,
     lastBroadcastMessageId: null,
@@ -66,7 +68,9 @@ export async function upsertUserWithCreated(
 
 /** All users with their last-broadcast reference (for the admin /broadcast). */
 export async function listBroadcastTargets(db: Db): Promise<BroadcastTarget[]> {
-  return db
+  // Broadcasts are delivered by the bot, so accounts without a Telegram id are
+  // excluded (they may still use the app).
+  const rows = await db
     .select({
       id: users.id,
       telegramUserId: users.telegramUserId,
@@ -75,7 +79,9 @@ export async function listBroadcastTargets(db: Db): Promise<BroadcastTarget[]> {
       lastBroadcastAt: users.lastBroadcastAt,
       lastBroadcastVersion: users.lastBroadcastVersion,
     })
-    .from(users);
+    .from(users)
+    .where(isNotNull(users.telegramUserId));
+  return rows as BroadcastTarget[];
 }
 
 /** Records the message we sent/edited for a user's latest broadcast. */
