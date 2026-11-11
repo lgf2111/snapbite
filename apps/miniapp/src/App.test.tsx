@@ -1,11 +1,15 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getSettings = vi.hoisted(() => vi.fn());
+const backendMode = vi.hoisted(() => ({ mode: 'local' as 'local' | 'worker' }));
 vi.mock('./lib/backend.js', async (orig) => ({
   ...(await orig<typeof import('./lib/backend.js')>()),
   createBackend: () => ({
-    mode: 'local',
+    // A getter: App builds its backend once at import, tests pick the mode per case.
+    get mode() {
+      return backendMode.mode;
+    },
     getSettings,
     mealsByDate: async () => [],
     mealsInRange: async () => [],
@@ -14,6 +18,7 @@ vi.mock('./lib/backend.js', async (orig) => ({
 }));
 
 import { App } from './App.js';
+import { resetAuthStatus } from './lib/account.js';
 import { clearCache } from './lib/cache.js';
 
 describe('first-run onboarding', () => {
@@ -23,8 +28,11 @@ describe('first-run onboarding', () => {
   beforeEach(() => {
     cleanup();
     clearCache();
+    resetAuthStatus();
     localStorage.clear();
     getSettings.mockReset();
+    backendMode.mode = 'local';
+    window.history.replaceState({}, '', '/');
   });
 
   it('opens the setup sheet for a brand-new visitor', async () => {
@@ -147,5 +155,186 @@ describe('first-run onboarding', () => {
     render(<App />);
     expect(await screen.findByText('Set goal')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+describe('boot: who is this browser?', () => {
+  const ME = (over: Record<string, unknown> = {}) => ({
+    signedIn: true,
+    via: 'session',
+    method: 'google',
+    email: 'ada@example.com',
+    userId: 'u1',
+    ...over,
+  });
+  const NOTHING = { profile: null, targets: null, connected: false };
+
+  /** Answer /api/auth/me with `me` (or reject); `gate` holds the answer back. */
+  function serve(me: unknown | 'fail', gate?: Promise<void>) {
+    backendMode.mode = 'worker';
+    vi.stubEnv('VITE_WORKER_URL', 'https://worker.test');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (gate) await gate;
+        if (me === 'fail') throw new TypeError('Failed to fetch');
+        return Response.json(url.endsWith('/providers') ? { email: false, google: true } : me);
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    cleanup();
+    clearCache();
+    resetAuthStatus();
+    localStorage.clear();
+    getSettings.mockReset();
+    window.history.replaceState({}, '', '/');
+  });
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    backendMode.mode = 'local';
+  });
+
+  it('a signed-in cold start with no profile opens on the form, with no welcome at all', async () => {
+    serve(ME());
+    getSettings.mockResolvedValue(NOTHING);
+    render(<App />);
+
+    const layer = await screen.findByRole('dialog');
+    // The form fields are there...
+    expect(await within(layer).findByTestId('onboarding-form')).toBeTruthy();
+    expect(layer.querySelector('input[type=date]')).toBeTruthy();
+    // ...and none of the welcome: no panel, heading, one-second cue or sign-in link.
+    expect(within(layer).queryByTestId('onboarding-intro')).toBeNull();
+    expect(within(layer).queryByRole('heading', { name: /welcome/i })).toBeNull();
+    expect(within(layer).queryByTestId('scroll-cue')).toBeNull();
+    expect(within(layer).queryByTestId('signin-link')).toBeNull();
+    // They are told who they are signed in as, and no skeleton plays.
+    expect(within(layer).getByText('Signed in as ada@example.com')).toBeTruthy();
+    expect(within(layer).queryByTestId('onboarding-skeleton')).toBeNull();
+  });
+
+  it('does not depend on the skip flag: a signed-in account is not a skipped one', async () => {
+    localStorage.setItem('snapbite.onboarding.keyDecision', 'skipped');
+    serve(ME());
+    getSettings.mockResolvedValue(NOTHING);
+    render(<App />);
+    expect(await screen.findByTestId('onboarding-form')).toBeTruthy();
+  });
+
+  it('a signed-in account with a profile opens Home, not setup', async () => {
+    serve(ME());
+    getSettings.mockResolvedValue({
+      profile: { sex: 'female' },
+      targets: { energyKcal: 2000, proteinG: 120, carbsG: 250, fatG: 70 },
+      connected: true,
+    });
+    render(<App />);
+    await waitFor(() => expect(screen.getByText(/kcal/)).toBeTruthy());
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('an anonymous visitor with no profile gets the welcome', async () => {
+    serve(ME({ signedIn: false, via: null, method: null, email: null, userId: null }));
+    getSettings.mockResolvedValue(NOTHING);
+    render(<App />);
+    expect(await screen.findByTestId('onboarding-intro')).toBeTruthy();
+    expect(screen.queryByTestId('onboarding-form')).toBeNull();
+  });
+
+  it('falls back to the welcome when /api/auth/me fails, never guessing signed-in', async () => {
+    serve('fail');
+    getSettings.mockResolvedValue(NOTHING);
+    render(<App />);
+    expect(await screen.findByTestId('onboarding-intro')).toBeTruthy();
+    expect(screen.queryByTestId('onboarding-form')).toBeNull();
+  });
+
+  it('holds the welcome back until /api/auth/me has answered', async () => {
+    const gate = { release: () => {} };
+    const held = new Promise<void>((resolve) => {
+      gate.release = resolve;
+    });
+    serve(ME(), held);
+    getSettings.mockResolvedValue(NOTHING);
+    render(<App />);
+
+    await new Promise((r) => setTimeout(r, 100));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByTestId('onboarding-intro')).toBeNull();
+
+    gate.release();
+    expect(await screen.findByTestId('onboarding-form')).toBeTruthy();
+    expect(screen.queryByTestId('onboarding-intro')).toBeNull();
+  });
+});
+
+describe('boot: what ?auth= on the landing URL does', () => {
+  const NOTHING = { profile: null, targets: null, connected: false };
+  const ANON = { signedIn: false, via: null, method: null, email: null, userId: null };
+
+  function serve(me: unknown) {
+    backendMode.mode = 'worker';
+    vi.stubEnv('VITE_WORKER_URL', 'https://worker.test');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json(me)),
+    );
+  }
+  beforeEach(() => {
+    cleanup();
+    clearCache();
+    resetAuthStatus();
+    localStorage.clear();
+    getSettings.mockReset();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    backendMode.mode = 'local';
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('?auth=ok with a confirmed session says who is signed in, and is removed from the URL', async () => {
+    window.history.replaceState({}, '', '/?auth=ok');
+    serve({
+      signedIn: true,
+      via: 'session',
+      method: 'google',
+      email: 'ada@example.com',
+      userId: 'u',
+    });
+    getSettings.mockResolvedValue(NOTHING);
+    render(<App />);
+
+    expect(
+      await screen.findByText('Signed in as ada@example.com', { selector: '[data-title]' }),
+    ).toBeTruthy();
+    expect(window.location.search).toBe('');
+  });
+
+  it('?auth=ok without a session says the browser did not keep it, instead of doing nothing', async () => {
+    window.history.replaceState({}, '', '/?auth=ok');
+    serve(ANON);
+    getSettings.mockResolvedValue(NOTHING);
+    render(<App />);
+
+    expect(await screen.findByText(/did not keep the session/i)).toBeTruthy();
+    expect(window.location.search).toBe('');
+  });
+
+  it('a failed sign-in says why', async () => {
+    window.history.replaceState({}, '', '/?auth=conflict&keep=1');
+    serve(ANON);
+    getSettings.mockResolvedValue(NOTHING);
+    render(<App />);
+
+    expect(await screen.findByText(/already belongs to another account/i)).toBeTruthy();
+    // Only ?auth is consumed.
+    expect(window.location.search).toBe('?keep=1');
   });
 });

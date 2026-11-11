@@ -14,8 +14,6 @@ import {
   DialogTitle,
 } from './ui/dialog.js';
 
-const DEFAULT_ENDPOINT = 'https://snapbite-worker.lgf2111.workers.dev';
-
 const STEPS = [
   'Shortcuts → new shortcut → Take Photo → Convert Image (JPEG).',
   'Add Get Contents of URL: Method POST, Request Body Form.',
@@ -95,7 +93,8 @@ function CopyButton({
  * is dropped on "Done" or when it is revoked; the server keeps only a hash.
  */
 export function ShortcutCard({ backend }: { backend: Backend }) {
-  const endpoint = `${readConfig().workerUrl || DEFAULT_ENDPOINT}/api/shortcut/log`;
+  // Same origin as the app: the Shortcut posts through the same proxy.
+  const endpoint = `${readConfig().apiBase || window.location.origin}/api/shortcut/log`;
   const [tokens, setTokens] = useState<DeviceTokenInfo[] | null>(null);
   const [fresh, setFresh] = useState<CreatedDeviceToken | null>(null);
   const [busy, setBusy] = useState(false);

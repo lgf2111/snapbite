@@ -74,6 +74,17 @@ not get them, even though the settings screens exist in the app.
   installed app.
 - **Photo logging depends on your own AI key**, and the Worker has no shared key.
 
+## Build note: production must be same-origin
+
+Until the 2026-11-11 build fix, `pnpm deploy` compiled the Worker's `workers.dev`
+address into the bundle and refused to deploy without it. Every API call then went
+cross-site, skipped the Pages Function proxy, and on iOS the session cookie was
+third-party again (Google's account chooser even named `lgf2111.workers.dev`).
+`build:prod` now builds without a Worker URL, and `check:bundle` aborts the deploy
+if a `workers.dev` address is in the bundle. A production build with no Worker URL
+is the same-origin HTTP backend, not local mode; empty means local mode only in
+dev and tests. This takes effect on the next Pages deploy.
+
 ## Security note: magic-link login (fixed in code, needs a Worker deploy)
 
 Until this fix is deployed, the production Worker's `POST /api/auth/login`

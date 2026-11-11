@@ -426,89 +426,72 @@ describe('OnboardingScreen sign-in for existing accounts', () => {
   });
 });
 
-describe('OnboardingScreen for a signed-in account (arriving from OAuth)', () => {
-  let signedIn = true;
+describe('OnboardingScreen for an account that is already signed in', () => {
   beforeEach(() => {
     cleanup();
     localStorage.clear();
-    signedIn = true;
     setReduced(false);
-    vi.stubEnv('VITE_WORKER_URL', 'https://worker.test');
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) =>
-        Response.json(
-          url.endsWith('/providers')
-            ? { email: true, google: true }
-            : {
-                signedIn,
-                via: signedIn ? 'session' : null,
-                method: signedIn ? 'google' : null,
-                email: signedIn ? 'ada@example.com' : null,
-                userId: 'u1',
-              },
-        ),
-      ),
-    );
   });
   afterEach(() => {
-    window.history.replaceState({}, '', '/');
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
     restore();
   });
 
-  const mount = () => {
+  const mount = (account: { email: string | null } | null = { email: 'ada@example.com' }) => {
     const { backend } = makeBackend();
-    render(<OnboardingScreen backend={backend} onDone={vi.fn()} onSkip={vi.fn()} />);
+    render(
+      <OnboardingScreen backend={backend} account={account} onDone={vi.fn()} onSkip={vi.fn()} />,
+    );
   };
 
-  it('opens on the form panel when signed in with no profile', async () => {
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
+  it('opens on the form alone: no welcome, no intro, no scroll hint, no skeleton', () => {
     mount();
-
-    // The welcome renders first (we do not know yet), then /me moves it.
-    expect(await screen.findByTestId('onboarding-form')).toBeTruthy();
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'instant', block: 'start' });
-    // No skeleton for someone who has already passed the welcome.
+    // Synchronously, on first render: nothing to wait for or animate into.
+    expect(screen.getByTestId('onboarding-form')).toBeTruthy();
+    expect(document.querySelector('input[type=date]')).toBeTruthy();
+    expect(screen.queryByTestId('onboarding-intro')).toBeNull();
+    expect(screen.queryByRole('heading', { name: /welcome/i })).toBeNull();
+    expect(screen.queryByTestId('scroll-cue')).toBeNull();
     expect(screen.queryByTestId('onboarding-skeleton')).toBeNull();
-    expect(screen.getByText('Signed in as ada@example.com')).toBeTruthy();
     expect(screen.queryByTestId('signin-link')).toBeNull();
   });
 
-  it('after the OAuth redirect (?auth=ok) the form is there on first paint', () => {
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
-    window.history.replaceState({}, '', '/?auth=ok');
+  it('says who they are signed in as, and puts the cursor in the first empty field', () => {
     mount();
-
-    // Synchronously, before /me has answered.
-    expect(screen.getByTestId('onboarding-form')).toBeTruthy();
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'instant', block: 'start' });
+    expect(screen.getByText('Signed in as ada@example.com')).toBeTruthy();
+    expect(document.activeElement).toBe(document.querySelector('input[type=date]'));
   });
 
-  it('removes ?auth=ok from the address once it has been used', async () => {
-    window.history.replaceState({}, '', '/?auth=ok');
-    mount();
-    await waitFor(() => expect(window.location.search).toBe(''));
+  it('does not start a one-second timer for a cue that is not there', () => {
+    vi.useFakeTimers();
+    try {
+      mount();
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(screen.queryByTestId('scroll-cue')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('shows the welcome to an anonymous visitor', async () => {
-    signedIn = false;
-    mount();
-    expect(await screen.findByTestId('signin-link')).toBeTruthy();
+  it('an anonymous visitor still gets the welcome, then the form below it', () => {
+    mount(null);
     expect(screen.getByTestId('onboarding-intro')).toBeTruthy();
     expect(screen.queryByTestId('onboarding-form')).toBeNull();
   });
 
-  it('falls back to the welcome if the redirect hint was wrong (session not kept)', async () => {
-    signedIn = false;
-    window.history.replaceState({}, '', '/?auth=ok');
-    mount();
-    expect(screen.getByTestId('onboarding-form')).toBeTruthy();
-
-    await waitFor(() => expect(window.location.search).toBe(''));
-    expect(await screen.findByTestId('signin-link')).toBeTruthy();
+  it('can still be skipped', () => {
+    const onSkip = vi.fn();
+    const { backend } = makeBackend();
+    render(
+      <OnboardingScreen
+        backend={backend}
+        account={{ email: null }}
+        onDone={vi.fn()}
+        onSkip={onSkip}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /skip for now/i }));
+    expect(onSkip).toHaveBeenCalled();
   });
 });

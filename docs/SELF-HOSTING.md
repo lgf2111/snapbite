@@ -90,13 +90,17 @@ and reminder crons are declared in `wrangler.toml` and deploy with the Worker.
 
 ## 6. Deploy the Mini App
 
-The Mini App must be built with the Worker URL baked in — the deploy script
-refuses to deploy a bundle that lacks it (that check exists because a bundle
-built without it silently runs in local mode):
+The Mini App calls `/api` on its **own** origin; a Pages Function
+(`apps/miniapp/functions/api/[[path]].ts`) forwards that to your Worker. So the
+Worker URL must NOT be baked into the bundle — a bundle that calls the Worker
+directly is cross-site, and iOS Safari drops its session cookie. The deploy
+script builds without it and refuses to deploy a bundle that contains a
+`workers.dev` address. If your Pages project can't reach the Worker's public
+address, bind it as a service named `API` in the Pages project settings.
 
 ```bash
 cd apps/miniapp
-VITE_WORKER_URL=https://snapbite-worker.<subdomain>.workers.dev pnpm deploy
+pnpm run deploy   # build:prod (same-origin /api via the Pages Function) + check:bundle + wrangler pages deploy
 ```
 
 Or point it at your own domain: deploy to Pages (`--project-name=<yours>`), then
@@ -125,8 +129,9 @@ Edit the copy inside `scripts/set-bot-profile.mjs` and
 4. Send a photo of food. You should get an "Analyzing…" message that is edited
    into the result, and the meal should appear in the Mini App.
 
-If the Mini App opens but every call fails, the usual cause is a Mini App built
-without `VITE_WORKER_URL`, or a Worker deployed before step 3's secrets were set.
+If the Mini App opens but every call fails, the usual causes are a Pages deploy that
+skipped `functions/` (run it from `apps/miniapp`) or a Worker deployed before step 3's
+secrets were set.
 
 ## 9. Optional: your own branding
 
@@ -143,6 +148,6 @@ without `VITE_WORKER_URL`, or a Worker deployed before step 3's secrets were set
 | Bot never replies | webhook not set, or `secret_token` mismatch (check `getWebhookInfo`) |
 | `/stats` silent | `ADMIN_TELEGRAM_ID` unset or not your numeric id — the command is invisible to non-admins by design |
 | "Add your AI key first" for everyone | expected until each user saves a key; they can still log by hand |
-| Mini App loads but no data | built without `VITE_WORKER_URL`, or wrong `MINI_APP_URL` |
+| Mini App loads but no data | the Pages Function did not deploy (run `wrangler pages deploy` from `apps/miniapp`), or wrong `MINI_APP_URL` |
 | Keys stop decrypting after a redeploy | `ENCRYPTION_KEY` changed — restore the original |
 | Photo analysis 503s | provider overload or region block; a fallback provider in Settings fixes it |

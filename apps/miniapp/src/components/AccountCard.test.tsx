@@ -109,27 +109,6 @@ describe('AccountCard when signed in', () => {
     expect(signInOffers()).toEqual([null, null, null]);
   });
 
-  it('says so when the redirect came back signed in but the session was not kept', async () => {
-    window.history.replaceState({}, '', '/?auth=ok');
-    serve({ signedIn: false, via: null, method: null, email: null, userId: 'anon' });
-    render(<AccountCard />);
-
-    expect(await screen.findByText(/did not keep the session/i)).toBeTruthy();
-    window.history.replaceState({}, '', '/');
-  });
-
-  it('confirms a good redirect only once /me says signed in', async () => {
-    window.history.replaceState({}, '', '/?auth=ok');
-    serve({ signedIn: true, via: 'session', method: 'google', email: 'a@b.co', userId: 'u' });
-    render(<AccountCard />);
-
-    await waitFor(() =>
-      expect(screen.getByText(/this account now works on any device/i)).toBeTruthy(),
-    );
-    await act(async () => {});
-    window.history.replaceState({}, '', '/');
-  });
-
   it('says so when the email could not be sent, instead of staying silent', async () => {
     vi.stubEnv('VITE_WORKER_URL', 'https://worker.test');
     vi.stubGlobal(

@@ -60,10 +60,10 @@ void (async () => {
   // Telegram Mini App and plain browser both mount the same React app. In a
   // browser it runs in demo mode until sessions land (see lib/backend.ts), but
   // the shell, capture and compression are real.
-  const workerUrl = readConfig().workerUrl;
+  const { apiBase, hasBackend } = readConfig();
   const token = new URLSearchParams(window.location.search).get('token');
-  if (window.location.pathname === '/verify' && token && workerUrl) {
-    await completeSignIn(token, workerUrl);
+  if (window.location.pathname === '/verify' && token && hasBackend) {
+    await completeSignIn(token, apiBase);
     return;
   }
   await mountMiniApp();

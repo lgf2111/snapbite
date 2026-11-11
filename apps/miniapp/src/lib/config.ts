@@ -1,32 +1,55 @@
 /**
- * Runtime config for the Mini App.
+ * Where the client sends its API calls, and whether there is a backend at all.
  *
- * - `workerUrl` is the base the client prepends to `/api/...`.
- *   - On the production origin it is that origin itself: a Pages Function
- *     (functions/api/[[path]].ts) forwards `/api/*` to the Worker, so the API is
- *     same-origin and the session cookie is first-party. (Called across sites,
- *     iOS Safari drops the cookie, so a sign-in would "succeed" and be forgotten.)
- *   - Anywhere else it comes from VITE_WORKER_URL at build time, which is how
- *     local dev and self-hosting point at a Worker. Empty means no backend: the
- *     app runs on the mock processor.
+ * `apiBase` is prepended to `/api/...`. The empty string means *same origin*:
+ * the request goes to whatever origin served the app, where a Pages Function
+ * (functions/api/[[path]].ts) forwards it to the Worker. That is what production
+ * must use. Called across sites instead, the session cookie is third-party and
+ * iOS Safari drops it: a sign-in "succeeds" and is forgotten, and Google's
+ * account chooser even names the Worker's host.
+ *
+ *  - A production build with no `VITE_WORKER_URL` is same-origin. It is NOT local
+ *    mode: an empty value only means "no backend" in dev and tests, where there
+ *    is no proxy to talk to.
+ *  - `VITE_WORKER_URL` stays the way to point dev, or a `build:local` bundle on
+ *    localhost, at a Worker (e.g. http://localhost:8787 or a deployed one).
+ *  - On the production origin the override is ignored even if one was baked in.
  */
 export interface AppConfig {
-  workerUrl: string;
-  /** True when a Worker backend is configured. */
+  /** Prefix for `/api/...`; '' is same-origin. Never an absolute URL in production. */
+  apiBase: string;
+  /** False only in dev/tests with no Worker configured: the app runs on local storage. */
   hasBackend: boolean;
 }
 
-/** Where the app is served in production; its Pages Function proxies `/api/*` to the Worker. */
+/** Where the app is served in production. */
 export const PRODUCTION_ORIGIN = 'https://snapbite.leeguanfeng.com';
 
-/** The production origin always wins over a baked-in env value (the old build set the workers.dev URL). */
-export function resolveWorkerUrl(override: string | undefined, here: { origin: string }): string {
-  if (here.origin === PRODUCTION_ORIGIN) return here.origin;
-  return (override ?? '').trim();
+export function resolveApiConfig(
+  override: string | undefined,
+  here: { origin: string },
+  build: { production: boolean },
+): AppConfig {
+  // The one origin that must never talk to the Worker directly.
+  if (here.origin === PRODUCTION_ORIGIN) return { apiBase: '', hasBackend: true };
+
+  const explicit = (override ?? '').trim().replace(/\/+$/, '');
+  if (explicit) return { apiBase: explicit, hasBackend: true };
+
+  // A production bundle has the Pages Function beside it: same-origin, HTTP backend.
+  if (build.production) return { apiBase: '', hasBackend: true };
+
+  // `vite dev` / tests with nothing configured: the mock/local backend.
+  return { apiBase: '', hasBackend: false };
 }
 
 export function readConfig(): AppConfig {
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
-  const workerUrl = resolveWorkerUrl(import.meta.env.VITE_WORKER_URL, { origin });
-  return { workerUrl, hasBackend: workerUrl.length > 0 };
+  return resolveApiConfig(
+    import.meta.env.VITE_WORKER_URL,
+    { origin },
+    {
+      production: import.meta.env.PROD === true,
+    },
+  );
 }

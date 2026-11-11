@@ -17,7 +17,7 @@ import {
   type UserExport,
 } from './api.js';
 import { cacheKey, clearCache, invalidate, setCached } from './cache.js';
-import { readConfig } from './config.js';
+import { type AppConfig, readConfig } from './config.js';
 import {
   type SavedMeal,
   clearMeals,
@@ -142,11 +142,9 @@ export interface Backend {
   logWeight(kg: number): Promise<SettingsView>;
 }
 
-export function createBackend(): Backend {
-  const config = readConfig();
-
+export function createBackend(config: AppConfig = readConfig()): Backend {
   if (config.hasBackend) {
-    const api = new ApiClient(config.workerUrl, getRawInitData);
+    const api = new ApiClient(config.apiBase, getRawInitData);
     return {
       mode: 'worker',
       async logManual(meal) {

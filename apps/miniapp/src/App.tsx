@@ -7,9 +7,11 @@ import { HomeScreen } from './components/HomeScreen.js';
 import { SetupLayer } from './components/SetupLayer.js';
 import { Skeleton } from './components/ui/skeleton';
 import { Toaster } from './components/ui/sonner';
+import { type Me, authNotice, fetchMe, takeAuthStatus } from './lib/account.js';
 import type { SettingsView } from './lib/api.js';
 import { type Backend, type RecentMeal, createBackend } from './lib/backend.js';
 import { cacheKey, getCached, revalidate } from './lib/cache.js';
+import { readConfig } from './lib/config.js';
 import { keyDecision, markKeyDecision } from './lib/onboarding.js';
 import { type Route, navigate, onRouteChange, parseRoute } from './lib/router.js';
 import { todayKey } from './lib/weekPrefs.js';
@@ -94,6 +96,33 @@ export function App() {
 
   useEffect(refreshProfile, []);
 
+  // Who is this browser? Asked once at boot, alongside the settings fetch. The
+  // welcome waits for the answer, so a signed-in account is never shown it, and
+  // `?auth=` (where the sign-in redirect lands) is read, acted on and removed.
+  // If the question cannot be answered we behave as anonymous: never guess.
+  const askMe = backend.mode === 'worker' && readConfig().hasBackend;
+  const [me, setMe] = useState<Me | null>(null);
+  const [meSettled, setMeSettled] = useState(!askMe);
+  useEffect(() => {
+    const status = takeAuthStatus();
+    if (!askMe) {
+      const note = authNotice(status, null);
+      if (note) toastFn(note.kind, note.message);
+      return;
+    }
+    let live = true;
+    void fetchMe(readConfig().apiBase).then((answer) => {
+      if (!live) return;
+      setMe(answer);
+      setMeSettled(true);
+      const note = authNotice(status, answer);
+      if (note) toastFn(note.kind, note.message);
+    });
+    return () => {
+      live = false;
+    };
+  }, [askMe]);
+
   // Back/forward and in-app navigation both land here.
   useEffect(
     () =>
@@ -110,12 +139,14 @@ export function App() {
   // profile and no targets). The account decides, not a flag in localStorage.
   // `onboardingSkipped` is in-memory on purpose: Skip hides setup for this
   // session, and the next launch shows the welcome again. A profile without
-  // targets lands on Home with the "Set goal" card instead.
+  // targets lands on Home with the "Set goal" card instead. Signed-in or not is
+  // decided before this opens (`meSettled`), so setup mounts already knowing
+  // whether to start on the form.
   useEffect(() => {
-    if (hasProfile === false && targets === null && !onboardingSkipped) {
+    if (meSettled && hasProfile === false && targets === null && !onboardingSkipped) {
       setShowOnboarding(true);
     }
-  }, [hasProfile, targets, onboardingSkipped]);
+  }, [meSettled, hasProfile, targets, onboardingSkipped]);
 
   const openMeal = (meal: RecentMeal) => {
     setDetailMeal(meal);
@@ -216,6 +247,7 @@ export function App() {
             <OnboardingScreen
               backend={backend}
               startAtKeyStep={resumeKeyStep}
+              account={me?.signedIn ? { email: me.email } : null}
               onDone={(t) => finishOnboarding({ targets: t })}
               onSkip={() => finishOnboarding({ skipped: true })}
               onToast={toastFn}

@@ -1,5 +1,6 @@
 import { Mail } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Me } from '../lib/account.js';
 import { readConfig } from '../lib/config.js';
 import { GoogleIcon } from './icons/GoogleIcon.js';
 import { Button } from './ui/button.js';
@@ -11,15 +12,6 @@ interface Providers {
   google: boolean;
 }
 
-export interface Me {
-  signedIn: boolean;
-  via: string | null;
-  /** How the session was opened; null for sessions older than that being recorded. */
-  method?: 'google' | 'email' | null;
-  email: string | null;
-  userId: string | null;
-}
-
 /**
  * Optional account section. The app works without signing in — an anonymous
  * account is created on first use — so this never blocks anything; it only
@@ -27,12 +19,11 @@ export interface Me {
  * browser and works on a second device.
  */
 export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = {}) {
-  const workerUrl = readConfig().workerUrl;
+  const { apiBase, hasBackend } = readConfig();
   // null = not known yet. Never treated as "signed out": a signed-in person must
   // not be shown the sign-in buttons while we are still asking, or if we fail to.
   const [me, setMe] = useState<Me | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
-  const authStatus = useRef<string | null>(null);
   const [providers, setProviders] = useState<Providers>({ email: false, google: false });
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
@@ -46,11 +37,11 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
   signedInCb.current = onSignedIn;
 
   const load = useCallback(async () => {
-    if (!workerUrl) return;
+    if (!hasBackend) return;
     try {
       const [meRes, provRes] = await Promise.all([
-        fetch(`${workerUrl}/api/auth/me`, { credentials: 'include' }),
-        fetch(`${workerUrl}/api/auth/providers`, { credentials: 'include' }),
+        fetch(`${apiBase}/api/auth/me`, { credentials: 'include' }),
+        fetch(`${apiBase}/api/auth/providers`, { credentials: 'include' }),
       ]);
       if (meRes.ok) {
         const next = (await meRes.json()) as Me;
@@ -64,7 +55,7 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
     } catch {
       setLoadFailed(true);
     }
-  }, [workerUrl]);
+  }, [apiBase, hasBackend]);
 
   useEffect(() => {
     void load();
@@ -85,37 +76,13 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
     };
   }, [load, onSignedIn]);
 
-  // Surface the result of a round trip (?auth=ok / ?auth=expired / ...). The
-  // "ok" case is only believed once /me confirms the session, below.
-  useEffect(() => {
-    const status = new URLSearchParams(window.location.search).get('auth');
-    if (!status) return;
-    authStatus.current = status;
-    if (status === 'expired')
-      setError('That sign-in link expired or was already used. Request a new one.');
-    else if (status === 'state') setError('The sign-in was interrupted. Please try again.');
-    else if (status === 'unverified') setError('That email is not verified with the provider.');
-    else if (status === 'conflict') setError('That address already belongs to another account.');
-    window.history.replaceState({}, '', window.location.pathname);
-  }, []);
-
-  useEffect(() => {
-    if (authStatus.current !== 'ok' || !me) return;
-    authStatus.current = null;
-    if (me.signedIn) setNotice('Signed in — this account now works on any device.');
-    else
-      setError(
-        'We signed you in, but this browser did not keep the session. Try again, or use the email link.',
-      );
-  }, [me]);
-
   async function requestLink() {
-    if (!workerUrl) return;
+    if (!hasBackend) return;
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const res = await fetch(`${workerUrl}/api/auth/login`, {
+      const res = await fetch(`${apiBase}/api/auth/login`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -141,10 +108,10 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
   }
 
   async function signOut() {
-    if (!workerUrl) return;
+    if (!hasBackend) return;
     setBusy(true);
     try {
-      await fetch(`${workerUrl}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+      await fetch(`${apiBase}/api/auth/logout`, { method: 'POST', credentials: 'include' });
       wasSignedIn.current = false;
       setMe({ signedIn: false, via: null, method: null, email: null, userId: null });
       setNotice('Signed out. This browser keeps working as an anonymous account.');
@@ -153,7 +120,7 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
     }
   }
 
-  if (!workerUrl) return null;
+  if (!hasBackend) return null;
 
   return (
     <Card>
@@ -199,7 +166,7 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
 
             {providers.google && (
               <Button asChild variant="outline">
-                <a href={`${workerUrl}/api/auth/start/google`}>
+                <a href={`${apiBase}/api/auth/start/google`}>
                   <GoogleIcon />
                   Continue with Google
                 </a>

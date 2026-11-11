@@ -1,28 +1,82 @@
-import { describe, expect, it } from 'vitest';
-import { PRODUCTION_ORIGIN, resolveWorkerUrl } from './config.js';
+import { describe, expect, it, vi } from 'vitest';
+import { createBackend } from './backend.js';
+import { PRODUCTION_ORIGIN, resolveApiConfig } from './config.js';
 
 const WORKERS_DEV = 'https://snapbite-worker.lgf2111.workers.dev';
+const PROD = { production: true };
+const DEV = { production: false };
 
-describe('resolveWorkerUrl', () => {
-  it('is same-origin on the production origin, so /api/* is first-party', () => {
-    const base = resolveWorkerUrl(undefined, { origin: PRODUCTION_ORIGIN });
-    expect(base).toBe(PRODUCTION_ORIGIN);
-    expect(`${base}/api/auth/me`).toBe('https://snapbite.leeguanfeng.com/api/auth/me');
+describe('a production build', () => {
+  it('uses a relative /api on whatever origin serves it, never an absolute URL', () => {
+    for (const origin of [
+      PRODUCTION_ORIGIN,
+      'https://snapbite.pages.dev',
+      'https://abc123.snapbite.pages.dev',
+      'https://self-hosted.example.org',
+    ]) {
+      const cfg = resolveApiConfig(undefined, { origin }, PROD);
+      expect(cfg).toEqual({ apiBase: '', hasBackend: true });
+      expect(`${cfg.apiBase}/api/auth/me`).toBe('/api/auth/me');
+      expect(cfg.apiBase).not.toMatch(/^https?:/);
+    }
   });
 
-  it('prefers same-origin over a workers.dev URL baked into the build', () => {
-    expect(resolveWorkerUrl(WORKERS_DEV, { origin: PRODUCTION_ORIGIN })).toBe(PRODUCTION_ORIGIN);
+  it('is the HTTP backend, not local mode, with no worker URL (the silent-nothing-stored trap)', () => {
+    const cfg = resolveApiConfig(undefined, { origin: PRODUCTION_ORIGIN }, PROD);
+    expect(cfg.hasBackend).toBe(true);
+    expect(createBackend(cfg).mode).toBe('worker');
   });
 
-  it('uses the env override under localhost', () => {
-    expect(resolveWorkerUrl(WORKERS_DEV, { origin: 'http://localhost:5173' })).toBe(WORKERS_DEV);
-    expect(resolveWorkerUrl(' http://localhost:8787 ', { origin: 'http://localhost:5173' })).toBe(
-      'http://localhost:8787',
+  it('on the production origin ignores a worker URL that was baked in anyway', () => {
+    const cfg = resolveApiConfig(WORKERS_DEV, { origin: PRODUCTION_ORIGIN }, PROD);
+    expect(cfg).toEqual({ apiBase: '', hasBackend: true });
+  });
+
+  it("sends the app's calls to a relative URL", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(String(url));
+        return Response.json({ favorites: [] });
+      }),
     );
+    try {
+      await createBackend(
+        resolveApiConfig(undefined, { origin: PRODUCTION_ORIGIN }, PROD),
+      ).listFavorites();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatch(/^\/api\//);
+  });
+});
+
+describe('dev and test', () => {
+  it('with no worker URL is local mode (mock data), which is what empty means here', () => {
+    const cfg = resolveApiConfig(undefined, { origin: 'http://localhost:5173' }, DEV);
+    expect(cfg).toEqual({ apiBase: '', hasBackend: false });
+    expect(createBackend(cfg).mode).toBe('local');
   });
 
-  it('is empty (mock mode) with no override off the production origin', () => {
-    expect(resolveWorkerUrl(undefined, { origin: 'http://localhost:5173' })).toBe('');
-    expect(resolveWorkerUrl('', { origin: 'https://preview.pages.dev' })).toBe('');
+  it('treats a blank worker URL like none', () => {
+    expect(resolveApiConfig('  ', { origin: 'http://localhost:5173' }, DEV).hasBackend).toBe(false);
+  });
+
+  it('uses VITE_WORKER_URL as given, so localhost can talk to a deployed or local Worker', () => {
+    expect(resolveApiConfig(WORKERS_DEV, { origin: 'http://localhost:5173' }, DEV)).toEqual({
+      apiBase: WORKERS_DEV,
+      hasBackend: true,
+    });
+    expect(
+      resolveApiConfig('http://localhost:8787/', { origin: 'http://localhost:5173' }, DEV).apiBase,
+    ).toBe('http://localhost:8787');
+  });
+
+  it('a build:local bundle (production build + explicit URL) on localhost uses that URL', () => {
+    expect(resolveApiConfig(WORKERS_DEV, { origin: 'http://localhost:4173' }, PROD).apiBase).toBe(
+      WORKERS_DEV,
+    );
   });
 });
