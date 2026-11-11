@@ -1,18 +1,11 @@
-import {
-  type BotReply,
-  createProvider,
-  decryptSecret,
-  photoLoggedReply,
-  resolveMeal,
-} from '@snapbite/core';
+import { type BotReply, photoLoggedReply, resolveMeal } from '@snapbite/core';
 import { and, asc, eq, lte } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
+import { QuotaExceeded, resolveProviderForUser } from './billing/provider.js';
 import { logError } from './db/errors.js';
 import { createMealsDb, saveMeal } from './db/meals.js';
 import { type PendingPhotoRetryRow, pendingPhotoRetries } from './db/schema.js';
-import { createSettingsDb, getSettings } from './db/settings.js';
 import type { Env } from './env.js';
-import { primaryProviderChoice } from './routes/meals.js';
 import { TelegramBotClient } from './telegram/botClient.js';
 
 /** First delayed retry ~3 min after the failure; subsequent ~15 min later. */
@@ -92,23 +85,12 @@ export async function runPhotoRetries(env: Env, nowMs: number = Date.now()): Pro
   if (rows.length === 0) return 0;
 
   const bot = new TelegramBotClient(env.TELEGRAM_BOT_TOKEN);
-  const encryptionKey = env.ENCRYPTION_KEY;
   const miniAppUrl = env.MINI_APP_URL ?? '';
   let logged = 0;
 
   for (const row of rows) {
     try {
-      const settingsDb = createSettingsDb(env.DB);
-      const settings = await getSettings(settingsDb, row.userId);
-      if (!settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
-        // No key anymore — nothing we can do; drop it quietly.
-        await deleteRetry(env.DB, row.id);
-        continue;
-      }
-      const apiKey = await decryptSecret(
-        { ciphertext: settings.apiKeyCiphertext, iv: settings.apiKeyIv },
-        encryptionKey,
-      );
+      const provider = await resolveProviderForUser(env.DB, env, row.userId);
 
       const filePath = await bot.getFilePath(row.fileId);
       const file = filePath ? await bot.downloadFile(filePath) : null;
@@ -118,14 +100,6 @@ export async function runPhotoRetries(env: Env, nowMs: number = Date.now()): Pro
         continue;
       }
 
-      const choice = primaryProviderChoice(settings, apiKey);
-      const provider = createProvider({
-        providerId: choice.provider,
-        apiKey: choice.apiKey,
-        ...(choice.model ? { model: choice.model } : {}),
-        ...(choice.baseUrl ? { baseUrl: choice.baseUrl } : {}),
-        ...(choice.supportsDetail != null ? { supportsDetail: choice.supportsDetail } : {}),
-      });
       const image = { base64: file.base64, mimeType: file.mimeType as 'image/jpeg' };
       const analysis = await provider.analyzeMeal(image, row.caption ? { hint: row.caption } : {});
       const meal = resolveMeal(analysis);
@@ -147,7 +121,7 @@ export async function runPhotoRetries(env: Env, nowMs: number = Date.now()): Pro
         userId: row.userId,
         meal,
         telegramFileId: row.fileId,
-        aiProvider: settings.aiProvider,
+        aiProvider: provider.id,
         telegramChatId: row.chatId,
         telegramMessageId: confirmId,
       });
@@ -157,7 +131,7 @@ export async function runPhotoRetries(env: Env, nowMs: number = Date.now()): Pro
       // Still failing — back off, and give up past the cap.
       const attempts = row.attempts + 1;
       if (attempts >= MAX_ATTEMPTS) {
-        await finishGiveUp(env, bot, row);
+        await finishGiveUp(env, bot, row, err instanceof QuotaExceeded ? err.userMessage : null);
       } else {
         await bumpRetry(env.DB, row.id, attempts, nowMs + NEXT_DELAY_MS);
       }
@@ -177,9 +151,12 @@ async function finishGiveUp(
   env: Env,
   bot: TelegramBotClient,
   row: PendingPhotoRetryRow,
+  reason: string | null = null,
 ): Promise<void> {
   await editOrSend(bot, row.chatId, row.statusMessageId, {
-    text: "Sorry — the AI stayed busy and I couldn't log that photo. Please send it again, or set a fallback provider in SnapBite → Settings so this doesn't happen.",
+    text:
+      reason ??
+      "Sorry — the AI stayed busy and I couldn't log that photo. Please send it again, or set a fallback provider in SnapBite → Settings so this doesn't happen.",
   });
   await deleteRetry(env.DB, row.id);
 }

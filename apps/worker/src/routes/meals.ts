@@ -1,17 +1,21 @@
 import {
   type AIFoodAnalysis,
-  type AIProvider,
   type MealImage,
   MealResult,
-  createProvider,
   currentStreak,
-  decryptSecret,
   mealLoggedMessage,
   resolveMeal,
   verifyInitData,
 } from '@snapbite/core';
 import { Hono } from 'hono';
 import { cookies, deviceLookupHash, readCookies } from '../auth/cookies.js';
+import {
+  type ProviderFactory,
+  ProviderSetupError,
+  QuotaExceeded,
+  defaultProviderFactory,
+  resolveProviderForUser,
+} from '../billing/provider.js';
 import { createAuthDb, findDeviceUser, findSessionUser } from '../db/auth.js';
 import { describeError, logError } from '../db/errors.js';
 import {
@@ -26,7 +30,6 @@ import {
   updateMeal,
 } from '../db/meals.js';
 import { recordMealSave } from '../db/metrics.js';
-import type { SettingsRow } from '../db/schema.js';
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';
@@ -34,53 +37,9 @@ import { photoKey, r2Store } from '../storage/photos.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
 import type { BotClientFactory } from './webhook.js';
 
+export type { ProviderChoice, ProviderFactory } from '../billing/provider.js';
+
 const defaultBotClientFactory: BotClientFactory = (token) => new TelegramBotClient(token);
-
-/** How the chosen provider is described to the factory. */
-export interface ProviderChoice {
-  apiKey: string;
-  provider: string;
-  model: string | null;
-  /** Custom OpenAI-compatible base URL (when `provider` is `custom`). */
-  baseUrl?: string | null;
-  /** Whether the custom endpoint honors `image_url.detail`. */
-  supportsDetail?: boolean;
-}
-
-/** Injectable provider factory so tests can supply a mock. */
-export type ProviderFactory = (choice: ProviderChoice) => AIProvider;
-
-export const defaultProviderFactory: ProviderFactory = ({
-  apiKey,
-  provider,
-  model,
-  baseUrl,
-  supportsDetail,
-}) =>
-  createProvider({
-    providerId: provider,
-    apiKey,
-    ...(model ? { model } : {}),
-    ...(baseUrl ? { baseUrl } : {}),
-    ...(supportsDetail != null ? { supportsDetail } : {}),
-  });
-
-/**
- * Builds the primary {@link ProviderChoice} from a settings row + decrypted key,
- * pulling the custom base URL / detail flag out of preferences_json when the
- * user's provider is `custom`.
- */
-export function primaryProviderChoice(row: SettingsRow, apiKey: string): ProviderChoice {
-  const choice: ProviderChoice = { apiKey, provider: row.aiProvider, model: row.aiModel };
-  if (row.aiProvider === 'custom') {
-    const custom = parsePreferences(row.preferencesJson).customProvider;
-    if (custom?.baseUrl) {
-      choice.baseUrl = custom.baseUrl;
-      choice.supportsDetail = custom.supportsDetail ?? false;
-    }
-  }
-  return choice;
-}
 
 export const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
@@ -129,10 +88,6 @@ export function mealsRoutes(
 
   // POST /api/meals/analyze — { base64, mimeType, hint? } -> MealResult
   app.post('/analyze', async (c) => {
-    if (!c.env.ENCRYPTION_KEY) {
-      return c.json({ error: 'Server misconfigured', detail: 'No encryption key' }, 500);
-    }
-
     let body: { base64?: unknown; mimeType?: unknown; hint?: unknown };
     try {
       body = await c.req.json();
@@ -149,32 +104,26 @@ export function mealsRoutes(
       return c.json({ error: 'Bad request', detail: 'unsupported mimeType' }, 400);
     }
 
-    // Load and decrypt the user's API key.
-    const settingsDb = createSettingsDb(c.env.DB);
-    const row = await getSettings(settingsDb, c.get('userId'));
-    if (!row?.apiKeyCiphertext || !row?.apiKeyIv) {
-      return c.json({ error: 'No API key', detail: 'Add your AI key in settings first' }, 400);
-    }
-
-    let apiKey: string;
-    try {
-      apiKey = await decryptSecret(
-        { ciphertext: row.apiKeyCiphertext, iv: row.apiKeyIv },
-        c.env.ENCRYPTION_KEY,
-      );
-    } catch {
-      return c.json({ error: 'Server error', detail: 'Could not decrypt key' }, 500);
-    }
-
     // Run the pipeline. `image` (the bytes) is a local const and is discarded
     // when the handler returns — nothing is written to storage.
     const image: MealImage = { base64, mimeType: mimeType as MealImage['mimeType'] };
     try {
-      const provider = providerFactory(primaryProviderChoice(row, apiKey));
+      const provider = await resolveProviderForUser(c.env.DB, c.env, c.get('userId'), {
+        providerFactory,
+      });
       const analysis = await provider.analyzeMeal(image, hint ? { hint } : {});
       const meal = resolveMeal(analysis);
-      return c.json(meal);
+      return c.json(provider.notice ? { ...meal, notice: provider.notice } : meal);
     } catch (err) {
+      if (err instanceof QuotaExceeded) {
+        return c.json(
+          { error: 'Analysis failed', detail: err.userMessage, kind: 'quota' },
+          err.status,
+        );
+      }
+      if (err instanceof ProviderSetupError) {
+        return c.json({ error: 'Server error', detail: err.userMessage }, err.status);
+      }
       const e = err as { kind?: string; status?: number; message?: string; cause?: unknown };
       const status = e.kind === 'http' && e.status === 401 ? 400 : 502;
       // Surface the provider's own message (e.g. a retired-model hint) when present.
@@ -370,10 +319,6 @@ export function mealsRoutes(
   // (no image), re-resolves nutrition, and RETURNS the revised MealResult
   // WITHOUT persisting. The client reviews it and saves via PUT /api/meals/:id.
   app.post('/:id/revise', async (c) => {
-    if (!c.env.ENCRYPTION_KEY) {
-      return c.json({ error: 'Server misconfigured', detail: 'No encryption key' }, 500);
-    }
-
     let body: { instruction?: unknown };
     try {
       body = await c.req.json();
@@ -393,34 +338,20 @@ export function mealsRoutes(
     const detail = await getMealDetail(mealsDb, id, c.get('userId'));
     if (!detail) return c.json({ error: 'Not found' }, 404);
 
-    // Load + decrypt the user's key.
-    const settingsDb = createSettingsDb(c.env.DB);
-    const row = await getSettings(settingsDb, c.get('userId'));
-    if (!row?.apiKeyCiphertext || !row?.apiKeyIv) {
-      return c.json({ error: 'No API key', detail: 'Add your AI key in settings first' }, 400);
-    }
-    let apiKey: string;
-    try {
-      apiKey = await decryptSecret(
-        { ciphertext: row.apiKeyCiphertext, iv: row.apiKeyIv },
-        c.env.ENCRYPTION_KEY,
-      );
-    } catch {
-      return c.json({ error: 'Server error', detail: 'Could not decrypt key' }, 500);
-    }
-
     // Bound the provider call so a hung model returns a clean 504 instead of
     // Cloudflare cutting the connection with a 524 (~100s edge limit).
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), REVISE_TIMEOUT_MS);
     try {
-      const provider = providerFactory(primaryProviderChoice(row, apiKey));
+      const provider = await resolveProviderForUser(c.env.DB, c.env, c.get('userId'), {
+        providerFactory,
+      });
       const analysis = await provider.reviseMeal(detailToAnalysis(detail), instruction, {
         signal: ac.signal,
       });
       // Draft only: return the revised meal for the client to review + save.
       const meal = resolveMeal(analysis);
-      return c.json({ meal });
+      return c.json(provider.notice ? { meal, notice: provider.notice } : { meal });
     } catch (err) {
       if (ac.signal.aborted) {
         return c.json(
@@ -431,6 +362,15 @@ export function mealsRoutes(
           },
           504,
         );
+      }
+      if (err instanceof QuotaExceeded) {
+        return c.json(
+          { error: 'Revision failed', detail: err.userMessage, kind: 'quota' },
+          err.status,
+        );
+      }
+      if (err instanceof ProviderSetupError) {
+        return c.json({ error: 'Server error', detail: err.userMessage }, err.status);
       }
       const e = err as { kind?: string; status?: number; message?: string; cause?: unknown };
       const status = e.kind === 'http' && e.status === 401 ? 400 : 502;

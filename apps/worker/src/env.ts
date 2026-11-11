@@ -10,6 +10,12 @@ export interface Env {
   TELEGRAM_BOT_TOKEN: string;
   /** AES-GCM master key (base64) for BYOK encryption. Used from Task 7. */
   ENCRYPTION_KEY?: string;
+  /**
+   * The owner's hosted Gemini key. Used only when a signed-in account buys or
+   * trials credits; BYOK users never touch it. Unset => the paid path degrades
+   * to a typed refusal instead of a broken call.
+   */
+  GEMINI_API_KEY?: string;
   /** HTTPS URL of the deployed Mini App, for the web_app launch button. */
   MINI_APP_URL?: string;
   /** Shared secret Telegram echoes in X-Telegram-Bot-Api-Secret-Token on webhooks. */
