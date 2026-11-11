@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:test';
-import { MockAIProvider, signInitData } from '@snapbite/core';
+import { AIProviderError, MockAIProvider, signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import {
@@ -52,7 +52,7 @@ describe('POST /api/shortcut/log', () => {
     const app = createApp({ providerFactory: () => new MockAIProvider() });
     const res = await app.request('/api/shortcut/log', post(null), env);
     expect(res.status).toBe(401);
-    expect(await res.text()).toContain('device token');
+    expect(await res.text()).toMatch(/^SnapBite: .*device token/);
   });
 
   it('rejects an unknown token', async () => {
@@ -88,7 +88,7 @@ describe('POST /api/shortcut/log', () => {
 
     const res = await app.request('/api/shortcut/log', post(raw), env);
     expect(res.status).toBe(400);
-    expect(await res.text()).toContain('AI key');
+    expect(await res.text()).toBe('SnapBite: add your AI key in Settings first');
   });
 
   it('rejects a HEIC upload with a usable message', async () => {
@@ -176,5 +176,153 @@ describe('POST /api/shortcut/log', () => {
 
     const obj = await env.PHOTOS.get(`photos/${mealId}`);
     expect(obj).not.toBeNull();
+  });
+
+  describe('reply contract', () => {
+    const failing = (err: unknown) => ({
+      analyzeMeal: async () => {
+        throw err;
+      },
+    });
+
+    it('answers text/plain with one short readable line, never JSON', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const token = await tokenFor(app, 9501);
+      const res = await app.request('/api/shortcut/log', post(token), env);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      const text = await res.text();
+      expect(text).toMatch(/^Logged \d+ kcal — .+/);
+      expect(text).not.toContain('{');
+      expect(text.length).toBeLessThan(120);
+    });
+
+    it('uses the analyser label, not the whole ingredient list', async () => {
+      const base = await new MockAIProvider().analyzeMeal(
+        { base64: 'aGVsbG8=', mimeType: 'image/jpeg' },
+        {},
+      );
+      const provider = {
+        analyzeMeal: async () => ({ ...base, title: '  Grilled salmon, rice  ' }),
+      };
+      const app = createApp({ providerFactory: () => provider as never });
+      const token = await tokenFor(app, 9502);
+      const text = await (await app.request('/api/shortcut/log', post(token), env)).text();
+      expect(text).toMatch(/^Logged \d+ kcal — Grilled salmon, rice( \(P \d+ · C \d+ · F \d+\))?$/);
+    });
+
+    it('trims a very long label so the line stays under the length budget', async () => {
+      const base = await new MockAIProvider().analyzeMeal(
+        { base64: 'aGVsbG8=', mimeType: 'image/jpeg' },
+        {},
+      );
+      const provider = { analyzeMeal: async () => ({ ...base, title: 'x'.repeat(200) }) };
+      const app = createApp({ providerFactory: () => provider as never });
+      const token = await tokenFor(app, 9503);
+      const text = await (await app.request('/api/shortcut/log', post(token), env)).text();
+      expect(text.length).toBeLessThan(120);
+      expect(text).toContain('…');
+    });
+
+    it('?format=json answers a structured body with the same message and status', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const token = await tokenFor(app, 9504);
+      const res = await app.request('/api/shortcut/log?format=json', post(token), env);
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('application/json');
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      const body = (await res.json()) as {
+        ok: boolean;
+        message: string;
+        mealId: string;
+        label: string;
+        kcal: number;
+        macros: { proteinG: number; carbsG: number; fatG: number };
+      };
+      expect(body.ok).toBe(true);
+      expect(body.message).toMatch(/^Logged \d+ kcal — /);
+      expect(typeof body.mealId).toBe('string');
+      expect(typeof body.label).toBe('string');
+      expect(typeof body.kcal).toBe('number');
+      expect(Object.keys(body.macros).sort()).toEqual(['carbsG', 'fatG', 'proteinG']);
+    });
+
+    it('?format=json keeps failures structured and on the same status', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const user = await upsertUser(createDb(env.DB), { id: 9505 });
+      const raw = mintDeviceToken();
+      await createDeviceToken(createDeviceTokensDb(env.DB), {
+        userId: user.id,
+        tokenHash: await hashDeviceToken(raw),
+      });
+      const res = await app.request('/api/shortcut/log?format=json', post(raw), env);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        ok: false,
+        message: 'SnapBite: add your AI key in Settings first',
+      });
+    });
+
+    it('a missing or bad token is a readable 401, no-store', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      for (const token of [null, 'sb_not-a-real-token']) {
+        const res = await app.request('/api/shortcut/log', post(token), env);
+        expect(res.status).toBe(401);
+        expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+        expect(res.headers.get('cache-control')).toBe('no-store');
+        const text = await res.text();
+        expect(text).toMatch(/^SnapBite: /);
+        expect(text).not.toContain('{');
+      }
+    });
+
+    it('an unreadable upload says so, with 400', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const token = await tokenFor(app, 9506);
+      const res = await app.request(
+        '/api/shortcut/log',
+        post(token, { base64: '', mimeType: 'image/jpeg' }),
+        env,
+      );
+      expect(res.status).toBe(400);
+      expect(await res.text()).toBe('SnapBite: the photo was not readable, try again');
+    });
+
+    it('an unparseable analysis says the photo was not readable, with 502', async () => {
+      const app = createApp({
+        providerFactory: () =>
+          failing(new AIProviderError('parse', 'bad json from model')) as never,
+      });
+      const token = await tokenFor(app, 9507);
+      const res = await app.request('/api/shortcut/log', post(token), env);
+      expect(res.status).toBe(502);
+      expect(await res.text()).toBe('SnapBite: the photo was not readable, try again');
+    });
+
+    it('an analysis with no food says no meal was detected, with 502', async () => {
+      const app = createApp({
+        providerFactory: () => failing(new AIProviderError('empty', 'no foods')) as never,
+      });
+      const token = await tokenFor(app, 9508);
+      const res = await app.request('/api/shortcut/log', post(token), env);
+      expect(res.status).toBe(502);
+      expect(await res.text()).toBe('SnapBite: no meal detected in that photo');
+    });
+
+    it('a provider outage never leaks its raw message into the notification', async () => {
+      const app = createApp({
+        providerFactory: () =>
+          failing(new AIProviderError('http', '{"error":"quota"}', { status: 429 })) as never,
+      });
+      const token = await tokenFor(app, 9509);
+      const res = await app.request('/api/shortcut/log', post(token), env);
+      expect(res.status).toBe(502);
+      const text = await res.text();
+      expect(text).toMatch(/^SnapBite: /);
+      expect(text).not.toContain('{');
+    });
   });
 });
