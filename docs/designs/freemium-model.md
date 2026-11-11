@@ -32,6 +32,17 @@ It is a convenience purchase, not a value ladder. There is no second reason to r
 
 The retention mechanics the review surfaced (**"your usual"**, the 12-month record, portion drift) are therefore **free features**, not paid ones. They were the strongest ideas in the review, and under this intent they belong to everyone.
 
+**One exception, added by the owner after the review: advanced analytics.** This is the one form of gating the review endorsed, because it gates *derived analysis* rather than the user's own data. The rule that keeps it honest:
+
+- **The log is not the product.** Every meal, photo, date, edit and export stays free and complete forever. A user can always see everything they logged, on any date, and take it elsewhere.
+- **What the plan adds is interpretation**: views computed *across* that data, which have to be built, kept correct, and explained. That is work with real cost, unlike a row read.
+- Concretely, premium analytics are: 90-day and 12-month trends; macro adherence against target per week, not per day; weekday and time-of-day patterns; dish frequency and portion drift over time; weight-versus-intake correlation for users who log weight; a weekly report card; and a projection to the target date at the current rate.
+- Free keeps the daily rings, the weekly view, the recap that already ships, and the streak. Those are the product's daily loop; they are never reduced to sell the report.
+- Analytics are computed from stored rows at zero AI cost, in one module (`packages/core/src/stats`), cached per user per day, so the paid tier's marginal cost stays near a query rather than a model call.
+- Nothing in the analytics may require a photo to exist: manual-only users must get the same reports.
+
+This is a deliberate revision of decision 1 below: the plan is no longer "AI only". It is "AI without a key, plus the reports you would otherwise compute yourself".
+
 ### The entitlement model the draft got wrong
 
 `users` is one row per *credential*, not per person: a human holds a device row, a Telegram row and a Google row. The Google callback mints a fresh device account when the cookie is absent. A `plan` column on `users` grants premium to exactly one sign-in path, and a payer loses it by switching device — the same failure that stranded this owner's meals twice.
@@ -73,7 +84,8 @@ Adopted: grace window, then a **usable floor** — manual entry, full log, date 
 
 **In scope**
 
-- Free: every feature, unlimited, BYOK (Gemini or any supported provider) — including the "your usual" tile, the 12-month record and file-based health import, because they are value, not monetisation.
+- Free: every feature, unlimited, BYOK (Gemini or any supported provider) — including the "your usual" tile and file-based health import. Daily rings, the weekly view, the recap and the streak stay free permanently.
+- Plan additionally unlocks **advanced analytics**: 90-day and 12-month trends, weekly macro adherence, weekday/time-of-day patterns, dish frequency and portion drift, weight-versus-intake correlation, a weekly report card, and a projection to target — all derived from the user's own rows, never a replacement for them.
 - Onboarding **leads with the key**: the setup guide is the primary path, and the plan is offered as a quiet alternative for someone who does not want to do it. The wording never scolds the free choice.
 - Plan: hosted AI only — no key, no Google Cloud project. Priced at cost recovery, offered as a convenience, never as an upgrade path with extras.
 - `billing_accounts` + cached `plan` + period/grace model; one `resolveProviderForUser`; `/api/me` publishes the plan.
@@ -98,7 +110,7 @@ Adopted: grace window, then a **usable floor** — manual entry, full log, date 
 
 ## Decisions adopted
 
-1. **The plan sells one capability: AI without a key.** No feature gating of any kind — not history, not reports, not collections, not the streak. Under a non-revenue intent, gating anything would be deliberate product damage for no return.
+1. **The plan sells two things: AI without a key, and advanced analytics.** Revised after review at the owner's direction. Gating is limited to *derived* views computed across the user's data (trends, patterns, adherence, report card, projection) — never the data itself, which stays free, complete and exportable.
 2. **BYOK is the recommended path, not the consolation prize.** Onboarding leads with the key guide, the copy names the free path first, and the plan appears as "or let SnapBite handle the AI".
 3. **Never gate the user's own data**, the log, date navigation, export, or the streak. Streak revive stays free — charging at the moment a user feels bad converts a loyalty loop into a paywall prompt.
 4. **Priced at cost recovery**: pinned model + 2027 provider pricing + fair-use cap, no margin target beyond staying solvent.
