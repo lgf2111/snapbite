@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { AppShell, type ShellTab } from './components/AppShell.js';
 import { CaptureSheet } from './components/CaptureSheet.js';
 import { HomeScreen } from './components/HomeScreen.js';
-import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog';
+import { SetupLayer } from './components/SetupLayer.js';
 import { Skeleton } from './components/ui/skeleton';
 import { Toaster } from './components/ui/sonner';
 import type { SettingsView } from './lib/api.js';
@@ -119,9 +119,9 @@ export function App() {
   };
 
   /**
-   * Onboarding is a sheet over Home, not a screen that replaces the app: the
-   * day is visible behind it, so a first-time user can see where they are going
-   * and dismiss it, instead of being trapped on a form with no way home.
+   * Onboarding is a full-screen layer over a Home that stays mounted (inert),
+   * so finishing or skipping reveals the day exactly as it was. Every way out
+   * (Skip, Escape, Back) is a skip, so nobody is trapped in setup.
    */
   const finishOnboarding = (opts: { targets?: DailyTargets | null; skipped?: boolean } = {}) => {
     markKeyDecision(opts.skipped ? 'skipped' : 'set');
@@ -137,51 +137,54 @@ export function App() {
 
   return (
     <>
-      <AppShell
-        active={tab}
-        onNavigate={(next) =>
-          navigate(next === 'settings' ? { name: 'settings' } : { name: 'day', date: homeDate })
-        }
-        onCapture={() => setCaptureOpen(true)}
-        captureBusy={captureOpen}
-      >
-        {detailId ? (
-          <Suspense fallback={<ScreenFallback />}>
-            <MealDetailScreen
+      {/* Home stays mounted but unreachable while setup covers it. */}
+      <div inert={showOnboarding}>
+        <AppShell
+          active={tab}
+          onNavigate={(next) =>
+            navigate(next === 'settings' ? { name: 'settings' } : { name: 'day', date: homeDate })
+          }
+          onCapture={() => setCaptureOpen(true)}
+          captureBusy={captureOpen}
+        >
+          {detailId ? (
+            <Suspense fallback={<ScreenFallback />}>
+              <MealDetailScreen
+                backend={backend}
+                mealId={detailId}
+                initialMeal={detailMeal}
+                onBack={() => {
+                  setDetailMeal(null);
+                  // Return to the day the meal belongs to, not always today.
+                  navigate({ name: 'day', date: homeDate }, { replace: true });
+                }}
+                onChanged={() => setHomeVersion((v) => v + 1)}
+                onToast={toastFn}
+              />
+            </Suspense>
+          ) : tab === 'settings' ? (
+            <Suspense fallback={<ScreenFallback />}>
+              <SettingsScreen backend={backend} onProfileSaved={refreshProfile} />
+            </Suspense>
+          ) : (
+            <HomeScreen
               backend={backend}
-              mealId={detailId}
-              initialMeal={detailMeal}
-              onBack={() => {
-                setDetailMeal(null);
-                // Return to the day the meal belongs to, not always today.
-                navigate({ name: 'day', date: homeDate }, { replace: true });
+              targets={targets}
+              date={homeDate}
+              onDateChange={(d) => {
+                setHomeDate(d);
+                navigate({ name: 'day', date: d });
               }}
-              onChanged={() => setHomeVersion((v) => v + 1)}
+              view={homeView}
+              onViewChange={setHomeView}
+              refreshSignal={homeVersion}
+              onOpenMeal={openMeal}
+              onSetGoal={() => setShowOnboarding(true)}
               onToast={toastFn}
             />
-          </Suspense>
-        ) : tab === 'settings' ? (
-          <Suspense fallback={<ScreenFallback />}>
-            <SettingsScreen backend={backend} onProfileSaved={refreshProfile} />
-          </Suspense>
-        ) : (
-          <HomeScreen
-            backend={backend}
-            targets={targets}
-            date={homeDate}
-            onDateChange={(d) => {
-              setHomeDate(d);
-              navigate({ name: 'day', date: d });
-            }}
-            view={homeView}
-            onViewChange={setHomeView}
-            refreshSignal={homeVersion}
-            onOpenMeal={openMeal}
-            onSetGoal={() => setShowOnboarding(true)}
-            onToast={toastFn}
-          />
-        )}
-      </AppShell>
+          )}
+        </AppShell>
+      </div>
 
       <CaptureSheet
         backend={backend}
@@ -192,16 +195,8 @@ export function App() {
         onToast={toastFn}
       />
 
-      {/* First run: a dismissible sheet over the real Home. Backdrop click and
-          the close control both skip, so nobody gets stuck in setup. */}
-      <Dialog
-        open={showOnboarding}
-        onOpenChange={(next) => {
-          if (!next) finishOnboarding({ skipped: true });
-        }}
-      >
-        <DialogContent className="sheet-safe bottom-0 top-auto max-h-[92svh] max-w-md translate-y-0 scroll-pb-28 overflow-y-auto rounded-b-none rounded-t-xl duration-200 data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2 data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100">
-          <DialogTitle className="sr-only">Set up SnapBite</DialogTitle>
+      {showOnboarding && (
+        <SetupLayer onDismiss={() => finishOnboarding({ skipped: true })}>
           <Suspense fallback={<ScreenFallback />}>
             <OnboardingScreen
               backend={backend}
@@ -211,8 +206,8 @@ export function App() {
               onToast={toastFn}
             />
           </Suspense>
-        </DialogContent>
-      </Dialog>
+        </SetupLayer>
+      )}
 
       <Toaster />
     </>

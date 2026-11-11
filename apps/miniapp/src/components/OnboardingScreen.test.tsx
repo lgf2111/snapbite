@@ -111,6 +111,26 @@ describe('OnboardingScreen intro', () => {
     expect(screen.getByTestId('onboarding-form').hasAttribute('inert')).toBe(false);
   });
 
+  it('keeps the welcome on screen and scrolls to the form when the gate opens', () => {
+    setReduced(false);
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const { backend } = makeBackend();
+    render(<OnboardingScreen backend={backend} onDone={vi.fn()} onSkip={vi.fn()} />);
+
+    act(() => {
+      vi.advanceTimersByTime(999);
+    });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    // The welcome is the first screenful, not a transition that disappears.
+    expect(screen.getByTestId('onboarding-intro')).toBeTruthy();
+  });
+
   it('skips the intro and the wait under reduced motion', () => {
     setReduced(true);
     const { backend } = makeBackend();
