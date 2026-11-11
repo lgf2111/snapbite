@@ -1,16 +1,19 @@
 import type { Backend, RecentMeal } from '@/lib/backend';
 import { clearCache } from '@/lib/cache';
 import type { DailyTargets, MealResult } from '@snapbite/core';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HERO_BASE_REM, ringNumeralSizeRem } from '../lib/ringNumeral.js';
 import { HomeScreen } from './HomeScreen.js';
+import { Toaster } from './ui/sonner.js';
 
 afterEach(() => {
   // Test files share one process, so RTL's auto-cleanup only covers the first
   // file to import it. Unmount explicitly.
   cleanup();
+  toast.dismiss();
   clearCache();
   localStorage.clear();
   vi.restoreAllMocks();
@@ -307,6 +310,31 @@ describe('HomeScreen', () => {
     expect(screen.getByText(/daily average/i)).toBeInTheDocument();
     // Radix marks the active toggle item with data-state, not aria-pressed.
     expect(avg.closest('[data-state]')).toHaveAttribute('data-state', 'on');
+  });
+
+  it('a swipe-delete offers Undo, and Undo restores the row without deleting it', async () => {
+    const backend = stubBackend({
+      mealsByDate: vi.fn(async () => [meal({ id: 'milk', label: 'Milk candy' })]),
+    });
+    render(
+      <>
+        <HomeScreen {...props(backend)} />
+        <Toaster />
+      </>,
+    );
+    await screen.findByText('Milk candy');
+
+    const card = screen.getByTestId('swipe-card');
+    fireEvent.mouseDown(card, { clientX: 400, clientY: 300 });
+    fireEvent.mouseMove(document, { clientX: 300, clientY: 300 });
+    fireEvent.mouseUp(document, { clientX: 300, clientY: 300 });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.queryByText('Milk candy')).not.toBeInTheDocument());
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+    expect(await screen.findByText('Milk candy')).toBeInTheDocument();
+    expect(backend.remove).not.toHaveBeenCalled();
   });
 
   it('edits a meal with AI inline from Home (no navigation)', async () => {

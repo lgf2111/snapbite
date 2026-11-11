@@ -31,6 +31,7 @@ export function MealThumb({ src }: { src?: string | null }) {
       >
         {/* The mark, as a background: a missing file shows nothing, not a glyph. */}
         <span
+          data-testid="meal-thumb-mark"
           className="size-7 rounded-md bg-contain bg-center bg-no-repeat opacity-80"
           style={{ backgroundImage: 'url(/icon-192.png)' }}
         />
