@@ -21,16 +21,8 @@ export const FAN = {
   /** Within this of the button's centre, releasing cancels. */
   deadPx: 24,
   /** Half-ring radii. The inner hollow holds the label. */
-  innerPx: 100,
+  innerPx: 80,
   outerPx: 148,
-  /** The camera button's radius (it is 4rem across). */
-  buttonPx: 32,
-  /** Clear space between the label band and the button, and between it and the arc. */
-  labelGapPx: 8,
-  /** One caption line. */
-  labelHeightPx: 20,
-  /** Radius the wedge icons sit at, kept where they were before the inner radius grew. */
-  iconPx: 114,
   /** Below the horizon, a finger within this many degrees of it still picks the nearer end wedge. */
   belowHorizonDeg: 30,
 } as const;
@@ -67,29 +59,10 @@ export function wedgePath(i: number): string {
   return `M ${at(R, a0)} A ${R} ${R} 0 0 1 ${at(R, a1)} L ${at(r, a1)} A ${r} ${r} 0 0 0 ${at(r, a0)} Z`;
 }
 
-/**
- * The label's box, in the same coordinates as `wedgePath`. It lives in the hollow:
- * its bottom edge is `labelGapPx` above the button's top, and its top corners are
- * `labelGapPx` inside the arc's inner edge, so it can touch neither. The width is
- * whatever that leaves at the top of the box; a longer name is truncated.
- */
-export function labelBox(): { left: number; top: number; width: number; height: number } {
-  const bottom = FAN.buttonPx + FAN.labelGapPx;
-  const top = bottom + FAN.labelHeightPx;
-  const reach = FAN.innerPx - FAN.labelGapPx;
-  const half = Math.floor(Math.sqrt(reach * reach - top * top));
-  return {
-    left: FAN.outerPx - half,
-    top: FAN.outerPx - top,
-    width: half * 2,
-    height: FAN.labelHeightPx,
-  };
-}
-
 /** Where a wedge's icon sits (box coordinates), at the middle of its ring. */
 export function wedgeCentre(i: number): { x: number; y: number } {
   const mid = 180 - (i + 0.5) * WEDGE_DEG;
-  const radius = FAN.iconPx;
+  const radius = (FAN.innerPx + FAN.outerPx) / 2;
   return {
     x: FAN.outerPx + radius * Math.cos(rad(mid)),
     y: FAN.outerPx - radius * Math.sin(rad(mid)),
