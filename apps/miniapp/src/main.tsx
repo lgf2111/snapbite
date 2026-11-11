@@ -53,7 +53,20 @@ async function completeSignIn(token: string, apiBase: string): Promise<void> {
   }
 }
 
+/**
+ * The service worker is only there to receive web push, so it is registered in
+ * production builds and only where the browser has one. A failure to register
+ * must never get in the way of the app.
+ */
+function registerServiceWorker(): void {
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  });
+}
+
 void (async () => {
+  registerServiceWorker();
   // Chrome can fire `beforeinstallprompt` before the app has mounted; start
   // listening now so the install card still gets it.
   void import('./lib/install.js').then((m) => m.watchInstallEvents());

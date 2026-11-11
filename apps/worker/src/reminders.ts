@@ -2,9 +2,11 @@ import { dueReminderSlots, reminderMessage } from '@snapbite/core';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { logError } from './db/errors.js';
+import { createPushDb } from './db/push.js';
 import { settings, users } from './db/schema.js';
 import { type ReminderConfig, parsePreferences } from './db/settings.js';
 import type { Env } from './env.js';
+import { pushToUser } from './push/deliver.js';
 import { TelegramBotClient } from './telegram/botClient.js';
 
 /**
@@ -14,15 +16,15 @@ import { TelegramBotClient } from './telegram/botClient.js';
  */
 export const REMINDER_WINDOW_MINUTES = 15;
 
-/** A user's reminder config joined with the Telegram id we DM. */
+/** A user's reminder config, with the Telegram id we fall back to (if they have one). */
 interface UserReminder {
   userId: string;
-  telegramUserId: number;
+  telegramUserId: number | null;
   reminders: ReminderConfig;
   preferencesJson: string | null;
 }
 
-/** Loads every user with reminders enabled, joined to their Telegram id. */
+/** Loads every user with reminders enabled (with their Telegram id, when they have one). */
 async function loadEnabledReminders(db: D1Database): Promise<UserReminder[]> {
   const orm = drizzle(db, { schema: { settings, users } });
   const rows = await orm
@@ -37,13 +39,11 @@ async function loadEnabledReminders(db: D1Database): Promise<UserReminder[]> {
   const out: UserReminder[] = [];
   for (const r of rows) {
     const reminders = parsePreferences(r.preferencesJson).reminders;
-    if (r.telegramUserId == null) continue;
     if (reminders?.enabled) {
       out.push({
         userId: r.userId,
-        // Skip accounts with no Telegram identity (email/device accounts):
-        // every one of these jobs delivers through the bot.
-        telegramUserId: r.telegramUserId as number,
+        // Web-only accounts have none; they can still have a push subscription.
+        telegramUserId: r.telegramUserId ?? null,
         reminders,
         preferencesJson: r.preferencesJson,
       });
@@ -72,14 +72,26 @@ async function markSent(
     .where(eq(settings.userId, userId));
 }
 
+/** What the notification says. Plain, and no instruction to message a bot. */
+export function pushReminderBody(label: string): string {
+  return `Time to log ${label}.`;
+}
+
 /**
  * Cron entrypoint: finds all users whose local time hits an enabled reminder
- * slot now (and hasn't been sent today) and DMs them. Best-effort per user —
- * one failure never blocks the rest. Returns the number of reminders sent.
+ * slot now (and hasn't been sent today) and reminds them.
+ *
+ * Channel: web push to every device the user subscribed. The Telegram DM is only
+ * the fallback, for an account that has a Telegram identity but no live push
+ * subscription (none ever, or every one just turned out dead). Best-effort per
+ * user: one failure never blocks the rest. Returns the number of reminders sent.
  */
 export async function runReminders(env: Env, nowMs: number = Date.now()): Promise<number> {
-  if (!env.TELEGRAM_BOT_TOKEN) return 0;
-  const bot = new TelegramBotClient(env.TELEGRAM_BOT_TOKEN);
+  const bot = env.TELEGRAM_BOT_TOKEN ? new TelegramBotClient(env.TELEGRAM_BOT_TOKEN) : null;
+  // Without VAPID keys every send would "fail" and wear the subscriptions down
+  // for a reason that is ours, so push is simply off until they are set.
+  const pushConfigured = Boolean(env.PUSH_VAPID_PUBLIC_KEY && env.PUSH_VAPID_PRIVATE_KEY);
+  const pushDb = createPushDb(env.DB);
   const enabled = await loadEnabledReminders(env.DB);
   let sent = 0;
 
@@ -94,12 +106,37 @@ export async function runReminders(env: Env, nowMs: number = Date.now()): Promis
       const d = new Date(localMs);
       const dateKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 
+      let didSomething = false;
       for (const label of due) {
-        await bot.sendMessage(u.telegramUserId, { text: reminderMessage(label) });
+        let delivered = false;
+        let live = 0;
+        if (pushConfigured) {
+          const result = await pushToUser(
+            pushDb,
+            u.userId,
+            {
+              title: 'SnapBite',
+              body: pushReminderBody(label),
+              url: '/',
+              tag: `reminder-${label}`,
+            },
+            env,
+          );
+          delivered = result.delivered > 0;
+          live = result.live;
+        }
+        // Telegram only when there is no live subscription to push to.
+        if (live === 0 && bot && u.telegramUserId != null) {
+          await bot.sendMessage(u.telegramUserId, { text: reminderMessage(label) });
+          delivered = true;
+        }
+        if (delivered) sent += 1;
+        // Stamp it either way: the window is one cron tick wide, so retrying
+        // would only double up on devices that did get it.
         lastSent[label] = dateKey;
-        sent += 1;
+        didSomething = true;
       }
-      await markSent(env.DB, u.userId, u.preferencesJson, lastSent);
+      if (didSomething) await markSent(env.DB, u.userId, u.preferencesJson, lastSent);
     } catch (err) {
       await logError(env.DB, {
         telegramUserId: u.telegramUserId,

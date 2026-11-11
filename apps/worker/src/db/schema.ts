@@ -326,3 +326,27 @@ export type DeviceTokenRow = typeof deviceTokens.$inferSelect;
 
 export type MetricsRow = typeof metrics.$inferSelect;
 export type UserActivityRow = typeof userActivity.$inferSelect;
+
+/** Web push subscriptions: one per device that turned reminders on (see push/send.ts). */
+export const pushSubscriptions = sqliteTable(
+  'push_subscriptions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    createdAt: text('created_at').notNull(),
+    lastOkAt: text('last_ok_at'),
+    failCount: integer('fail_count').notNull().default(0),
+    userAgent: text('user_agent'),
+  },
+  (t) => ({
+    endpointIdx: uniqueIndex('push_subscriptions_endpoint_unique').on(t.endpoint),
+    userIdx: index('push_subscriptions_user_idx').on(t.userId),
+  }),
+);
+
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;

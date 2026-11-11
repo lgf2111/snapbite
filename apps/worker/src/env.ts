@@ -45,6 +45,12 @@ export interface Env {
   EMAIL_FROM?: string;
   /** Public origin of the app, used to build magic links. */
   APP_ORIGIN?: string;
+  /** Web push (VAPID): the public key, base64url, a 65-byte uncompressed P-256 point. */
+  PUSH_VAPID_PUBLIC_KEY?: string;
+  /** Web push (VAPID): the private scalar, base64url, 32 bytes. A secret. */
+  PUSH_VAPID_PRIVATE_KEY?: string;
+  /** Web push (VAPID) contact, e.g. `mailto:you@example.com`. */
+  PUSH_VAPID_SUBJECT?: string;
   /** Google OAuth client id (sign-in with Google). */
   GOOGLE_CLIENT_ID?: string;
   /** Google OAuth client secret. */
