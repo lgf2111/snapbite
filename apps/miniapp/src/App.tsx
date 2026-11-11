@@ -2,7 +2,7 @@ import type { DailyTargets } from '@snapbite/core';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { AppShell, type ShellTab } from './components/AppShell.js';
-import { CaptureSheet } from './components/CaptureSheet.js';
+import { type CaptureIntent, CaptureSheet } from './components/CaptureSheet.js';
 import { HomeScreen } from './components/HomeScreen.js';
 import { SetupLayer } from './components/SetupLayer.js';
 import { Skeleton } from './components/ui/skeleton';
@@ -12,6 +12,7 @@ import type { SettingsView } from './lib/api.js';
 import { type Backend, type RecentMeal, createBackend } from './lib/backend.js';
 import { cacheKey, getCached, revalidate } from './lib/cache.js';
 import { readConfig } from './lib/config.js';
+import { takeLaunchIntent } from './lib/launch.js';
 import { markKeyDecision } from './lib/onboarding.js';
 import { type Route, navigate, onRouteChange, parseRoute } from './lib/router.js';
 import { todayKey } from './lib/weekPrefs.js';
@@ -58,6 +59,8 @@ export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   // "Uploading 2 of 4" while a multi-photo batch runs; null otherwise.
   const [batchStatus, setBatchStatus] = useState<string | null>(null);
+  // A request from outside the app (an icon shortcut, a shared photo): see lib/launch.ts.
+  const [captureIntent, setCaptureIntent] = useState<CaptureIntent | null>(null);
   const cameraRef = useRef<HTMLButtonElement>(null);
 
   // Profile/targets drive the Home rings + onboarding gate.
@@ -121,6 +124,24 @@ export function App() {
       live = false;
     };
   }, [askMe]);
+
+  // Launched from an icon shortcut or the share sheet: hand it to the capture flow once.
+  useEffect(() => {
+    const launch = takeLaunchIntent();
+    if (!launch) return;
+    if (launch.type === 'shared') {
+      let live = true;
+      void launch.photo.then((file) => {
+        if (!live) return;
+        if (file) setCaptureIntent({ type: 'file', file });
+        else toastFn('info', 'That share had no photo to log.');
+      });
+      return () => {
+        live = false;
+      };
+    }
+    setCaptureIntent(launch);
+  }, []);
 
   // Back/forward and in-app navigation both land here.
   useEffect(
@@ -234,6 +255,8 @@ export function App() {
         onManualLogged={() => setHomeVersion((v) => v + 1)}
         onToast={toastFn}
         onBatchStatus={setBatchStatus}
+        intent={captureIntent}
+        onIntentHandled={() => setCaptureIntent(null)}
       />
 
       {showOnboarding && (
