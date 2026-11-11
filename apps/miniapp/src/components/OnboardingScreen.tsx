@@ -9,7 +9,7 @@ import {
   type ProviderId,
   type UserProfile,
 } from '@snapbite/core';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { markKeyDecision } from '../lib/onboarding.js';
 import { KeyHelp } from './KeyHelp.js';
 import { LinkifiedHint } from './LinkifiedHint.js';
@@ -102,11 +102,19 @@ export function OnboardingScreen({
       ),
   );
   const [introDone, setIntroDone] = useState(!showIntro);
+  const formRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (introDone) return;
     const timer = window.setTimeout(() => setIntroDone(true), INTRO_MS);
     return () => window.clearTimeout(timer);
   }, [introDone]);
+  // The welcome keeps the first screenful; once the form is live the page
+  // scrolls down to it. The welcome stays above, it is not unmounted.
+  useEffect(() => {
+    if (showIntro && introDone) {
+      formRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }
+  }, [showIntro, introDone]);
 
   // API-key step state.
   const [provider, setProvider] = useState<ProviderId>(() => readResume()?.provider ?? 'gemini');
@@ -161,7 +169,7 @@ export function OnboardingScreen({
 
   if (step === 'apikey') {
     return (
-      <div className="flex flex-1 flex-col gap-4 pb-4">
+      <div className="flex flex-1 flex-col gap-4 py-6">
         <div className="flex flex-col gap-1">
           <h1 className="text-title">Add your AI key</h1>
           <p className="text-muted-foreground text-caption">
@@ -225,12 +233,13 @@ export function OnboardingScreen({
   return (
     <div className="flex flex-1 flex-col">
       {showIntro && (
-        // In flow, not an absolute overlay: the sheet scrolls, so an overlay sized
+        // In flow, not an absolute overlay: the layer scrolls, so an overlay sized
         // to the whole form would centre its text somewhere below the fold. This
-        // block fills the first screen and the form sits beneath it.
+        // block is exactly one screen tall (minus the safe areas the layer pads
+        // with) and the form sits beneath it.
         <div
           data-testid="onboarding-intro"
-          className="animate-in fade-in flex min-h-[70svh] flex-col items-center justify-center gap-2 text-center duration-500"
+          className="animate-in fade-in flex min-h-[calc(100dvh_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom)_-_1rem)] flex-col items-center justify-center gap-2 text-center duration-500"
         >
           <h1 className="font-display text-display leading-tight">
             Welcome
@@ -242,12 +251,13 @@ export function OnboardingScreen({
       )}
 
       <div
+        ref={formRef}
         data-testid="onboarding-form"
         // Hidden from tab order and screen readers until it fades in, so nobody
         // fills an invisible form.
         inert={!introDone}
         className={cn(
-          'flex flex-col gap-4 pb-4',
+          'flex scroll-mt-4 flex-col gap-4 py-4',
           introDone ? 'animate-in fade-in slide-in-from-bottom-2 duration-500' : 'opacity-0',
         )}
       >

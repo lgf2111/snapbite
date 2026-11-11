@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getSettings = vi.hoisted(() => vi.fn());
 vi.mock('./lib/backend.js', async (orig) => ({
@@ -16,6 +16,9 @@ vi.mock('./lib/backend.js', async (orig) => ({
 import { App } from './App.js';
 
 describe('first-run onboarding', () => {
+  // Test files share one DOM (single fork): leave nothing mounted behind.
+  afterEach(cleanup);
+
   beforeEach(() => {
     cleanup();
     localStorage.clear();
@@ -26,6 +29,20 @@ describe('first-run onboarding', () => {
     getSettings.mockResolvedValue({ profile: null, targets: null, connected: false });
     render(<App />);
     await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+  });
+
+  it('covers the whole screen: no card, no backdrop, Home unreachable behind it', async () => {
+    getSettings.mockResolvedValue({ profile: null, targets: null, connected: false });
+    render(<App />);
+    const layer = await screen.findByRole('dialog');
+
+    expect(layer.className).toContain('fixed inset-0');
+    expect(layer.className).not.toMatch(/rounded|max-w-/);
+    expect(layer.getAttribute('aria-modal')).toBe('true');
+    // The app behind is inert: not focusable, not clickable, not announced.
+    expect(document.querySelector('[inert]')?.contains(layer)).toBe(false);
+    expect(document.querySelector('[inert]')?.querySelector('nav')).toBeTruthy();
+    expect(document.body.style.overflow).toBe('hidden');
   });
 
   it('does not reopen the sheet once the visitor has dismissed it', async () => {
