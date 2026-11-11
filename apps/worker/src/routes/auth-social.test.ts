@@ -86,22 +86,75 @@ describe('social account resolution (email join key)', () => {
   });
 });
 
-describe('same-origin sign-in on the app domain', () => {
-  const googleEnv = { ...env, GOOGLE_CLIENT_ID: 'client-id', GOOGLE_CLIENT_SECRET: 'secret' };
+describe('Google redirect URI behind the Pages proxy', () => {
+  const APP = 'https://snapbite.leeguanfeng.com';
+  const WORKER = 'https://snapbite-worker.lgf2111.workers.dev';
+  const googleEnv = {
+    ...env,
+    GOOGLE_CLIENT_ID: 'client-id',
+    GOOGLE_CLIENT_SECRET: 'secret',
+    APP_ORIGIN: APP,
+  };
 
-  it('derives the redirect URI from the origin the request came in on', async () => {
+  async function redirectUri(
+    headers: Record<string, string>,
+    e: typeof googleEnv | typeof env = googleEnv,
+  ) {
     const app = createApp();
-    for (const origin of [
-      'https://snapbite.leeguanfeng.com',
-      'https://snapbite-worker.lgf2111.workers.dev',
-    ]) {
-      const res = await app.request(`${origin}/api/auth/start/google`, {}, googleEnv);
-      expect(res.status).toBe(302);
-      const location = new URL(res.headers.get('location') ?? '');
-      expect(location.searchParams.get('redirect_uri')).toBe(`${origin}/api/auth/callback/google`);
-      // The state cookie is set on the same host the callback will arrive on.
-      expect(res.headers.get('set-cookie')).toContain('sb_oauth_state=');
-    }
+    const res = await app.request(`${WORKER}/api/auth/start/google`, { headers }, e);
+    expect(res.status).toBe(302);
+    return new URL(res.headers.get('location') ?? '').searchParams.get('redirect_uri');
+  }
+
+  it('uses the app origin when the proxy says so and it matches APP_ORIGIN', async () => {
+    expect(
+      await redirectUri({
+        'x-forwarded-host': 'snapbite.leeguanfeng.com',
+        'x-forwarded-proto': 'https',
+      }),
+    ).toBe(`${APP}/api/auth/callback/google`);
+  });
+
+  it('defaults the proto to https when only the host is forwarded', async () => {
+    expect(await redirectUri({ 'x-forwarded-host': 'snapbite.leeguanfeng.com' })).toBe(
+      `${APP}/api/auth/callback/google`,
+    );
+  });
+
+  it('ignores a forwarded host that is not APP_ORIGIN', async () => {
+    expect(await redirectUri({ 'x-forwarded-host': 'evil.example.com' })).toBe(
+      `${WORKER}/api/auth/callback/google`,
+    );
+  });
+
+  it('ignores the right host on the wrong scheme', async () => {
+    expect(
+      await redirectUri({
+        'x-forwarded-host': 'snapbite.leeguanfeng.com',
+        'x-forwarded-proto': 'http',
+      }),
+    ).toBe(`${WORKER}/api/auth/callback/google`);
+  });
+
+  it('ignores forwarded headers entirely when APP_ORIGIN is not configured', async () => {
+    const noApp = { ...googleEnv, APP_ORIGIN: undefined };
+    expect(await redirectUri({ 'x-forwarded-host': 'snapbite.leeguanfeng.com' }, noApp)).toBe(
+      `${WORKER}/api/auth/callback/google`,
+    );
+  });
+
+  it('is the request origin when called directly, as before', async () => {
+    expect(await redirectUri({})).toBe(`${WORKER}/api/auth/callback/google`);
+  });
+
+  it('sets the state cookie in the same response, for the callback to compare', async () => {
+    const app = createApp();
+    const res = await app.request(
+      `${WORKER}/api/auth/start/google`,
+      { headers: { 'x-forwarded-host': 'snapbite.leeguanfeng.com' } },
+      googleEnv,
+    );
+    expect(res.headers.get('set-cookie')).toContain('sb_oauth_state=');
   });
 });
 

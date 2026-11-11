@@ -3,13 +3,6 @@ main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
-# The app's own domain forwards /api/* to this Worker, so the browser talks to
-# one site: the session cookie is first-party (iOS Safari drops it when the app
-# at snapbite.leeguanfeng.com calls snapbite-worker.*.workers.dev). The
-# workers.dev address stays on for Telegram, the bot webhook and the iOS Shortcut.
-workers_dev = true
-routes = [{ pattern = "snapbite.leeguanfeng.com/api/*", zone_name = "leeguanfeng.com" }]
-
 # Meal reminders: run every 15 minutes; the handler DMs users whose local time
 # matches an enabled reminder slot (see src/reminders.ts, §15).
 [triggers]

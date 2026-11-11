@@ -122,6 +122,34 @@ export const oauthStateCookie = {
   maxAge: STATE_TTL_S,
 };
 
+/**
+ * The origin the browser actually used.
+ *
+ * The app reaches this Worker through a Pages Function proxy on its own domain
+ * (so the session cookie is first-party). Behind that proxy the request URL is
+ * the workers.dev host, and the proxy reports what the browser saw in
+ * `x-forwarded-host` / `x-forwarded-proto`. Those headers are believed only when
+ * they spell exactly APP_ORIGIN: anyone can send them, and trusting an arbitrary
+ * value would let a caller choose where Google redirects back to.
+ */
+export function publicOrigin(
+  env: { APP_ORIGIN?: string },
+  headers: { get(name: string): string | null },
+  requestUrl: string,
+): string {
+  const own = new URL(requestUrl).origin;
+  const host = headers.get('x-forwarded-host');
+  if (!host || !env.APP_ORIGIN) return own;
+  let app: string;
+  try {
+    app = new URL(env.APP_ORIGIN).origin;
+  } catch {
+    return own;
+  }
+  const proto = headers.get('x-forwarded-proto') ?? 'https';
+  return `${proto}://${host}` === app ? app : own;
+}
+
 /** The callback URL Google must call back; must match the console exactly. */
 export function redirectUriFor(apiOrigin: string): string {
   return `${apiOrigin}/api/auth/callback/google`;
