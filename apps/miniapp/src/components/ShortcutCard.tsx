@@ -189,7 +189,10 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
             </ol>
 
             <div className="flex flex-col gap-1">
-              <code ref={urlRef} className="text-caption font-mono select-all break-words [overflow-wrap:anywhere]">
+              <code
+                ref={urlRef}
+                className="text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
+              >
                 {endpoint}
               </code>
               <CopyButton text={endpoint} target={urlRef} label="Copy URL" />
