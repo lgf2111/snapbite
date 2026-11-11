@@ -23,7 +23,16 @@ interface Props {
   /** A meal was logged through the by-hand form (no AI result to hand back). */
   onManualLogged: () => void;
   onToast: (kind: 'success' | 'error' | 'info', msg: string) => void;
+  /**
+   * Where a multi-photo upload is up to ("Uploading 2 of 4"), or null when none is
+   * running. The shell shows it under the camera button and disables the button
+   * while it is set.
+   */
+  onBatchStatus?: (status: string | null) => void;
 }
+
+/** Most photos taken from one library pick: the analyser is slow and rate-limited. */
+export const MAX_BATCH = 5;
 
 /**
  * The pickers are always mounted and kept out of sight with `sr-only` positioning,
@@ -55,6 +64,7 @@ export function CaptureSheet({
   onLogged,
   onManualLogged,
   onToast,
+  onBatchStatus,
 }: Props) {
   /** The by-hand dialog; it carries the saved-meals list, so both cards open it. */
   const [manualOpen, setManualOpen] = useState(false);
@@ -63,6 +73,9 @@ export function CaptureSheet({
   const [error, setError] = useState<string | null>(null);
   const photo = useRef<{ base64: string; mimeType: string } | null>(null);
   const preview = useRef<string | null>(null);
+  const [batching, setBatching] = useState(false);
+  /** Synchronous twin of `batching`: a second pick can arrive before a render. */
+  const batchRunning = useRef(false);
   const cameraInput = useRef<HTMLInputElement | null>(null);
   const libraryInput = useRef<HTMLInputElement | null>(null);
 
@@ -92,6 +105,63 @@ export function CaptureSheet({
       setError(err instanceof Error ? err.message : 'Could not read that photo');
       setStage('error');
     }
+  }
+
+  /**
+   * Several photos from the library: each becomes its own meal, one at a time. The
+   * analyser is the slow, rate-limited part, so parallel uploads would only earn
+   * 429s. A failure is counted and the next photo still goes; nothing is abandoned.
+   * There is no review step per photo: the summary toast is the feedback.
+   */
+  async function runBatch(files: File[]) {
+    batchRunning.current = true;
+    setBatching(true);
+    onOpenChange(false);
+    let logged = 0;
+    let failed = 0;
+    try {
+      for (const [i, file] of files.entries()) {
+        onBatchStatus?.(`Uploading ${i + 1} of ${files.length}`);
+        try {
+          // Always re-encoded (see compressPhoto): the bytes sent carry no metadata.
+          const compressed = await compressPhoto(file);
+          const result = await backend.analyze(compressed.base64, compressed.mimeType);
+          await backend.logWithPhoto(result, {
+            base64: compressed.base64,
+            mimeType: compressed.mimeType,
+          });
+          logged += 1;
+          onLogged(result);
+        } catch {
+          failed += 1;
+        }
+      }
+    } finally {
+      batchRunning.current = false;
+      setBatching(false);
+      onBatchStatus?.(null);
+    }
+    if (failed === 0) onToast('success', `${logged} logged`);
+    else if (logged === 0) onToast('error', `${failed} failed`);
+    else onToast('info', `${logged} logged, ${failed} failed`);
+  }
+
+  /** The library pick: one photo keeps the review step, several are logged as a batch. */
+  function handleLibrary(list: FileList | null) {
+    const picked = [...(list ?? [])];
+    if (batchRunning.current || picked.length === 0) return;
+    if (picked.length === 1) {
+      void handleFile(picked[0]);
+      return;
+    }
+    const files = picked.slice(0, MAX_BATCH);
+    if (picked.length > MAX_BATCH) {
+      onToast(
+        'info',
+        `Only the first ${MAX_BATCH} of ${picked.length} photos were added. Pick the rest again afterwards.`,
+      );
+    }
+    void runBatch(files);
   }
 
   async function save() {
@@ -125,6 +195,7 @@ export function CaptureSheet({
     cameraInput.current?.click();
   }
   function uploadImage() {
+    if (batchRunning.current) return;
     libraryInput.current?.click();
   }
 
@@ -158,10 +229,15 @@ export function CaptureSheet({
         ref={libraryInput}
         type="file"
         accept="image/*"
+        multiple
         className={FILE_INPUT}
         tabIndex={-1}
         aria-hidden
-        onChange={(e) => void handleFile(e.target.files?.[0])}
+        onChange={(e) => {
+          handleLibrary(e.target.files);
+          // So picking the same photos again still fires a change.
+          e.target.value = '';
+        }}
       />
 
       <CaptureMenu
@@ -171,7 +247,7 @@ export function CaptureSheet({
         triggerRef={triggerRef}
       />
       {/* Hold the button and slide: the same four actions, for the thumb. */}
-      <CaptureFan triggerRef={triggerRef} enabled={!open} onPick={pick} />
+      <CaptureFan triggerRef={triggerRef} enabled={!open && !batching} onPick={pick} />
 
       <Dialog
         open={stage !== 'idle'}
