@@ -81,6 +81,30 @@ describe('OnboardingScreen resume', () => {
     expect(JSON.stringify(saved)).not.toMatch(/apiKey|AIza/);
   });
 
+  it('writes nothing to the resume record just by opening the welcome', () => {
+    renderScreen();
+    expect(localStorage.getItem('snapbite.onboarding.resume')).toBeNull();
+  });
+
+  it('ignores a stale "profile" record left by older builds and opens the welcome', () => {
+    localStorage.setItem(
+      'snapbite.onboarding.resume',
+      JSON.stringify({ step: 'profile', provider: 'gemini' }),
+    );
+    renderScreen();
+    expect(screen.getByTestId('onboarding-intro')).toBeTruthy();
+    expect(screen.queryByText(/Add your AI key/i)).toBeNull();
+  });
+
+  it('reopens the key step only when the user genuinely left it', () => {
+    localStorage.setItem(
+      'snapbite.onboarding.resume',
+      JSON.stringify({ step: 'apikey', provider: 'openai' }),
+    );
+    renderScreen();
+    expect(screen.getByText(/Add your AI key/i)).toBeTruthy();
+  });
+
   it('clears the resume record once onboarding finishes', async () => {
     const onSkip = vi.fn();
     renderScreen({ startAtKeyStep: true, onSkip });

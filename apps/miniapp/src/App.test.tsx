@@ -14,6 +14,7 @@ vi.mock('./lib/backend.js', async (orig) => ({
 }));
 
 import { App } from './App.js';
+import { clearCache } from './lib/cache.js';
 
 describe('first-run onboarding', () => {
   // Test files share one DOM (single fork): leave nothing mounted behind.
@@ -21,6 +22,7 @@ describe('first-run onboarding', () => {
 
   beforeEach(() => {
     cleanup();
+    clearCache();
     localStorage.clear();
     getSettings.mockReset();
   });
@@ -67,19 +69,83 @@ describe('first-run onboarding', () => {
     }
   });
 
-  it('does not reopen the sheet once the visitor has dismissed it', async () => {
+  it('shows the welcome on every launch for an account with nothing, even after a skip', async () => {
+    // The old gate read this flag and never showed the welcome again.
     localStorage.setItem('snapbite.onboarding.keyDecision', 'skipped');
     getSettings.mockResolvedValue({ profile: null, targets: null, connected: false });
+
+    const first = render(<App />);
+    await screen.findByRole('dialog');
+    first.unmount();
+    clearCache();
+
     render(<App />);
-    await waitFor(() => expect(screen.getByText('Set goal')).toBeTruthy());
+    await screen.findByRole('dialog');
+  });
+
+  it('a skip hides setup for this session and writes nothing that survives it', async () => {
+    getSettings.mockResolvedValue({ profile: null, targets: null, connected: false });
+    const first = render(<App />);
+    const layer = await screen.findByRole('dialog');
+
+    fireEvent.keyDown(layer, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await screen.findByText('Set goal')).toBeTruthy();
+    expect(localStorage.getItem('snapbite.onboarding.keyDecision')).toBeNull();
+
+    // The next launch (a fresh mount, same storage) shows the welcome again.
+    first.unmount();
+    clearCache();
+    render(<App />);
+    await screen.findByRole('dialog');
+  });
+
+  it('opens again from the Set goal card after a skip', async () => {
+    getSettings.mockResolvedValue({ profile: null, targets: null, connected: false });
+    render(<App />);
+    fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape' });
+    fireEvent.click(await screen.findByText('Set goal'));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+  });
+
+  it('never shows the welcome to an account that has a profile', async () => {
+    getSettings.mockResolvedValue({
+      profile: { sex: 'female' },
+      targets: { energyKcal: 2000, proteinG: 120, carbsG: 250, fatG: 70 },
+      connected: true,
+    });
+    render(<App />);
+    await waitFor(() => expect(screen.getByText(/kcal/)).toBeTruthy());
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('still opens from the Set goal button after a dismissal', async () => {
-    localStorage.setItem('snapbite.onboarding.keyDecision', 'skipped');
-    getSettings.mockResolvedValue({ profile: null, targets: null, connected: false });
+  it('sends a profile without targets to Home with the Set goal card, not the welcome', async () => {
+    getSettings.mockResolvedValue({ profile: { sex: 'female' }, targets: null, connected: true });
     render(<App />);
-    fireEvent.click(await screen.findByText('Set goal'));
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    expect(await screen.findByText('Set goal')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('does not guess "no profile" when the server cannot be reached', async () => {
+    getSettings.mockRejectedValue(new Error('offline'));
+    render(<App />);
+    expect(await screen.findByText('Set goal')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('still asks about the AI key once, and respects the answer', async () => {
+    const profile = { profile: { sex: 'female' }, targets: null, connected: false };
+
+    getSettings.mockResolvedValue(profile);
+    const first = render(<App />);
+    await screen.findByRole('dialog');
+    first.unmount();
+    clearCache();
+
+    localStorage.setItem('snapbite.onboarding.keyDecision', 'skipped');
+    getSettings.mockResolvedValue(profile);
+    render(<App />);
+    expect(await screen.findByText('Set goal')).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
