@@ -6,20 +6,19 @@
  * No token is ever in the file: each person creates their own in Settings and pastes
  * it over PASTE_YOUR_TOKEN_HERE after adding it.
  *
- * The file is NOT linked to directly inside the installed app: navigating a PWA to it
- * puts a Files-style preview over the whole screen with no way back. On iOS the
- * Shortcuts URL scheme hands the file to the Shortcuts app instead, and the person
- * returns here afterwards. The plain https link is the fallback for other devices,
- * and is shown as text so it can be copied.
+ * It is linked with a plain https anchor. The `shortcuts://import-shortcut?url=` scheme
+ * was tried and rejected on iOS 26 ("The shortcut URL provided was invalid"), so do not
+ * bring it back. Opening the file shows a preview with "Open in Shortcuts".
  */
 export const SHORTCUT_FILE_URL =
   'https://snapbite.leeguanfeng.com/shortcut/snapbite-log-meal.shortcut';
-export const SHORTCUT_NAME = 'SnapBite Log Meal';
 
-/** `shortcuts://import-shortcut?url=<file>&name=SnapBite%20Log%20Meal` */
-export function shortcutImportUrl(file: string = SHORTCUT_FILE_URL): string {
-  return `shortcuts://import-shortcut?url=${encodeURIComponent(file)}&name=${encodeURIComponent(SHORTCUT_NAME)}`;
-}
+/**
+ * Apple's own share link (https://www.icloud.com/shortcuts/...). Empty until the shortcut
+ * is published to iCloud; once set the card leads with it, because that link opens a
+ * proper import screen with a Get Shortcut button instead of a file preview.
+ */
+export const SHORTCUT_ICLOUD_URL = '';
 
 /** What the person has to replace in the shortcut, and where. Shown verbatim in the card. */
 export const SHORTCUT_TOKEN_FIELD = 'Authorization';

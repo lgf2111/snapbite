@@ -3,12 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CreatedDeviceToken, DeviceTokenInfo } from '../lib/api.js';
 import type { Backend } from '../lib/backend.js';
 import { readConfig } from '../lib/config.js';
-import { installPlatform, isStandalone } from '../lib/install.js';
+import { isStandalone } from '../lib/install.js';
 import {
   SHORTCUT_FILE_URL,
+  SHORTCUT_ICLOUD_URL,
   SHORTCUT_TOKEN_FIELD,
   SHORTCUT_TOKEN_PLACEHOLDER,
-  shortcutImportUrl,
 } from '../lib/shortcut.js';
 import { Button } from './ui/button.js';
 import { Card, CardContent } from './ui/card.js';
@@ -188,10 +188,10 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
   }
 
   const standalone = useState(isStandalone)[0];
-  // The Shortcuts URL scheme exists on iOS only; anywhere else it would go nowhere.
-  const addHref = useState(() =>
-    installPlatform() === 'ios' ? shortcutImportUrl() : SHORTCUT_FILE_URL,
-  )[0];
+  // Apple's iCloud link opens a real import screen, so it leads when we have one; until
+  // then the plain https file is the way in.
+  const icloud = SHORTCUT_ICLOUD_URL;
+  const addHref = icloud || SHORTCUT_FILE_URL;
   const hasToken = tokens != null && tokens.length > 0;
   // Three steps, visible. Once there is a token the person has been through them, so
   // they fold into one line (and only then).
@@ -202,13 +202,14 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
       <li className="flex flex-col gap-1.5">
         <p className="font-medium">1. Get the shortcut</p>
         <Button asChild>
-          {/* A plain link to the Shortcuts URL scheme: iOS hands the file to the
-              Shortcuts app, and the person comes back here. No fetch, no blob, no
-              download attribute, and never a navigation to the file itself. */}
+          {/* A plain https link: no fetch, no blob, no download attribute, and not the
+              shortcuts:// scheme, which iOS 26 rejects for a file URL. */}
           <a href={addHref}>Add the Shortcut</a>
         </Button>
         <p className="text-muted-foreground text-caption">
-          It opens the Shortcuts app — tap Add Shortcut, then come back here.
+          {icloud
+            ? 'It opens the Shortcuts import screen — tap Get Shortcut, then Add Shortcut.'
+            : 'It opens a file preview — tap Open in Shortcuts, then Add Shortcut.'}
         </p>
         <div className="flex flex-col gap-1">
           <code
@@ -216,9 +217,18 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
             data-testid="shortcut-file-url"
             className="text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
           >
-            {SHORTCUT_FILE_URL}
+            {addHref}
           </code>
-          <CopyButton text={SHORTCUT_FILE_URL} target={fileRef} label="Copy shortcut link" />
+          {/* For anyone whose preview gets stuck: paste it into Safari by hand. */}
+          <CopyButton text={addHref} target={fileRef} label="Copy link" />
+          {icloud && (
+            <a
+              href={SHORTCUT_FILE_URL}
+              className="text-primary-text text-caption underline-offset-4 hover:underline"
+            >
+              Use the file link instead
+            </a>
+          )}
         </div>
       </li>
 

@@ -5,6 +5,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DeviceTokenInfo } from '../lib/api.js';
 import { ShortcutCard } from './ShortcutCard.js';
 
+// The iCloud link is a module constant, empty until published; let each test choose it.
+const icloud = vi.hoisted(() => ({ url: '' }));
+vi.mock('../lib/shortcut.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/shortcut.js')>()),
+  get SHORTCUT_ICLOUD_URL() {
+    return icloud.url;
+  },
+}));
+
 const RAW = 'sb_TEST-RAW-TOKEN-VALUE';
 
 function stub(initial: DeviceTokenInfo[] = []) {
@@ -45,6 +54,7 @@ const OLD: DeviceTokenInfo = {
 afterEach(() => {
   cleanup();
   Reflect.deleteProperty(window, 'matchMedia');
+  icloud.url = '';
 });
 
 describe('ShortcutCard', () => {
@@ -149,21 +159,17 @@ describe('ShortcutCard: the three steps', () => {
     Reflect.deleteProperty(navigator, 'userAgent');
   });
 
-  it('on iOS, step 1 hands the file to Shortcuts through its URL scheme (no navigation to the file)', async () => {
-    asUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15');
+  it('step 1 is a plain link to the https file, never the shortcuts:// scheme', async () => {
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
     const link = screen.getByRole('link', { name: 'Add the Shortcut' });
-    const href = link.getAttribute('href') as string;
-
-    expect(href.startsWith('shortcuts://import-shortcut?url=')).toBe(true);
-    const url = new URL(href.replace('shortcuts://', 'https://x/'));
-    expect(url.searchParams.get('url')).toBe(FILE);
-    expect(href).toContain(encodeURIComponent(FILE));
-    expect(href.endsWith('&name=SnapBite%20Log%20Meal')).toBe(true);
-    // A plain anchor: no new tab, no download, nothing fetched.
+    expect(link.getAttribute('href')).toBe(FILE);
+    expect(link.getAttribute('href')).not.toContain('shortcuts://');
     expect(link.hasAttribute('target')).toBe(false);
     expect(link.hasAttribute('download')).toBe(false);
+    expect(
+      screen.getByText('It opens a file preview — tap Open in Shortcuts, then Add Shortcut.'),
+    ).toBeTruthy();
 
     await userEvent.click(screen.getByRole('button', { name: 'Create Shortcut token' }));
     await screen.findByText(RAW);
@@ -172,33 +178,63 @@ describe('ShortcutCard: the three steps', () => {
     ).not.toContain(RAW);
   });
 
-  it('elsewhere, step 1 falls back to the plain https file link', () => {
-    asUserAgent('Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0 Safari/537.36');
-    const { backend } = stub();
-    render(<ShortcutCard backend={backend} />);
-    expect(screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href')).toBe(FILE);
-  });
-
-  it('always shows the same https link as copyable text under the button', () => {
+  it('the same link is the same on every device, and shown as text', () => {
     for (const ua of [
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)',
       'Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0',
     ]) {
       asUserAgent(ua);
       const { backend } = stub();
       const view = render(<ShortcutCard backend={backend} />);
+      expect(screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href')).toBe(
+        FILE,
+      );
       expect(screen.getByTestId('shortcut-file-url').textContent).toBe(FILE);
-      expect(screen.getByRole('button', { name: 'Copy shortcut link' })).toBeTruthy();
       view.unmount();
     }
   });
 
-  it('says it opens the Shortcuts app and to come back, and that the token step happens there', () => {
+  it('"Copy link" copies that same https string', async () => {
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Copy link' }));
+    expect(writeText).toHaveBeenCalledWith(FILE);
+    expect(screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href')).toBe(
+      writeText.mock.calls[0]?.[0],
+    );
+  });
+
+  it('with an iCloud link set, the primary button leads with it and the file stays as the other way', async () => {
+    const ICLOUD = 'https://www.icloud.com/shortcuts/0123456789abcdef';
+    icloud.url = ICLOUD;
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+
+    expect(screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href')).toBe(
+      ICLOUD,
+    );
+    expect(screen.getByText(/tap Get Shortcut, then Add Shortcut/)).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: 'Use the file link instead' }).getAttribute('href'),
+    ).toBe(FILE);
+    await userEvent.click(screen.getByRole('button', { name: 'Copy link' }));
+    expect(writeText).toHaveBeenCalledWith(ICLOUD);
+  });
+
+  it('without one, there is no iCloud line to point at nothing', () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    expect(screen.queryByText(/iCloud/i)).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Use the file link instead' })).toBeNull();
+  });
+
+  it('says the token step happens after the shortcut is added, in the Shortcuts app', () => {
     const { backend } = stub();
     const { container } = render(<ShortcutCard backend={backend} />);
-    expect(
-      screen.getByText('It opens the Shortcuts app — tap Add Shortcut, then come back here.'),
-    ).toBeTruthy();
     expect(container.textContent).toContain(
       'after the shortcut is added, inside the Shortcuts app — not in SnapBite',
     );
