@@ -23,11 +23,6 @@ interface ManualMealDialogProps {
   onOpenChange: (open: boolean) => void;
   onLogged: () => void;
   onToast?: (kind: ToastKind, message: string) => void;
-  /**
-   * Open on the saved-meals list alone ("Use saved meals"); the form appears
-   * once one is picked, or from "Enter a meal by hand" when there are none.
-   */
-  startWithSaved?: boolean;
 }
 
 const EMPTY = { name: '', energyKcal: '', proteinG: '', carbsG: '', fatG: '' };
@@ -42,7 +37,6 @@ export function ManualMealDialog({
   onOpenChange,
   onLogged,
   onToast,
-  startWithSaved = false,
 }: ManualMealDialogProps) {
   const [form, setForm] = useState({ ...EMPTY });
   const [busy, setBusy] = useState(false);
@@ -123,9 +117,6 @@ export function ManualMealDialog({
     }
   }
 
-  // "Use saved meals": just the list until one is picked (or there are none).
-  const savedOnly = startWithSaved && showSaved;
-
   const macroFields: Array<{ key: keyof typeof form; label: string; icon: string }> = [
     { key: 'energyKcal', label: 'Calories', icon: '🔥' },
     { key: 'proteinG', label: 'Protein (g)', icon: '🥩' },
@@ -137,30 +128,14 @@ export function ManualMealDialog({
     <Dialog open={open} onOpenChange={(o) => (busy ? null : onOpenChange(o))}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{savedOnly ? 'Saved meals' : 'Add a meal'}</DialogTitle>
+          <DialogTitle>Add a meal</DialogTitle>
           <DialogDescription>
-            {savedOnly
-              ? 'Pick one to fill it in, then tweak anything and log it.'
-              : 'Log a meal by hand — no photo or AI key needed. Enter what you ate and its macros (estimates are fine; you can edit later).'}
+            Log a meal by hand — no photo or AI key needed. Enter what you ate and its macros
+            (estimates are fine; you can edit later).
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          {savedOnly && favorites && favorites.length === 0 && (
-            <div className="flex flex-col items-start gap-2">
-              <p className="text-muted-foreground text-caption">
-                No saved meals yet. Save one from a meal's detail screen and it will show up here.
-              </p>
-              <Button variant="secondary" size="sm" onClick={() => setShowSaved(false)}>
-                Enter a meal by hand
-              </Button>
-            </div>
-          )}
-
-          {savedOnly && favorites === null && (
-            <p className="text-muted-foreground text-caption">Loading…</p>
-          )}
-
           {showSaved && favorites && favorites.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <Label>Saved meals</Label>
@@ -193,59 +168,51 @@ export function ManualMealDialog({
                   </div>
                 ))}
               </div>
-              {!savedOnly && (
-                <p className="text-muted-foreground text-xs">
-                  Tap a saved meal to fill it in below — tweak anything, then log.
-                </p>
-              )}
+              <p className="text-muted-foreground text-xs">
+                Tap a saved meal to fill it in below — tweak anything, then log.
+              </p>
             </div>
           )}
 
-          {!savedOnly && (
-            <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mm-name">What did you eat?</Label>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="mm-name">What did you eat?</Label>
+            <Input
+              id="mm-name"
+              autoFocus
+              placeholder="e.g. Chicken rice"
+              value={form.name}
+              disabled={busy}
+              onChange={(e) => set('name', e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {macroFields.map((f) => (
+              <div key={f.key} className="flex flex-col gap-1.5">
+                <Label htmlFor={`mm-${f.key}`}>
+                  {f.icon} {f.label}
+                </Label>
                 <Input
-                  id="mm-name"
-                  autoFocus
-                  placeholder="e.g. Chicken rice"
-                  value={form.name}
+                  id={`mm-${f.key}`}
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  placeholder="0"
+                  value={form[f.key]}
                   disabled={busy}
-                  onChange={(e) => set('name', e.target.value)}
+                  onChange={(e) => set(f.key, e.target.value)}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {macroFields.map((f) => (
-                  <div key={f.key} className="flex flex-col gap-1.5">
-                    <Label htmlFor={`mm-${f.key}`}>
-                      {f.icon} {f.label}
-                    </Label>
-                    <Input
-                      id={`mm-${f.key}`}
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      placeholder="0"
-                      value={form[f.key]}
-                      disabled={busy}
-                      onChange={(e) => set(f.key, e.target.value)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+            ))}
+          </div>
         </div>
 
         <DialogFooter>
           <Button variant="secondary" disabled={busy} onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          {!savedOnly && (
-            <Button disabled={!canSave} onClick={() => void save()}>
-              {busy ? 'Logging…' : 'Log meal'}
-            </Button>
-          )}
+          <Button disabled={!canSave} onClick={() => void save()}>
+            {busy ? 'Logging…' : 'Log meal'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

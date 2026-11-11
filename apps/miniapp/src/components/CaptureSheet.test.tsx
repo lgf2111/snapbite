@@ -85,17 +85,17 @@ describe('CaptureSheet (the add-a-meal flow)', () => {
     await waitFor(() => expect(backend.listFavorites).toHaveBeenCalled());
   });
 
-  it('Use saved meals opens the saved-meals list, not the blank form', async () => {
-    setup();
+  it('Use saved meals opens the existing dialog, whose saved-meals list is unchanged', async () => {
+    const { backend } = setup();
     fireEvent.click(card(/use saved meals/i));
 
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByText('Saved meals')).toBeTruthy();
-    expect(await within(dialog).findByText(/no saved meals yet/i)).toBeTruthy();
-    expect(within(dialog).queryByLabelText(/what did you eat/i)).toBeNull();
-    // A way out of an empty list.
-    fireEvent.click(within(dialog).getByRole('button', { name: /enter a meal by hand/i }));
-    expect(await within(dialog).findByLabelText(/what did you eat/i)).toBeTruthy();
+    expect(within(dialog).getByText('Add a meal')).toBeTruthy();
+    // The list is the one ManualMealDialog already loads.
+    await waitFor(() => expect(backend.listFavorites).toHaveBeenCalled());
+    // No new picker or empty state: the plain form is there.
+    expect(within(dialog).getByLabelText(/what did you eat/i)).toBeTruthy();
+    expect(within(dialog).queryByText(/no saved meals yet/i)).toBeNull();
   });
 
   it('keeps the four cards where they are when a toast appears', async () => {
