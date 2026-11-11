@@ -11,9 +11,10 @@ import {
   type UserProfile,
 } from '@snapbite/core';
 import { ArrowDown } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { readConfig } from '../lib/config.js';
 import { markKeyDecision } from '../lib/onboarding.js';
+import type { Me } from './AccountCard.js';
 import { KeyHelp } from './KeyHelp.js';
 import { LinkifiedHint } from './LinkifiedHint.js';
 import { ProfileForm } from './ProfileForm.js';
@@ -115,8 +116,22 @@ export function OnboardingScreen({
 
   // The form mounts the first time its panel is reached and then stays mounted
   // (off-screen, not destroyed) so scrolling back keeps what was typed.
-  const [reached, setReached] = useState(false);
-  const [skeletonDone, setSkeletonDone] = useState(reduced);
+  //
+  // Someone arriving from Google/email sign-in has already seen the welcome and
+  // is signed in: they land on the form, with no skeleton and no scrolling.
+  // `?auth=ok` is the hint that survives the redirect's page reload; /me
+  // (below) is what confirms it.
+  const [arrivedFromSignIn] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('auth') === 'ok' &&
+      step === 'profile',
+  );
+  const [reached, setReached] = useState(arrivedFromSignIn);
+  const [skeletonDone, setSkeletonDone] = useState(reduced || arrivedFromSignIn);
+  // Position the form instantly and put the cursor in it (once it exists).
+  const [arrival, setArrival] = useState(arrivedFromSignIn);
+  const [account, setAccount] = useState<{ email: string | null } | null>(null);
   useEffect(() => {
     if (!reached || skeletonDone) return;
     const timer = window.setTimeout(() => setSkeletonDone(true), SKELETON_MS);
@@ -149,7 +164,7 @@ export function OnboardingScreen({
     };
   }, [signInOpen]);
 
-  async function onSignedIn() {
+  async function onSignedIn(me: Me) {
     try {
       const settings = await backend.getSettings();
       if (settings.targets) {
@@ -169,10 +184,64 @@ export function OnboardingScreen({
     } catch {
       // Fall through: signed in, but we could not read targets.
     }
-    // Signed in to an account with no goal yet: back to the welcome, form below.
+    // Signed in to an account with no goal yet: straight to the form. They have
+    // already seen the welcome, so there is nothing to tell them.
+    setAccount({ email: me.email });
     setSignInOpen(false);
-    onToast?.('info', 'Signed in — now set your goal.');
+    showForm();
   }
+
+  // Landing straight on the form panel, no animation (not a gesture of the user).
+  useLayoutEffect(() => {
+    if (arrival && formReady) {
+      formPanel.current?.scrollIntoView?.({ behavior: 'instant', block: 'start' });
+    }
+  }, [arrival, formReady]);
+  // After the sign-in layer has given focus back (its cleanup runs first), move
+  // focus to the first empty field. No keyboard opens without a tap on iOS.
+  useEffect(() => {
+    if (!arrival || !formReady) return;
+    const fields = [
+      ...(formPanel.current?.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+        'input:not([type=hidden]):not([disabled]),select:not([disabled])',
+      ) ?? []),
+    ];
+    (fields.find((f) => f.value === '') ?? fields[0])?.focus({ preventScroll: true });
+    setArrival(false);
+  }, [arrival, formReady]);
+
+  const showForm = useCallback(() => {
+    setReached(true);
+    setSkeletonDone(true);
+    setArrival(true);
+  }, []);
+
+  // Already signed in (this is a cold start after the OAuth redirect, or a
+  // signed-in person with no goal yet): the welcome is not for them.
+  useEffect(() => {
+    if (!canSignIn || step !== 'profile') return;
+    let live = true;
+    fetch(`${readConfig().workerUrl}/api/auth/me`, { credentials: 'include' })
+      .then((r) => (r.ok ? (r.json() as Promise<Me>) : null))
+      .then((me) => {
+        if (!live) return;
+        if (arrivedFromSignIn) {
+          window.history.replaceState(window.history.state, '', window.location.pathname);
+        }
+        if (me?.signedIn) {
+          setAccount({ email: me.email });
+          showForm();
+        } else if (arrivedFromSignIn) {
+          // The hint was wrong (e.g. the session was not kept): back to the welcome.
+          setArrival(false);
+          formPanel.current?.parentElement?.scrollTo?.({ top: 0 });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [canSignIn, step, arrivedFromSignIn, showForm]);
 
   function onScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
@@ -364,7 +433,7 @@ export function OnboardingScreen({
               </button>
             )}
 
-            {canSignIn && (
+            {canSignIn && !account && (
               // Quiet on purpose: text, not a filled button, under the scroll cue.
               // The whole row is the target (44px+), so the lead-in is tappable too.
               <button
@@ -404,6 +473,9 @@ export function OnboardingScreen({
                 data-testid="onboarding-form"
                 className="motion-safe:animate-in motion-safe:fade-in flex flex-col gap-4 duration-300"
               >
+                {account?.email && (
+                  <p className="text-caption font-medium break-all">Signed in as {account.email}</p>
+                )}
                 <p className="text-muted-foreground text-caption">
                   Tell us a bit about yourself to get daily calorie and macro targets. You can
                   change these any time in Settings — or skip and just start logging (targets simply
@@ -431,7 +503,10 @@ export function OnboardingScreen({
         </section>
       </div>
       {signInOpen && (
-        <SignInScreen onBack={() => setSignInOpen(false)} onSignedIn={() => void onSignedIn()} />
+        <SignInScreen
+          onBack={() => setSignInOpen(false)}
+          onSignedIn={(me) => void onSignedIn(me)}
+        />
       )}
     </div>
   );

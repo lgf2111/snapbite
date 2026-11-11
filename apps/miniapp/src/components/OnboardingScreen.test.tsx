@@ -284,7 +284,13 @@ describe('OnboardingScreen sign-in for existing accounts', () => {
         Response.json(
           url.endsWith('/providers')
             ? { email: true, google: true }
-            : { signedIn, via: null, email: null, userId: 'u1' },
+            : {
+                signedIn,
+                via: signedIn ? 'session' : null,
+                method: signedIn ? 'google' : null,
+                email: signedIn ? 'ada@example.com' : null,
+                userId: 'u1',
+              },
         ),
       ),
     );
@@ -397,8 +403,11 @@ describe('OnboardingScreen sign-in for existing accounts', () => {
     expect(onDone).not.toHaveBeenCalled();
   });
 
-  it('returns to the welcome when the account has no goal yet', async () => {
-    const { onDone } = renderWith(async () => ({ targets: null, connected: true }));
+  it('goes straight to the form when a new account has no goal yet: no welcome, no toast', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const onToast = vi.fn();
+    const { onDone } = renderWith(async () => ({ targets: null, connected: true }), { onToast });
     fireEvent.click(screen.getByTestId('signin-link'));
     await screen.findByRole('link', { name: 'Continue with Google' });
 
@@ -408,7 +417,98 @@ describe('OnboardingScreen sign-in for existing accounts', () => {
     });
 
     await waitFor(() => expect(screen.queryByTestId('onboarding-signin')).toBeNull());
+    expect(await screen.findByTestId('onboarding-form')).toBeTruthy();
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'instant', block: 'start' });
+    expect(screen.getByText('Signed in as ada@example.com')).toBeTruthy();
+    expect(document.activeElement).toBe(document.querySelector('input[type=date]'));
+    expect(onToast).not.toHaveBeenCalled();
     expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
+describe('OnboardingScreen for a signed-in account (arriving from OAuth)', () => {
+  let signedIn = true;
+  beforeEach(() => {
+    cleanup();
+    localStorage.clear();
+    signedIn = true;
+    setReduced(false);
+    vi.stubEnv('VITE_WORKER_URL', 'https://worker.test');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        Response.json(
+          url.endsWith('/providers')
+            ? { email: true, google: true }
+            : {
+                signedIn,
+                via: signedIn ? 'session' : null,
+                method: signedIn ? 'google' : null,
+                email: signedIn ? 'ada@example.com' : null,
+                userId: 'u1',
+              },
+        ),
+      ),
+    );
+  });
+  afterEach(() => {
+    window.history.replaceState({}, '', '/');
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    restore();
+  });
+
+  const mount = () => {
+    const { backend } = makeBackend();
+    render(<OnboardingScreen backend={backend} onDone={vi.fn()} onSkip={vi.fn()} />);
+  };
+
+  it('opens on the form panel when signed in with no profile', async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    mount();
+
+    // The welcome renders first (we do not know yet), then /me moves it.
+    expect(await screen.findByTestId('onboarding-form')).toBeTruthy();
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'instant', block: 'start' });
+    // No skeleton for someone who has already passed the welcome.
+    expect(screen.queryByTestId('onboarding-skeleton')).toBeNull();
+    expect(screen.getByText('Signed in as ada@example.com')).toBeTruthy();
+    expect(screen.queryByTestId('signin-link')).toBeNull();
+  });
+
+  it('after the OAuth redirect (?auth=ok) the form is there on first paint', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    window.history.replaceState({}, '', '/?auth=ok');
+    mount();
+
+    // Synchronously, before /me has answered.
+    expect(screen.getByTestId('onboarding-form')).toBeTruthy();
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'instant', block: 'start' });
+  });
+
+  it('removes ?auth=ok from the address once it has been used', async () => {
+    window.history.replaceState({}, '', '/?auth=ok');
+    mount();
+    await waitFor(() => expect(window.location.search).toBe(''));
+  });
+
+  it('shows the welcome to an anonymous visitor', async () => {
+    signedIn = false;
+    mount();
+    expect(await screen.findByTestId('signin-link')).toBeTruthy();
     expect(screen.getByTestId('onboarding-intro')).toBeTruthy();
+    expect(screen.queryByTestId('onboarding-form')).toBeNull();
+  });
+
+  it('falls back to the welcome if the redirect hint was wrong (session not kept)', async () => {
+    signedIn = false;
+    window.history.replaceState({}, '', '/?auth=ok');
+    mount();
+    expect(screen.getByTestId('onboarding-form')).toBeTruthy();
+
+    await waitFor(() => expect(window.location.search).toBe(''));
+    expect(await screen.findByTestId('signin-link')).toBeTruthy();
   });
 });

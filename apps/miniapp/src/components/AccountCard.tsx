@@ -11,9 +11,11 @@ interface Providers {
   google: boolean;
 }
 
-interface Me {
+export interface Me {
   signedIn: boolean;
   via: string | null;
+  /** How the session was opened; null for sessions older than that being recorded. */
+  method?: 'google' | 'email' | null;
   email: string | null;
   userId: string | null;
 }
@@ -24,9 +26,13 @@ interface Me {
  * offers to attach an email/Google identity so the account survives a cleared
  * browser and works on a second device.
  */
-export function AccountCard({ onSignedIn }: { onSignedIn?: () => void } = {}) {
+export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = {}) {
   const workerUrl = readConfig().workerUrl;
+  // null = not known yet. Never treated as "signed out": a signed-in person must
+  // not be shown the sign-in buttons while we are still asking, or if we fail to.
   const [me, setMe] = useState<Me | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const authStatus = useRef<string | null>(null);
   const [providers, setProviders] = useState<Providers>({ email: false, google: false });
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
@@ -49,12 +55,14 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: () => void } = {}) {
       if (meRes.ok) {
         const next = (await meRes.json()) as Me;
         setMe(next);
-        if (next.signedIn && wasSignedIn.current === false) signedInCb.current?.();
+        setLoadFailed(false);
+        if (next.signedIn && wasSignedIn.current === false) signedInCb.current?.(next);
         wasSignedIn.current = next.signedIn;
       }
       if (provRes.ok) setProviders((await provRes.json()) as Providers);
+      if (!meRes.ok) setLoadFailed(true);
     } catch {
-      // Offline or misconfigured: the section simply doesn't render state.
+      setLoadFailed(true);
     }
   }, [workerUrl]);
 
@@ -77,18 +85,29 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: () => void } = {}) {
     };
   }, [load, onSignedIn]);
 
-  // Surface the result of a round trip (?auth=ok / ?auth=expired / ...).
+  // Surface the result of a round trip (?auth=ok / ?auth=expired / ...). The
+  // "ok" case is only believed once /me confirms the session, below.
   useEffect(() => {
     const status = new URLSearchParams(window.location.search).get('auth');
     if (!status) return;
-    if (status === 'ok') setNotice('Signed in — this account now works on any device.');
-    else if (status === 'expired')
+    authStatus.current = status;
+    if (status === 'expired')
       setError('That sign-in link expired or was already used. Request a new one.');
     else if (status === 'state') setError('The sign-in was interrupted. Please try again.');
     else if (status === 'unverified') setError('That email is not verified with the provider.');
     else if (status === 'conflict') setError('That address already belongs to another account.');
     window.history.replaceState({}, '', window.location.pathname);
   }, []);
+
+  useEffect(() => {
+    if (authStatus.current !== 'ok' || !me) return;
+    authStatus.current = null;
+    if (me.signedIn) setNotice('Signed in — this account now works on any device.');
+    else
+      setError(
+        'We signed you in, but this browser did not keep the session. Try again, or use the email link.',
+      );
+  }, [me]);
 
   async function requestLink() {
     if (!workerUrl) return;
@@ -124,7 +143,8 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: () => void } = {}) {
     setBusy(true);
     try {
       await fetch(`${workerUrl}/api/auth/logout`, { method: 'POST', credentials: 'include' });
-      setMe({ signedIn: false, via: null, email: null, userId: null });
+      wasSignedIn.current = false;
+      setMe({ signedIn: false, via: null, method: null, email: null, userId: null });
       setNotice('Signed out. This browser keeps working as an anonymous account.');
     } finally {
       setBusy(false);
@@ -138,11 +158,33 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: () => void } = {}) {
       <CardContent className="flex flex-col gap-3">
         <span className="font-medium">Account</span>
 
-        {me?.signedIn ? (
-          <>
-            <p className="text-muted-foreground text-caption">
-              Signed in as {me.email ?? 'your account'}
+        {me === null ? (
+          loadFailed ? (
+            <>
+              <p className="text-muted-foreground text-caption">
+                Could not check your account right now.
+              </p>
+              <Button variant="secondary" onClick={() => void load()}>
+                Try again
+              </Button>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-caption" aria-busy="true">
+              Checking your account…
             </p>
+          )
+        ) : me.signedIn ? (
+          <>
+            <div className="flex flex-col gap-0.5">
+              <p className="text-body font-medium break-all">{me.email ?? 'Your account'}</p>
+              <p className="text-muted-foreground text-caption">
+                {me.method === 'google'
+                  ? 'Signed in with Google'
+                  : me.method === 'email'
+                    ? 'Signed in with an email link'
+                    : 'Signed in'}
+              </p>
+            </div>
             <Button variant="secondary" disabled={busy} onClick={() => void signOut()}>
               Sign out
             </Button>
@@ -183,11 +225,11 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: () => void } = {}) {
                 </Button>
               </>
             )}
-
-            {notice && <p className="text-caption text-[var(--success)]">{notice}</p>}
-            {error && <p className="text-caption text-destructive">{error}</p>}
           </>
         )}
+
+        {notice && <p className="text-caption text-[var(--success)]">{notice}</p>}
+        {error && <p className="text-caption text-destructive">{error}</p>}
       </CardContent>
     </Card>
   );
