@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CreatedDeviceToken, DeviceTokenInfo } from '../lib/api.js';
 import type { Backend } from '../lib/backend.js';
 import { readConfig } from '../lib/config.js';
+import { SHORTCUT_TEMPLATE_URL } from '../lib/shortcut.js';
 import { Button } from './ui/button.js';
 import { Card, CardContent } from './ui/card.js';
 import {
@@ -181,6 +182,22 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
               Copy it now — it will not be shown again.
             </p>
 
+            {SHORTCUT_TEMPLATE_URL && (
+              <div className="flex flex-col gap-1">
+                <Button asChild>
+                  <a href={SHORTCUT_TEMPLATE_URL} target="_blank" rel="noopener noreferrer">
+                    Add the Shortcut
+                  </a>
+                </Button>
+                <p className="text-muted-foreground text-caption">
+                  You'll paste your token once when you add it.
+                </p>
+              </div>
+            )}
+
+            <p className="text-muted-foreground text-caption">
+              {SHORTCUT_TEMPLATE_URL ? 'Or set it up by hand:' : 'Set it up in Shortcuts:'}
+            </p>
             <ol className="text-caption flex list-decimal flex-col gap-1 pl-5">
               {STEPS.map((step) => (
                 <li key={step}>{step}</li>

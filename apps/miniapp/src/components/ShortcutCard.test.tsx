@@ -5,6 +5,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DeviceTokenInfo } from '../lib/api.js';
 import { ShortcutCard } from './ShortcutCard.js';
 
+// The template link is a module constant; let each test choose it.
+const template = vi.hoisted(() => ({ url: '' }));
+vi.mock('../lib/shortcut.js', () => ({
+  get SHORTCUT_TEMPLATE_URL() {
+    return template.url;
+  },
+}));
+
 const RAW = 'sb_TEST-RAW-TOKEN-VALUE';
 
 function stub(initial: DeviceTokenInfo[] = []) {
@@ -42,7 +50,10 @@ const OLD: DeviceTokenInfo = {
   revokedAt: null,
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  template.url = '';
+});
 
 describe('ShortcutCard', () => {
   it('idle: offers to create a token and shows it once after creating', async () => {
@@ -113,5 +124,60 @@ describe('ShortcutCard', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Copy token' }));
     expect(await screen.findByText('Press and hold to copy.')).toBeInTheDocument();
+  });
+});
+
+describe('ShortcutCard template link', () => {
+  const TEMPLATE = 'https://www.icloud.com/shortcuts/0123456789abcdef';
+
+  async function createToken() {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Create Shortcut token' }));
+    await screen.findByText(RAW);
+  }
+
+  it('with no template link there is no "Add the Shortcut" control, only the manual steps', async () => {
+    template.url = '';
+    await createToken();
+
+    expect(screen.queryByRole('link', { name: 'Add the Shortcut' })).toBeNull();
+    expect(screen.queryByText(/paste your token once/i)).toBeNull();
+    expect(screen.getByText(/Take Photo → Convert Image/)).toBeTruthy();
+    expect(screen.getByText('Set it up in Shortcuts:')).toBeTruthy();
+  });
+
+  it('with a template link: a new-tab link above the manual steps, which stay as the fallback', async () => {
+    template.url = TEMPLATE;
+    await createToken();
+
+    const link = screen.getByRole('link', { name: 'Add the Shortcut' });
+    expect(link.getAttribute('href')).toBe(TEMPLATE);
+    // Opens Shortcuts rather than navigating the installed app away.
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+    expect(screen.getByText("You'll paste your token once when you add it.")).toBeTruthy();
+
+    // The four actions are still there, underneath, now read as the fallback.
+    expect(screen.getByText('Or set it up by hand:')).toBeTruthy();
+    const firstStep = screen.getByText(/Take Photo → Convert Image/);
+    expect(firstStep).toBeTruthy();
+    expect(link.compareDocumentPosition(firstStep) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole('listitem').length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('never puts the token in the link', async () => {
+    template.url = TEMPLATE;
+    await createToken();
+    expect(
+      screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href'),
+    ).not.toContain(RAW);
+  });
+
+  it('shows no link before a token exists to paste', () => {
+    template.url = TEMPLATE;
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    expect(screen.queryByRole('link', { name: 'Add the Shortcut' })).toBeNull();
   });
 });

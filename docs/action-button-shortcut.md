@@ -68,6 +68,31 @@ error.
 Press and hold the Action Button once: the camera opens, you shoot, and the
 notification tells you what was logged.
 
+## Share it with someone else
+
+If a shareable template has been published, the app's Settings → One-tap logging
+card has an **Add the Shortcut** button once you have created a token. To install
+it on your own phone:
+
+1. In the app, open **Settings → One-tap logging** and tap **Create Shortcut
+   token**. Tap **Copy**: it is shown once.
+2. Tap **Add the Shortcut**. It opens in the Shortcuts app.
+3. When Shortcuts asks for your token, **paste your own** and tap **Add Shortcut**.
+   That is the only thing you have to do.
+4. Set the Action Button to it (Step 3 above), and press once to try it.
+
+The iCloud link carries the **action list only**. Tokens are per account and are
+never in the link, so sharing it gives nobody access to your meals; everyone who
+installs it pastes their own token at import. If the button is not in the app yet,
+no template has been published: follow Steps 1–3 above to build it by hand.
+
+**For whoever publishes the template:** build the Shortcut once as in Step 2, but do
+not leave a real token in it. Make the `Authorization` value `Bearer ` followed by a
+text action that holds an **Import Question** (Shortcut settings → Setup → Add
+Import Question) asking "Paste your SnapBite token". Share it from the Share sheet
+→ Copy iCloud Link, check that the header shows the question and no `sb_…` value,
+then paste the link into `SHORTCUT_TEMPLATE_URL` in `apps/miniapp/src/lib/shortcut.ts`.
+
 ## Optional: lock the screen afterwards
 
 Add **Set Focus** or **Lock Screen** at the end if you want the phone to go back
