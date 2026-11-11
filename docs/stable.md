@@ -35,15 +35,30 @@ works for an anonymous visitor.
 - **Your data.** Export it as JSON, or delete the account and everything on it,
   from Settings. AI keys are stored encrypted and device tokens only as hashes.
 
+## Reminders
+
+Meal reminders are web push first: Settings → Meal reminders → **Reminders on this
+phone**. They arrive as notifications from SnapBite, not from Telegram.
+
+- **On iPhone** this works only once SnapBite is on the Home Screen (iOS 16.4+). In
+  Safari the switch says "Add SnapBite to your Home Screen first".
+- **Not guaranteed.** iOS can drop them if the app was force-quit or Low Power Mode
+  is on.
+- **Each device subscribes separately.** Phone and laptop both get the reminder.
+- **Telegram is only the fallback**, for an account that has a Telegram identity but
+  no live push subscription (never subscribed, or the subscription turned out dead).
+- A subscription the push service reports gone (404/410) is deleted at once; five
+  failures in a row also remove it. Delete the account and they go too.
+- "Send a test notification" appears once the phone is subscribed.
+
 ## Still needs Telegram
 
 These are delivered by the bot, so an account without a Telegram identity does
 not get them, even though the settings screens exist in the app.
 
-- **Meal reminders.** Configured in Settings, sent as bot messages. Accounts with
-  no Telegram identity are skipped by the reminder job.
-- **Adaptive calorie-target updates and the weekly recap.** Also bot messages,
-  and also skipped for web-only accounts.
+- **Adaptive calorie-target updates and the weekly recap.** Bot messages, skipped
+  for web-only accounts. (Meal reminders no longer need Telegram: see "Reminders"
+  below.)
 - **Logging by sending the bot a photo or text**, and the commands `/saved`,
   `/weight`, `/coach`, `/setup`, `/export`, `/delete`, `/feedback`.
 - **Linking a web account to a bot account.** Send `/linkemail` to the bot; the
@@ -54,8 +69,12 @@ not get them, even though the settings screens exist in the app.
 
 ## Knowingly unfinished
 
-- **Web push reminders do not exist.** Reminders are Telegram-only (above). A
-  web-only user gets none.
+- **Web push reminders are built but have not been seen on a real phone.** The
+  cipher and the signing are tested against an independent decryptor and a
+  signature check, but an actual iPhone notification is unproven. They need the
+  migration `0017_push_subscriptions.sql` applied and the three `PUSH_VAPID_*`
+  Worker secrets (both done by the owner at deploy), and the Pages deploy for
+  `public/sw.js`.
 - **Magic-link email is not configured in production.** There is no email
   provider, so the email sign-in option is hidden (`/api/auth/providers` reports
   `email: false`). Until it is set up, Google is the only way to sign in.

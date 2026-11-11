@@ -13,3 +13,8 @@
 # so they're safe to cache aggressively and immutably.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The service worker file must always be revalidated, or a stale copy can keep
+# running for a day. It is also what the browser byte-compares to detect updates.
+/sw.js
+  Cache-Control: no-cache, must-revalidate

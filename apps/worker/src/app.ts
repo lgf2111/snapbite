@@ -9,6 +9,7 @@ import { deviceTokenRoutes } from './routes/deviceTokens.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { feedbackRoutes } from './routes/feedback.js';
 import { type ProviderFactory, mealPhotoRoutes, mealsRoutes } from './routes/meals.js';
+import { pushRoutes } from './routes/push.js';
 import { settingsRoutes } from './routes/settings.js';
 import { shortcutRoutes } from './routes/shortcut.js';
 import { type BotClientFactory, webhookRoutes } from './routes/webhook.js';
@@ -82,6 +83,7 @@ export function createApp(opts: CreateAppOptions = {}) {
   api.route('/favorites', favoritesRoutes());
   api.route('/account', accountRoutes());
   api.route('/tokens', deviceTokenRoutes());
+  api.route('/push', pushRoutes());
   api.route('/feedback', feedbackRoutes(opts.botClientFactory));
 
   app.route('/api', api);

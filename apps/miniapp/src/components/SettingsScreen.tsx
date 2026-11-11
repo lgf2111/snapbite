@@ -56,6 +56,7 @@ import { LinkifiedHint } from './LinkifiedHint.js';
 import { MacroLine } from './MacroLine.js';
 import { ProfileForm } from './ProfileForm.js';
 import { type ProviderConfig, ProviderPicker } from './ProviderPicker.js';
+import { PushReminders } from './PushReminders.js';
 import { ShortcutCard } from './ShortcutCard.js';
 
 interface SettingsScreenProps {
@@ -590,6 +591,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             Once per slot, in your device&rsquo;s timezone. Times snap to the nearest{' '}
             {REMINDER_STEP_MINUTES} minutes.
           </p>
+          {!isLocal && <PushReminders />}
           <div className="flex flex-col gap-2 pt-1">
             {(['breakfast', 'lunch', 'dinner'] as const).map((label) => (
               <div key={label} className="flex items-center justify-between gap-3">
