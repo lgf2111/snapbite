@@ -182,14 +182,20 @@ export async function deleteSession(db: AuthDb, raw: string): Promise<void> {
  * so an anonymous visitor gets a real `users` row with no email and no Telegram
  * id — everything else about the account is identical.
  */
-export async function findOrCreateDeviceUser(db: AuthDb, deviceHash: string) {
+/** The account bound to this device token, or null. Never creates one. */
+export async function findDeviceUser(db: AuthDb, deviceHash: string) {
   const rows = await db
-    .select({ user: users, tokenId: deviceTokens.id })
+    .select({ user: users })
     .from(deviceTokens)
     .innerJoin(users, eq(users.id, deviceTokens.userId))
     .where(and(eq(deviceTokens.tokenHash, deviceHash), isNull(deviceTokens.revokedAt)))
     .limit(1);
-  if (rows[0]) return { user: rows[0].user, created: false };
+  return rows[0]?.user ?? null;
+}
+
+export async function findOrCreateDeviceUser(db: AuthDb, deviceHash: string) {
+  const existing = await findDeviceUser(db, deviceHash);
+  if (existing) return { user: existing, created: false };
 
   const now = Date.now();
   const userId = crypto.randomUUID();
