@@ -1,9 +1,10 @@
 import type { Backend, RecentMeal } from '@/lib/backend';
 import { clearCache } from '@/lib/cache';
 import type { DailyTargets, MealResult } from '@snapbite/core';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { HERO_BASE_REM, ringNumeralSizeRem } from '../lib/ringNumeral.js';
 import { HomeScreen } from './HomeScreen.js';
 
 afterEach(() => {
@@ -197,6 +198,70 @@ describe('HomeScreen', () => {
     rerender(<HomeScreen {...props(backend, { view: 'weekly' })} />);
     expect(pill().style.transform).toBe('translateX(100%)');
     await waitFor(() => expect(backend.mealsInRange).toHaveBeenCalled());
+  });
+
+  describe('weekly view layout with a real week of data', () => {
+    const week = [1, 2, 3, 4, 5, 6, 7].map((i) =>
+      meal({ id: `w${i}`, energyKcal: 100, proteinG: 8, carbsG: 12, fatG: 3 }),
+    );
+
+    async function weekly() {
+      const backend = stubBackend({ mealsInRange: vi.fn(async () => week) });
+      render(<HomeScreen {...props(backend, { targets: TARGETS, view: 'weekly' })} />);
+      await screen.findByText(/week total/i);
+    }
+
+    it('shows a five-digit weekly total grouped and stepped down, not at the Daily size', async () => {
+      await weekly();
+      const numeral = document.querySelector('[data-slot="ring-numeral"]') as HTMLElement;
+      // 7 days x 2000 target - 700 eaten = 13300 left.
+      expect(numeral.textContent).toBe('13,300');
+      expect(numeral.style.fontSize).toBe(`${ringNumeralSizeRem('13,300')}rem`);
+      expect(Number.parseFloat(numeral.style.fontSize)).toBeLessThan(HERO_BASE_REM);
+      expect(numeral.className).toContain('tabular');
+      // The unit line keeps its own size.
+      expect(screen.getByText('kcal left').className).toContain('text-caption');
+    });
+
+    it('keeps Daily at the size it always had', async () => {
+      const backend = stubBackend({ mealsByDate: vi.fn(async () => [meal({ energyKcal: 140 })]) });
+      render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+      await screen.findByText('Chicken rice');
+      const numeral = document.querySelector('[data-slot="ring-numeral"]') as HTMLElement;
+      expect(numeral.textContent).toBe('1860');
+      expect(Number.parseFloat(numeral.style.fontSize)).toBe(HERO_BASE_REM);
+    });
+
+    it('puts Total / Daily avg in its own full-width row under the ring and macros', async () => {
+      await weekly();
+      const toggle = screen.getByRole('radiogroup', { name: 'Weekly total or average' });
+      const card = toggle.closest('section') as HTMLElement;
+      const ringRow = card
+        .querySelector('[data-slot="ring-numeral"]')
+        ?.closest('.flex.items-center.gap-4') as HTMLElement;
+
+      // A direct child of the card, after the row that holds the ring and the macros.
+      expect(toggle.parentElement).toBe(card);
+      expect(ringRow.contains(toggle)).toBe(false);
+      expect(ringRow.nextElementSibling).toBe(toggle);
+      // Full width and 44px tall; labels at caption size, never truncated.
+      expect(toggle.className).toContain('w-full');
+      expect(toggle.className).toContain('h-11');
+      for (const item of within(toggle).getAllByRole('radio')) {
+        expect(item.className).toContain('text-caption');
+        expect(item.className).toContain('whitespace-nowrap');
+        expect(item.className).not.toMatch(/truncate|overflow-hidden|text-ellipsis/);
+      }
+      expect(within(toggle).getByText('Daily avg')).toBeTruthy();
+      expect(within(toggle).getByText('Total')).toBeTruthy();
+    });
+
+    it('is not in the Daily view at all', async () => {
+      const backend = stubBackend();
+      render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+      await screen.findByText('Nothing logged yet');
+      expect(screen.queryByRole('radiogroup', { name: 'Weekly total or average' })).toBeNull();
+    });
   });
 
   it('fires onOpenMeal when a meal row is tapped', async () => {

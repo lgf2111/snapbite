@@ -264,84 +264,88 @@ export function HomeScreen({
       {viewTargets ? (
         <section
           aria-label="Today's progress"
-          className="flex items-center gap-4 rounded-lg border border-border bg-card p-4"
+          className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4"
         >
-          <ProgressRing
-            consumed={consumed.energyKcal}
-            target={viewTargets.energyKcal}
-            label={weeklyAverage ? 'kcal / day' : 'kcal'}
-            size={132}
-            hero
-            colorClass="text-primary"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="font-display text-title leading-tight">
-              {!hasMeals
-                ? 'Nothing logged yet'
-                : kcalOver
-                  ? `Over by ${Math.abs(kcalLeft ?? 0)}`
-                  : proteinShort
-                    ? 'Protein is short'
-                    : 'On track'}
-            </p>
-            {!hasMeals ? (
-              <p className="text-muted-foreground text-caption">Tap the camera to add one.</p>
-            ) : (
-              weekly && (
-                <p className="text-muted-foreground text-caption">
-                  {weeklyAverage ? 'Daily average' : 'Week total'} · {range.label}
-                </p>
-              )
-            )}
+          <div className="flex items-center gap-4">
+            <ProgressRing
+              consumed={consumed.energyKcal}
+              target={viewTargets.energyKcal}
+              label={weeklyAverage ? 'kcal / day' : 'kcal'}
+              size={132}
+              hero
+              colorClass="text-primary"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="font-display text-title leading-tight">
+                {!hasMeals
+                  ? 'Nothing logged yet'
+                  : kcalOver
+                    ? `Over by ${Math.abs(kcalLeft ?? 0)}`
+                    : proteinShort
+                      ? 'Protein is short'
+                      : 'On track'}
+              </p>
+              {!hasMeals ? (
+                <p className="text-muted-foreground text-caption">Tap the camera to add one.</p>
+              ) : (
+                weekly && (
+                  <p className="text-muted-foreground text-caption">
+                    {weeklyAverage ? 'Daily average' : 'Week total'} · {range.label}
+                  </p>
+                )
+              )}
 
-            <dl className="mt-3 flex flex-col gap-1.5">
-              {[
-                ['Protein', consumed.proteinG, viewTargets.proteinG, 'g'],
-                ['Carbs', consumed.carbsG, viewTargets.carbsG, 'g'],
-                ['Fat', consumed.fatG, viewTargets.fatG, 'g'],
-              ].map(([label, have, target, unit]) => (
-                <div key={String(label)} className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1">
-                  <dt className="text-muted-foreground text-caption">{label}</dt>
-                  <dd className="tabular text-caption font-medium">
-                    {Math.round(Number(have))}
-                    <span className="text-muted-foreground">
-                      {' / '}
-                      {Math.round(Number(target))}
-                      {unit}
-                    </span>
-                  </dd>
-                  {/* Progress as length, so it never rests on colour alone. The
+              <dl className="mt-3 flex flex-col gap-1.5">
+                {[
+                  ['Protein', consumed.proteinG, viewTargets.proteinG, 'g'],
+                  ['Carbs', consumed.carbsG, viewTargets.carbsG, 'g'],
+                  ['Fat', consumed.fatG, viewTargets.fatG, 'g'],
+                ].map(([label, have, target, unit]) => (
+                  <div key={String(label)} className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1">
+                    <dt className="text-muted-foreground text-caption">{label}</dt>
+                    <dd className="tabular text-caption font-medium">
+                      {Math.round(Number(have))}
+                      <span className="text-muted-foreground">
+                        {' / '}
+                        {Math.round(Number(target))}
+                        {unit}
+                      </span>
+                    </dd>
+                    {/* Progress as length, so it never rests on colour alone. The
                       numbers above stay the source of truth. */}
-                  <dd
-                    aria-hidden
-                    data-slot="macro-bar"
-                    className="bg-muted ring-border/60 col-span-2 h-[3px] overflow-hidden rounded-full ring-1"
-                  >
-                    <div
-                      className="bg-primary h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
-                      style={{
-                        transform: `scaleX(${macroPercent(Number(have), Number(target)) / 100})`,
-                      }}
-                    />
-                  </dd>
-                </div>
-              ))}
-            </dl>
-
-            {weekly && (
-              <ToggleGroup
-                type="single"
-                value={weekViewMode}
-                onValueChange={(v) => v && setWeekMode(v as WeekViewMode)}
-                size="sm"
-                className="mt-3"
-                aria-label="Weekly total or average"
-              >
-                <ToggleGroupItem value="total">Total</ToggleGroupItem>
-                <ToggleGroupItem value="average">Daily avg</ToggleGroupItem>
-              </ToggleGroup>
-            )}
+                    <dd
+                      aria-hidden
+                      data-slot="macro-bar"
+                      className="bg-muted ring-border/60 col-span-2 h-[3px] overflow-hidden rounded-full ring-1"
+                    >
+                      <div
+                        className="bg-primary h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
+                        style={{
+                          transform: `scaleX(${macroPercent(Number(have), Number(target)) / 100})`,
+                        }}
+                      />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           </div>
+
+          {/* Its own row under the ring and the macros, the card's full inner width: beside
+              the ring column it was squeezed and its second label clipped. Weekly only. */}
+          {weekly && (
+            <ToggleGroup
+              type="single"
+              value={weekViewMode}
+              onValueChange={(v) => v && setWeekMode(v as WeekViewMode)}
+              size="sm"
+              block
+              aria-label="Weekly total or average"
+            >
+              <ToggleGroupItem value="total">Total</ToggleGroupItem>
+              <ToggleGroupItem value="average">Daily avg</ToggleGroupItem>
+            </ToggleGroup>
+          )}
         </section>
       ) : (
         <section className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
