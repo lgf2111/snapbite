@@ -26,6 +26,12 @@ function setReduced(reduced: boolean) {
   })) as unknown as typeof window.matchMedia;
 }
 
+/** Test files share one DOM (single fork): restore globals and leave nothing mounted. */
+function restore() {
+  window.matchMedia = realMatchMedia;
+  cleanup();
+}
+
 /** jsdom has no layout: give the scroller a viewport and scroll it. */
 function scrollTo(top: number) {
   const scroller = screen.getByTestId('onboarding-scroller');
@@ -42,11 +48,8 @@ const renderScreen = (extra: Record<string, unknown> = {}) => {
   return { ...made, ...utils };
 };
 
-afterEach(() => {
-  window.matchMedia = realMatchMedia;
-});
-
 describe('OnboardingScreen resume', () => {
+  afterEach(restore);
   beforeEach(() => {
     cleanup();
     localStorage.clear();
@@ -98,6 +101,7 @@ describe('OnboardingScreen motion', () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+    restore();
   });
 
   it('opens on the welcome, with the scroll cue only after about a second', () => {
@@ -224,6 +228,7 @@ describe('OnboardingScreen motion', () => {
 });
 
 describe('OnboardingScreen under reduced motion', () => {
+  afterEach(restore);
   beforeEach(() => {
     cleanup();
     localStorage.clear();
@@ -240,5 +245,146 @@ describe('OnboardingScreen under reduced motion', () => {
     scrollTo(800);
     expect(screen.queryByTestId('onboarding-skeleton')).toBeNull();
     expect(screen.getByTestId('onboarding-form')).toBeTruthy();
+  });
+});
+
+describe('OnboardingScreen sign-in for existing accounts', () => {
+  const TARGETS = { energyKcal: 1900, proteinG: 110, carbsG: 220, fatG: 60 };
+  let signedIn = false;
+
+  function stubServer() {
+    vi.stubEnv('VITE_WORKER_URL', 'https://worker.test');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        Response.json(
+          url.endsWith('/providers')
+            ? { email: true, google: true }
+            : { signedIn, via: null, email: null, userId: 'u1' },
+        ),
+      ),
+    );
+  }
+
+  function renderWith(getSettings: () => Promise<unknown>, extra: Record<string, unknown> = {}) {
+    const made = makeBackend();
+    const backend = { ...made.backend, getSettings } as unknown as Backend;
+    const onDone = vi.fn();
+    render(<OnboardingScreen backend={backend} onDone={onDone} onSkip={vi.fn()} {...extra} />);
+    return { onDone };
+  }
+
+  beforeEach(() => {
+    cleanup();
+    localStorage.clear();
+    signedIn = false;
+    setReduced(true);
+    stubServer();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    restore();
+  });
+
+  it('offers a quiet 44px sign-in on the welcome panel, not a second sign-up', () => {
+    renderWith(async () => ({}));
+    const link = screen.getByRole('button', { name: /already have an account\? sign in/i });
+    expect(link.className).toContain('min-h-11');
+    // Text, not a filled button: no background fill classes.
+    expect(link.className).not.toMatch(/\bbg-/);
+    expect(screen.queryByText(/sign up/i)).toBeNull();
+    expect(screen.getByTestId('onboarding-intro').contains(link)).toBe(true);
+  });
+
+  it('is absent without a server to sign in to', () => {
+    vi.unstubAllEnvs();
+    vi.stubEnv('VITE_WORKER_URL', '');
+    renderWith(async () => ({}));
+    expect(screen.queryByTestId('signin-link')).toBeNull();
+  });
+
+  it('opens the sign-in surface full-screen, and Back returns with the form intact', async () => {
+    renderWith(async () => ({}));
+    scrollTo(800);
+    const dob = document.querySelector('input[type=date]') as HTMLInputElement;
+    fireEvent.change(dob, { target: { value: '1990-05-05' } });
+
+    fireEvent.click(screen.getByTestId('signin-link'));
+
+    const surface = screen.getByTestId('onboarding-signin');
+    expect(surface.className).toContain('absolute inset-0');
+    expect(within(surface).getByRole('heading', { name: 'Sign in' })).toBeTruthy();
+    expect(await within(surface).findByRole('link', { name: 'Continue with Google' })).toBeTruthy();
+    // The panels underneath are unreachable while it is up, but still mounted.
+    expect(screen.getByTestId('onboarding-scroller').hasAttribute('inert')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to welcome' }));
+
+    expect(screen.queryByTestId('onboarding-signin')).toBeNull();
+    expect(screen.getByTestId('onboarding-scroller').hasAttribute('inert')).toBe(false);
+    expect(document.querySelector('input[type=date]')).toBe(dob);
+    expect(dob.value).toBe('1990-05-05');
+  });
+
+  it("the phone's Back closes sign-in instead of leaving setup", () => {
+    renderWith(async () => ({}));
+    fireEvent.click(screen.getByTestId('signin-link'));
+    expect(window.history.state?.sbSignIn).toBe(true);
+
+    // What Back does: the sign-in entry is popped, leaving the setup one.
+    window.history.replaceState({ sbSetup: true }, '');
+    act(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+
+    expect(screen.queryByTestId('onboarding-signin')).toBeNull();
+    expect(screen.getByTestId('onboarding-intro')).toBeTruthy();
+  });
+
+  it('a successful sign-in exits onboarding with the account targets', async () => {
+    const { onDone } = renderWith(async () => ({ targets: TARGETS, connected: true }));
+    fireEvent.click(screen.getByTestId('signin-link'));
+    await screen.findByRole('link', { name: 'Continue with Google' });
+    expect(onDone).not.toHaveBeenCalled();
+
+    // Sign-in completes elsewhere (another tab / the Google round trip)...
+    signedIn = true;
+    // ...and the app notices when it is looked at again.
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(TARGETS));
+    expect(localStorage.getItem('snapbite.onboarding.resume')).toBeNull();
+  });
+
+  it('continues to the key step when the account has targets but no key yet', async () => {
+    const { onDone } = renderWith(async () => ({ targets: TARGETS, connected: false }));
+    fireEvent.click(screen.getByTestId('signin-link'));
+    await screen.findByRole('link', { name: 'Continue with Google' });
+
+    signedIn = true;
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    await waitFor(() => expect(screen.getAllByText(/Add your AI key/i).length).toBeGreaterThan(0));
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it('returns to the welcome when the account has no goal yet', async () => {
+    const { onDone } = renderWith(async () => ({ targets: null, connected: true }));
+    fireEvent.click(screen.getByTestId('signin-link'));
+    await screen.findByRole('link', { name: 'Continue with Google' });
+
+    signedIn = true;
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    await waitFor(() => expect(screen.queryByTestId('onboarding-signin')).toBeNull());
+    expect(onDone).not.toHaveBeenCalled();
+    expect(screen.getByTestId('onboarding-intro')).toBeTruthy();
   });
 });

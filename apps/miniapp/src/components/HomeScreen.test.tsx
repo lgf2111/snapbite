@@ -1,12 +1,15 @@
 import type { Backend, RecentMeal } from '@/lib/backend';
 import { clearCache } from '@/lib/cache';
 import type { DailyTargets, MealResult } from '@snapbite/core';
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HomeScreen } from './HomeScreen.js';
 
 afterEach(() => {
+  // Test files share one process, so RTL's auto-cleanup only covers the first
+  // file to import it. Unmount explicitly.
+  cleanup();
   clearCache();
   localStorage.clear();
   vi.restoreAllMocks();

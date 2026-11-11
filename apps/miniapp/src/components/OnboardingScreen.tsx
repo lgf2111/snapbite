@@ -12,10 +12,12 @@ import {
 } from '@snapbite/core';
 import { ArrowDown } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { readConfig } from '../lib/config.js';
 import { markKeyDecision } from '../lib/onboarding.js';
 import { KeyHelp } from './KeyHelp.js';
 import { LinkifiedHint } from './LinkifiedHint.js';
 import { ProfileForm } from './ProfileForm.js';
+import { SignInScreen } from './SignInScreen.js';
 
 type ToastKind = 'success' | 'error' | 'info';
 
@@ -124,6 +126,50 @@ export function OnboardingScreen({
   // to a snap point. Switch snapping off while a field has focus.
   const [typing, setTyping] = useState(false);
   const formPanel = useRef<HTMLElement>(null);
+
+  // Sign-in is a second full-screen layer over the panels, which stay mounted
+  // (inert) so Back finds the welcome and the typed form untouched. It owns one
+  // history entry, so the phone's Back closes it instead of leaving setup.
+  const canSignIn = backend.mode === 'worker' && readConfig().workerUrl !== '';
+  const [signInOpen, setSignInOpen] = useState(false);
+  const signInTrigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!signInOpen) return;
+    window.history.pushState({ sbSetup: true, sbSignIn: true }, '');
+    const onPop = () => {
+      if (!window.history.state?.sbSignIn) setSignInOpen(false);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      if (window.history.state?.sbSignIn) window.history.back();
+      signInTrigger.current?.focus({ preventScroll: true });
+    };
+  }, [signInOpen]);
+
+  async function onSignedIn() {
+    try {
+      const settings = await backend.getSettings();
+      if (settings.targets) {
+        // Same exit the form takes: targets in hand, then the optional key step
+        // unless a key is already connected, then Home.
+        setSavedTargets(settings.targets);
+        if (settings.connected) {
+          writeResume(null);
+          onDone(settings.targets);
+          return;
+        }
+        setSignInOpen(false);
+        setStep('apikey');
+        return;
+      }
+    } catch {
+      // Fall through: signed in, but we could not read targets.
+    }
+    // Signed in to an account with no goal yet: back to the welcome, form below.
+    setSignInOpen(false);
+    onToast?.('info', 'Signed in — now set your goal.');
+  }
 
   function onScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
@@ -252,107 +298,135 @@ export function OnboardingScreen({
   }
 
   return (
-    <div
-      data-testid="onboarding-scroller"
-      onScroll={onScroll}
-      onFocusCapture={(e) => {
-        if (e.target instanceof HTMLElement && e.target.matches('input,select,textarea')) {
-          setTyping(true);
-        }
-      }}
-      onBlurCapture={(e) => {
-        const next = e.relatedTarget;
-        if (!(next instanceof HTMLElement && next.matches('input,select,textarea'))) {
-          setTyping(false);
-        }
-      }}
-      className={cn(
-        'h-[100svh] snap-y overflow-y-auto overscroll-contain',
-        typing ? 'snap-none' : 'snap-mandatory',
-      )}
-    >
-      <section
-        data-testid="onboarding-intro"
-        className="relative flex h-[100svh] snap-start snap-always flex-col items-center justify-center gap-2 px-4 pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))] text-center"
-      >
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground absolute top-[calc(0.5rem+env(safe-area-inset-top))] right-3"
-          disabled={saving}
-          onClick={onSkip}
-        >
-          Skip for now
-        </Button>
-
-        <h1 className="motion-safe:animate-in motion-safe:fade-in font-display text-display leading-tight duration-500">
-          Welcome
-          <br />
-          to SnapBite
-        </h1>
-        <p className="text-muted-foreground text-caption">Let&rsquo;s set up your targets.</p>
-
-        {cueShown && (
-          // A button, not decoration: it is the keyboard and switch path to the
-          // form. The arrow is hidden from assistive tech; the words carry it.
-          <button
-            type="button"
-            data-testid="scroll-cue"
-            onClick={scrollToForm}
-            className="motion-safe:animate-in motion-safe:fade-in text-muted-foreground text-caption absolute inset-x-0 bottom-[calc(1rem+env(safe-area-inset-bottom))] mx-auto flex w-fit flex-col items-center gap-1 rounded-md px-3 py-2 duration-500 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-          >
-            <span>Scroll down to set your goal</span>
-            <ArrowDown className="text-primary-text motion-safe:animate-drift size-5" aria-hidden />
-          </button>
+    <div className="relative h-[100svh]">
+      <div
+        data-testid="onboarding-scroller"
+        inert={signInOpen}
+        onScroll={onScroll}
+        onFocusCapture={(e) => {
+          if (e.target instanceof HTMLElement && e.target.matches('input,select,textarea')) {
+            setTyping(true);
+          }
+        }}
+        onBlurCapture={(e) => {
+          const next = e.relatedTarget;
+          if (!(next instanceof HTMLElement && next.matches('input,select,textarea'))) {
+            setTyping(false);
+          }
+        }}
+        className={cn(
+          'h-[100svh] snap-y overflow-y-auto overscroll-contain',
+          typing ? 'snap-none' : 'snap-mandatory',
         )}
-      </section>
-
-      <section
-        ref={formPanel}
-        data-testid="onboarding-form-panel"
-        className="h-[100svh] snap-start snap-always scroll-pb-28 overflow-y-auto pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))]"
       >
-        <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-6">
-          {reached && !formReady && (
-            <div data-testid="onboarding-skeleton" aria-hidden className="flex flex-col gap-4">
-              <Skeleton className="h-5 w-3/4 rounded-md" />
-              {[0, 1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-11 w-full rounded-md" />
-              ))}
-              <Skeleton className="h-11 w-full rounded-md" />
-            </div>
-          )}
+        <section
+          data-testid="onboarding-intro"
+          className="relative flex h-[100svh] snap-start snap-always flex-col items-center justify-center gap-2 px-4 pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))] text-center"
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground absolute top-[calc(0.5rem+env(safe-area-inset-top))] right-3"
+            disabled={saving}
+            onClick={onSkip}
+          >
+            Skip for now
+          </Button>
 
-          {formReady && (
-            <div
-              data-testid="onboarding-form"
-              className="motion-safe:animate-in motion-safe:fade-in flex flex-col gap-4 duration-300"
-            >
-              <p className="text-muted-foreground text-caption">
-                Tell us a bit about yourself to get daily calorie and macro targets. You can change
-                these any time in Settings — or skip and just start logging (targets simply
-                won&rsquo;t show yet).
-              </p>
+          <h1 className="motion-safe:animate-in motion-safe:fade-in font-display text-display leading-tight duration-500">
+            Welcome
+            <br />
+            to SnapBite
+          </h1>
+          <p className="text-muted-foreground text-caption">Let&rsquo;s set up your targets.</p>
 
-              <ProfileForm
-                initial={null}
-                submitLabel="Set my goal"
-                saving={saving}
-                onSubmit={saveProfile}
-              />
-
-              <Button
-                variant="ghost"
-                className="text-muted-foreground"
-                disabled={saving}
-                onClick={onSkip}
+          <div className="absolute inset-x-0 bottom-[calc(0.5rem+env(safe-area-inset-bottom))] flex flex-col items-center">
+            {cueShown && (
+              // A button, not decoration: it is the keyboard and switch path to the
+              // form. The arrow is hidden from assistive tech; the words carry it.
+              <button
+                type="button"
+                data-testid="scroll-cue"
+                onClick={scrollToForm}
+                className="motion-safe:animate-in motion-safe:fade-in text-muted-foreground text-caption flex w-fit flex-col items-center gap-1 rounded-md px-3 py-2 duration-500 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
-                Skip for now — I&rsquo;ll just start logging
-              </Button>
-            </div>
-          )}
-        </div>
-      </section>
+                <span>Scroll down to set your goal</span>
+                <ArrowDown
+                  className="text-primary-text motion-safe:animate-drift size-5"
+                  aria-hidden
+                />
+              </button>
+            )}
+
+            {canSignIn && (
+              // Quiet on purpose: text, not a filled button, under the scroll cue.
+              // The whole row is the target (44px+), so the lead-in is tappable too.
+              <button
+                type="button"
+                ref={signInTrigger}
+                data-testid="signin-link"
+                onClick={() => setSignInOpen(true)}
+                className="text-muted-foreground text-caption flex min-h-11 items-center gap-1 rounded-md px-4 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                Already have an account?
+                <span className="text-primary-text font-medium underline underline-offset-4">
+                  Sign in
+                </span>
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section
+          ref={formPanel}
+          data-testid="onboarding-form-panel"
+          className="h-[100svh] snap-start snap-always scroll-pb-28 overflow-y-auto pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))]"
+        >
+          <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-6">
+            {reached && !formReady && (
+              <div data-testid="onboarding-skeleton" aria-hidden className="flex flex-col gap-4">
+                <Skeleton className="h-5 w-3/4 rounded-md" />
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-11 w-full rounded-md" />
+                ))}
+                <Skeleton className="h-11 w-full rounded-md" />
+              </div>
+            )}
+
+            {formReady && (
+              <div
+                data-testid="onboarding-form"
+                className="motion-safe:animate-in motion-safe:fade-in flex flex-col gap-4 duration-300"
+              >
+                <p className="text-muted-foreground text-caption">
+                  Tell us a bit about yourself to get daily calorie and macro targets. You can
+                  change these any time in Settings — or skip and just start logging (targets simply
+                  won&rsquo;t show yet).
+                </p>
+
+                <ProfileForm
+                  initial={null}
+                  submitLabel="Set my goal"
+                  saving={saving}
+                  onSubmit={saveProfile}
+                />
+
+                <Button
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  disabled={saving}
+                  onClick={onSkip}
+                >
+                  Skip for now — I&rsquo;ll just start logging
+                </Button>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+      {signInOpen && (
+        <SignInScreen onBack={() => setSignInOpen(false)} onSignedIn={() => void onSignedIn()} />
+      )}
     </div>
   );
 }

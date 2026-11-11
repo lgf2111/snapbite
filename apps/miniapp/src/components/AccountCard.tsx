@@ -1,5 +1,5 @@
 import { Mail } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { readConfig } from '../lib/config.js';
 import { GoogleIcon } from './icons/GoogleIcon.js';
 import { Button } from './ui/button.js';
@@ -24,7 +24,7 @@ interface Me {
  * offers to attach an email/Google identity so the account survives a cleared
  * browser and works on a second device.
  */
-export function AccountCard() {
+export function AccountCard({ onSignedIn }: { onSignedIn?: () => void } = {}) {
   const workerUrl = readConfig().workerUrl;
   const [me, setMe] = useState<Me | null>(null);
   const [providers, setProviders] = useState<Providers>({ email: false, google: false });
@@ -33,6 +33,12 @@ export function AccountCard() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // `onSignedIn` fires on a signed-out -> signed-in change seen after mount, not
+  // for someone who was already signed in when the card opened.
+  const wasSignedIn = useRef<boolean | null>(null);
+  const signedInCb = useRef(onSignedIn);
+  signedInCb.current = onSignedIn;
+
   const load = useCallback(async () => {
     if (!workerUrl) return;
     try {
@@ -40,7 +46,12 @@ export function AccountCard() {
         fetch(`${workerUrl}/api/auth/me`, { credentials: 'include' }),
         fetch(`${workerUrl}/api/auth/providers`, { credentials: 'include' }),
       ]);
-      if (meRes.ok) setMe((await meRes.json()) as Me);
+      if (meRes.ok) {
+        const next = (await meRes.json()) as Me;
+        setMe(next);
+        if (next.signedIn && wasSignedIn.current === false) signedInCb.current?.();
+        wasSignedIn.current = next.signedIn;
+      }
       if (provRes.ok) setProviders((await provRes.json()) as Providers);
     } catch {
       // Offline or misconfigured: the section simply doesn't render state.
@@ -50,6 +61,21 @@ export function AccountCard() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // A magic link opened in another tab, or a Google round trip that left this
+  // page open, finishes while we are in the background: look again on return.
+  useEffect(() => {
+    if (!onSignedIn) return;
+    const again = () => {
+      if (document.visibilityState !== 'hidden') void load();
+    };
+    document.addEventListener('visibilitychange', again);
+    window.addEventListener('focus', again);
+    return () => {
+      document.removeEventListener('visibilitychange', again);
+      window.removeEventListener('focus', again);
+    };
+  }, [load, onSignedIn]);
 
   // Surface the result of a round trip (?auth=ok / ?auth=expired / ...).
   useEffect(() => {
