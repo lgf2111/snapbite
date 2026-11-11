@@ -229,3 +229,34 @@ describe('GET /api/account/export streams byte-identical JSON', () => {
     expect(text.toLowerCase()).not.toContain('"iv"');
   });
 });
+
+describe('GET /api/account/export with only the session cookie (the installed app)', () => {
+  it('returns the signed-in account as an attachment, not a 401', async () => {
+    const app = createApp();
+    const login = (await (
+      await app.request(
+        '/api/auth/login',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email: 'export-cookie@example.com' }),
+        },
+        env,
+      )
+    ).json()) as { link: string };
+    const token = new URL(login.link).searchParams.get('token') as string;
+    const verify = await app.request(`/api/auth/verify?token=${token}`, {}, env);
+    const cookie = (verify.headers.get('set-cookie') ?? '').split(';')[0] as string;
+
+    const res = await app.request('/api/account/export', { headers: { cookie } }, env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(res.headers.get('content-disposition')).toMatch(
+      /^attachment; filename="snapbite-export-\d{4}-\d{2}-\d{2}\.json"$/,
+    );
+    const body = (await res.json()) as { exportedAt?: string; meals?: unknown[] };
+    expect(typeof body.exportedAt).toBe('string');
+    expect(Array.isArray(body.meals)).toBe(true);
+    expect(JSON.stringify(body)).not.toMatch(/api_?key/i);
+  });
+});
