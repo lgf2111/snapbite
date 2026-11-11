@@ -56,18 +56,27 @@ Search `Get Contents of URL`. Tap the chevron and set:
   `Bearer sb_your_token_here` (keep the word `Bearer` and one space).
 
 **Action 4 — Show Notification**
-Search `Show Notification`, and set its text to the **Contents of URL** variable
-from Action 3. The notification text is exactly the server's reply: SnapBite
-answers with one plain sentence, so there is nothing to parse or format. A
-successful one reads:
+Search `Show Notification`, then fill in its three fields. This combination is what
+makes the notification look like the confirm card in the app:
+
+- **Title** → `Meal logged`
+- **Body** → the **Contents of URL** variable from Action 3
+- **Attachment** → the **Photo** variable from Action 1 (the **Take Photo** result)
+
+The body is exactly the server's reply, two plain lines, so there is nothing to parse
+or format. A successful one reads:
 
 ```
-Logged 612 kcal — Grilled salmon, rice (P 42 · C 58 · F 21)
+17 kcal — Want Want milk candy
+P 0 g · C 3 g · F 0 g
 ```
 
-If something is wrong, the reply says so in the same place, for example
-`SnapBite: add your AI key in Settings first`. (Add `?format=json` to the URL
-only if you want a structured reply to build your own Shortcut around.)
+The first line is the calories and the meal name (the name is cut if it is long, the
+calories never are). The second is protein, carbs and fat in whole grams.
+
+If something is wrong, the body is a single readable sentence instead, for example
+`SnapBite: add your AI key in Settings first`. (Add `?format=json` to the URL only if
+you want a structured reply to build your own Shortcut around.)
 
 ## Step 3 — put it on the Action Button
 

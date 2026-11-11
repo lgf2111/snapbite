@@ -145,11 +145,16 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-/** A notification shows about two lines; past this the macros are dropped. */
-const MAX_LINE = 120;
-const MAX_LABEL = 60;
+/*
+ * The notification body is two lines, shaped like the in-app confirm card:
+ *   17 kcal — Want Want milk candy
+ *   P 0 g · C 3 g · F 0 g
+ * Line 1 stays under 60 characters (the title is cut, never the kcal) and the whole
+ * thing under 120, so iOS does not clip it.
+ */
+const MAX_LINE_1 = 59;
 
-interface Logged {
+export interface Logged {
   kcal: number;
   label: string;
   macros: { proteinG: number; carbsG: number; fatG: number };
@@ -157,15 +162,15 @@ interface Logged {
 
 /** The analyser's meal name, else the first foods: never the whole ingredient list. */
 function mealLabel(title: string | undefined, foods: string[]): string {
-  const raw = (title?.trim() || foods.slice(0, 2).join(', ')).replace(/\s+/g, ' ').trim();
-  return raw.length > MAX_LABEL ? `${raw.slice(0, MAX_LABEL - 1).trimEnd()}…` : raw;
+  return (title?.trim() || foods.slice(0, 2).join(', ')).replace(/\s+/g, ' ').trim();
 }
 
-/** `Logged 612 kcal — Grilled salmon, rice (P 42 · C 58 · F 21)`; macros only if they fit. */
-function oneLine({ kcal, label, macros }: Logged): string {
-  const line = `Logged ${Math.round(kcal)} kcal — ${label}`;
-  const withMacros = `${line} (P ${Math.round(macros.proteinG)} · C ${Math.round(macros.carbsG)} · F ${Math.round(macros.fatG)})`;
-  return withMacros.length < MAX_LINE ? withMacros : line;
+export function oneLine({ kcal, label, macros }: Logged): string {
+  const lead = `${Math.round(kcal)} kcal — `;
+  const room = Math.max(0, MAX_LINE_1 - lead.length);
+  const title = label.length > room ? `${label.slice(0, Math.max(0, room - 1)).trimEnd()}…` : label;
+  const g = (n: number) => Math.round(n);
+  return `${lead}${title}\nP ${g(macros.proteinG)} g · C ${g(macros.carbsG)} g · F ${g(macros.fatG)} g`;
 }
 
 type Reply = { ok: true; logged: Logged; mealId: string } | { ok: false; message: string };

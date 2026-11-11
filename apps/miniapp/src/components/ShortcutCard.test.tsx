@@ -168,6 +168,16 @@ describe('ShortcutCard: the three steps', () => {
     expect(text).toMatch(/shown only once/i);
   });
 
+  it('tells the person how to fill in Show Notification so it looks like the card', () => {
+    const { backend } = stub();
+    const { container } = render(<ShortcutCard backend={backend} />);
+    const text = container.textContent ?? '';
+    expect(text).toContain('Title to Meal logged');
+    expect(text).toContain('Body to Contents of URL');
+    expect(text).toContain('Attachment to Photo');
+    expect(text).toContain('Title Meal logged, Body Contents of URL, Attachment Photo');
+  });
+
   it('step 3 gives the Action Button path in order, and the card says why', () => {
     const { backend } = stub();
     const { container } = render(<ShortcutCard backend={backend} />);
