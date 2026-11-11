@@ -15,7 +15,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -23,19 +23,18 @@ jobs:
           version: 12.4.2
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          # Node 20 is deprecated on runners; 22 is the current LTS and matches
+          # what the Worker and Pages builds are tested against locally.
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Core is a workspace dependency of the apps and must be built (tsc -b)
-      # before typechecking/testing the packages that import it.
-      - name: Build core
-        run: pnpm --filter @snapbite/core build
-
+      # Core is a build dependency of the apps; `pnpm typecheck` / `pnpm test`
+      # at the root build it first, so the order cannot drift from this file.
       - name: Lint (Biome)
         run: pnpm lint
 

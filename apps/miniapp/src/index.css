@@ -169,11 +169,27 @@ body {
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/*
+ * The real "exclude the notch" switch: `viewport-fit=cover` lets the page paint
+ * edge to edge, and these insets are what put content back inside the safe box.
+ * A fixed bottom bar or a sheet that ignores them sits under the home indicator;
+ * a screen that ignores the top one starts under the Dynamic Island.
+ */
+.h-screen-safe {
+  min-height: 100svh;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0px);
 }
 /* Named to avoid Tailwind's spacing scale: `pb-bar` is also a generated utility
    (`--spacing-bar`), and the duplicate rule dropped the safe-area inset. */
+.sheet-safe {
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+}
+
 .reserve-bar {
   padding-bottom: calc(var(--spacing-bar) + env(safe-area-inset-bottom, 0px) + 1rem);
 }
