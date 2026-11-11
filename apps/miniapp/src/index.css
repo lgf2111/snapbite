@@ -330,3 +330,34 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/*
+ * Toast close button. Sonner draws a 20px circle on the toast's corner that only
+ * shows on hover. A phone has no hover and a 20px target is too small, so: put
+ * it inside, at the right, always visible, with a 44px hit area (the drawn
+ * circle stays small).
+ */
+[data-sonner-toast] [data-close-button] {
+  left: auto;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 1;
+}
+[data-sonner-toast] [data-close-button]::after {
+  content: "";
+  position: absolute;
+  inset: -12px;
+}
+[data-sonner-toast][data-styled="true"] {
+  padding-right: 48px;
+}
+
+/* No sliding: a dismissed toast is simply removed. */
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toast],
+  [data-sonner-toast][data-swipe-out="true"] {
+    transition: none !important;
+    animation: none !important;
+  }
+}
