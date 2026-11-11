@@ -34,6 +34,8 @@ interface Props {
   intent?: CaptureIntent | null;
   /** Called once the intent has been acted on, so the owner can clear it. */
   onIntentHandled?: () => void;
+  /** One-line credit trace when a BYOK call overflowed onto our key. */
+  onCreditNotice?: (notice: string) => void;
 }
 
 export type CaptureIntent =
@@ -80,6 +82,7 @@ export function CaptureSheet({
   onBatchStatus,
   intent = null,
   onIntentHandled,
+  onCreditNotice,
 }: Props) {
   /** The by-hand dialog; it carries the saved-meals list, so both cards open it. */
   const [manualOpen, setManualOpen] = useState(false);
@@ -116,7 +119,8 @@ export function CaptureSheet({
     try {
       const compressed = await compressPhoto(file);
       photo.current = { base64: compressed.base64, mimeType: compressed.mimeType };
-      const result = await backend.analyze(compressed.base64, compressed.mimeType);
+      const { notice, ...result } = await backend.analyze(compressed.base64, compressed.mimeType);
+      if (notice) onCreditNotice?.(notice);
       setDraft(result);
       setStage('review');
     } catch (err) {
@@ -143,7 +147,11 @@ export function CaptureSheet({
         try {
           // Always re-encoded (see compressPhoto): the bytes sent carry no metadata.
           const compressed = await compressPhoto(file);
-          const result = await backend.analyze(compressed.base64, compressed.mimeType);
+          const { notice, ...result } = await backend.analyze(
+            compressed.base64,
+            compressed.mimeType,
+          );
+          if (notice) onCreditNotice?.(notice);
           await backend.logWithPhoto(result, {
             base64: compressed.base64,
             mimeType: compressed.mimeType,

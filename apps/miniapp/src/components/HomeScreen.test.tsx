@@ -443,4 +443,16 @@ describe('HomeScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: /reports/i }));
     expect(onOpenReports).toHaveBeenCalledTimes(1);
   });
+
+  it('shows one quiet line when a credit was used for overflow', async () => {
+    render(
+      <HomeScreen
+        {...props(stubBackend(), { creditNotice: 'Your key hit its limit — used 1 credit' })}
+      />,
+    );
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Your key hit its limit — used 1 credit',
+    );
+  });
 });

@@ -64,6 +64,9 @@ interface HomeScreenProps {
   /** Setup is covering Home: the install tip must not render behind it. */
   hideInstallGuide?: boolean;
   onToast?: (kind: ToastKind, message: string) => void;
+  /** One-line credit trace when a BYOK call overflowed onto our key. */
+  creditNotice?: string | null;
+  onCreditNotice?: (notice: string) => void;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -93,6 +96,8 @@ export function HomeScreen({
   onSetGoal,
   hideInstallGuide = false,
   onToast,
+  creditNotice = null,
+  onCreditNotice,
 }: HomeScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
   /** The meal being edited with AI inline from Home (null = dialog closed). */
@@ -479,6 +484,10 @@ export function HomeScreen({
         <ChevronRight className="text-muted-foreground size-4 shrink-0" />
       </button>
 
+      {creditNotice && (
+        <output className="text-muted-foreground text-caption block">{creditNotice}</output>
+      )}
+
       {error && <p className="text-destructive text-caption">{error}</p>}
 
       {!meals && !error && (
@@ -540,6 +549,7 @@ export function HomeScreen({
           mealId={aiMeal.id}
           onDraft={(revised) => void handleAiDraft(aiMeal.id, revised)}
           {...(onToast ? { onToast } : {})}
+          {...(onCreditNotice ? { onCreditNotice } : {})}
         />
       )}
 

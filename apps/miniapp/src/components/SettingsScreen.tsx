@@ -48,6 +48,7 @@ import {
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AccountCard } from './AccountCard.js';
+import { CreditsCard } from './CreditsCard.js';
 import { ExportData } from './ExportData.js';
 import { ExternalLink } from './ExternalLink.js';
 import { InfoDisclosure } from './InfoDisclosure.js';
@@ -159,6 +160,8 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [sendingFeedback, setSendingFeedback] = useState(false);
+  // Bumped after sign-in so the credits card re-reads its summary.
+  const [accountVersion, setAccountVersion] = useState(0);
   // Each slot has its own on/off toggle + time. `times` always holds all three
   // slots (so a toggled-off slot keeps its time); `slotOn` tracks which are
   // enabled. We persist only the enabled slots' times to the backend.
@@ -866,7 +869,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
         Account &amp; data
       </h2>
 
-      <AccountCard />
+      <AccountCard onSignedIn={() => setAccountVersion((version) => version + 1)} />
+
+      {/* Paid features need a verified identity, so this is worker-only. */}
+      {!isLocal && <CreditsCard backend={backend} refreshSignal={accountVersion} />}
 
       <Card>
         <CardContent className="flex flex-col gap-3">

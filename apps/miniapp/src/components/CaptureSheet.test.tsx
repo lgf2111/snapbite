@@ -1,6 +1,7 @@
 import type { Backend } from '@/lib/backend';
 import { notifyLogged } from '@/lib/mealNotice';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CaptureSheet, MAX_BATCH } from './CaptureSheet.js';
@@ -278,6 +279,21 @@ describe('uploading several photos from the library', () => {
     expect(analyze).toHaveBeenCalledTimes(4);
     expect(onLogged).toHaveBeenCalledTimes(3);
     expect(onToast).toHaveBeenCalledWith('info', '3 logged, 1 failed');
+  });
+
+  it('reports the overflow notice without saving it into the meal', async () => {
+    const onCreditNotice = vi.fn();
+    const notice = 'Your key hit its limit — used 1 credit';
+    const analyze = vi.fn(async () => ({ ...RESULT, notice }));
+    const logWithPhoto = vi.fn(async (_meal: unknown, _photo: unknown) => {});
+    const { camera } = setup(false, { analyze, logWithPhoto }, { onCreditNotice });
+
+    pick(camera, photo('a.jpg'));
+    await waitFor(() => expect(onCreditNotice).toHaveBeenCalledWith(notice));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save meal' }));
+    await waitFor(() => expect(logWithPhoto).toHaveBeenCalledTimes(1));
+    expect(logWithPhoto.mock.calls[0]?.[0]).not.toHaveProperty('notice');
   });
 
   it('reports all-succeeded and all-failed plainly', async () => {
