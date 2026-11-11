@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SnapBite — palette options</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 20px 64px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, sans-serif;
+    background: #0b0c0e; color: #e9e9e6;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; }
+  h1 { font: 600 30px/1.1 ui-serif, Georgia, serif; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .lede { color: #9a9a95; font-size: 14px; line-height: 1.5; margin: 0 0 8px; max-width: 62ch; }
+  .lede code { background: #1b1d21; padding: 1px 5px; border-radius: 4px; }
+  .pal { border: 1px solid #22252a; border-radius: 16px; padding: 18px; margin-top: 18px; background: #101215; }
+  .pal header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .pal h2 { font-size: 17px; margin: 0 0 4px; font-weight: 600; }
+  .idea { margin: 0; color: #9a9a95; font-size: 13px; max-width: 52ch; line-height: 1.45; }
+  .pick { text-align: right; font-size: 12px; }
+  .pick code { color: #cfcfc8; }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  @media (max-width: 720px) { .modes { grid-template-columns: 1fr; } }
+  .mode { border-radius: 12px; padding: 12px; background: var(--bg); border: 1px solid var(--border); }
+  .mode-name { margin: 0 0 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .preview { border-radius: 10px; background: var(--card); padding: 12px; color: var(--fg); }
+  .pv-head { display: flex; align-items: center; justify-content: space-between; }
+  .pv-title { font-size: 13px; color: var(--muted); }
+  .pv-ring { font: 600 22px/1 ui-serif, Georgia, serif; text-align: right; }
+  .pv-ring em { display: block; font: 400 10px/1.4 -apple-system, sans-serif; font-style: normal; color: var(--muted); }
+  .pv-verdict { font: 600 15px/1.2 ui-serif, Georgia, serif; margin: 10px 0 8px; }
+  .pv-rows { font-size: 11px; }
+  .pv-rows div { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid var(--border); }
+  .pv-rows span { color: var(--muted); }
+  .pv-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .pv-btn { background: var(--primary); color: var(--on); border-radius: 8px; padding: 7px 12px; font-size: 11px; font-weight: 600; }
+  .pv-ghost { border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; font-size: 11px; color: var(--muted); }
+  .swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+  .sw { border: 1px solid; border-radius: 8px; padding: 8px 6px; font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
+  .sw span { display: block; font-size: 9px; opacity: .75; text-transform: none; letter-spacing: 0; margin-top: 2px; }
+  .checks { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 10px; color: #8d8d88; }
+  .checks b { margin-left: 4px; font-weight: 600; }
+  .checks .ok b { color: #6dc98a; }
+  .checks .bad b { color: #ff7b72; }
+  .ok { color: #6dc98a; }
+  .bad { color: #ff7b72; }
+  footer { margin-top: 28px; color: #77776f; font-size: 12px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>SnapBite — palette options</h1>
+  <p class="lede">
+    Six directions, each shown in light and dark with a mini version of the real Home card.
+    Every text pair is measured: the numbers under each panel are WCAG ratios, and a swatch
+    cannot look right and fail AA at the same time — they are computed from the same values.
+    Tell me a name and I will swap the tokens.
+  </p>
+  <p class="lede">
+    The two-colour code beside each name is the accent in light / dark. The accent is the only
+    colour that ever means "press this"; status stays in text so it never depends on hue.
+  </p>
+  
+    <section class="pal">
+      <header>
+        <div>
+          <h2>Paprika on paper</h2>
+          <p class="idea">Chilli-red accent on warm cream. The one you have now.</p>
+        </div>
+        <div class="pick">
+          <code data-copy="primary">#b8371a / #ff7a52</code>
+          <p class="ok">all pairs pass AA</p>
+        </div>
+      </header>
+      <div class="modes">
+        
+      <div class="mode light" style="--bg:#fffcf7;--card:#f6efe6;--fg:#1f1a16;--muted:#6b5f53;--primary:#b8371a;--on:#ffffff;--border:#d8c6b0">
+        <p class="mode-name">light</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#fffcf7;color:#1f1a16;border-color:#d8c6b0">bg<span>#fffcf7</span></div><div class="sw" style="background:#f6efe6;color:#1f1a16;border-color:#d8c6b0">surface<span>#f6efe6</span></div><div class="sw" style="background:#d8c6b0;color:#fffcf7;border-color:#d8c6b0">border<span>#d8c6b0</span></div><div class="sw" style="background:#1f1a16;color:#fffcf7;border-color:#d8c6b0">fg<span>#1f1a16</span></div><div class="sw" style="background:#6b5f53;color:#fffcf7;border-color:#d8c6b0">muted<span>#6b5f53</span></div><div class="sw" style="background:#b8371a;color:#ffffff;border-color:#d8c6b0">primary<span>#b8371a</span></div><div class="sw" style="background:#2a6b4f;color:#fffcf7;border-color:#d8c6b0">success<span>#2a6b4f</span></div><div class="sw" style="background:#8a5200;color:#fffcf7;border-color:#d8c6b0">warning<span>#8a5200</span></div><div class="sw" style="background:#a3231b;color:#fffcf7;border-color:#d8c6b0">danger<span>#a3231b</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>16.85:1</b></li><li class="ok">muted on bg<b>6.06:1</b></li><li class="ok">fg on surface<b>15.12:1</b></li><li class="ok">muted on surface<b>5.43:1</b></li><li class="ok">primary on bg<b>5.70:1</b></li><li class="ok">onPrimary on primary<b>5.83:1</b></li><li class="ok">success on bg<b>6.19:1</b></li><li class="ok">warning on bg<b>6.24:1</b></li><li class="ok">danger on bg<b>7.29:1</b></li></ul>
+      </div>
+        
+      <div class="mode dark" style="--bg:#14100d;--card:#1e1814;--fg:#f4ede3;--muted:#a99a8b;--primary:#ff7a52;--on:#2a0e05;--border:#4b3d33">
+        <p class="mode-name">dark</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#14100d;color:#f4ede3;border-color:#4b3d33">bg<span>#14100d</span></div><div class="sw" style="background:#1e1814;color:#f4ede3;border-color:#4b3d33">surface<span>#1e1814</span></div><div class="sw" style="background:#4b3d33;color:#14100d;border-color:#4b3d33">border<span>#4b3d33</span></div><div class="sw" style="background:#f4ede3;color:#14100d;border-color:#4b3d33">fg<span>#f4ede3</span></div><div class="sw" style="background:#a99a8b;color:#14100d;border-color:#4b3d33">muted<span>#a99a8b</span></div><div class="sw" style="background:#ff7a52;color:#2a0e05;border-color:#4b3d33">primary<span>#ff7a52</span></div><div class="sw" style="background:#6fc49b;color:#14100d;border-color:#4b3d33">success<span>#6fc49b</span></div><div class="sw" style="background:#e0a83c;color:#14100d;border-color:#4b3d33">warning<span>#e0a83c</span></div><div class="sw" style="background:#ff8a7a;color:#14100d;border-color:#4b3d33">danger<span>#ff8a7a</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>16.28:1</b></li><li class="ok">muted on bg<b>6.92:1</b></li><li class="ok">fg on surface<b>15.11:1</b></li><li class="ok">muted on surface<b>6.42:1</b></li><li class="ok">primary on bg<b>7.35:1</b></li><li class="ok">onPrimary on primary<b>7.01:1</b></li><li class="ok">success on bg<b>9.05:1</b></li><li class="ok">warning on bg<b>8.86:1</b></li><li class="ok">danger on bg<b>8.26:1</b></li></ul>
+      </div>
+      </div>
+    </section>
+
+    <section class="pal">
+      <header>
+        <div>
+          <h2>Basil & linen</h2>
+          <p class="idea">Herb green on unbleached linen. Calm, fresh, "salad", less appetite-heat than red.</p>
+        </div>
+        <div class="pick">
+          <code data-copy="primary">#2f6b3f / #7cc48d</code>
+          <p class="ok">all pairs pass AA</p>
+        </div>
+      </header>
+      <div class="modes">
+        
+      <div class="mode light" style="--bg:#fbfaf6;--card:#eff0e6;--fg:#1c211c;--muted:#5c6459;--primary:#2f6b3f;--on:#ffffff;--border:#cdd0be">
+        <p class="mode-name">light</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#fbfaf6;color:#1c211c;border-color:#cdd0be">bg<span>#fbfaf6</span></div><div class="sw" style="background:#eff0e6;color:#1c211c;border-color:#cdd0be">surface<span>#eff0e6</span></div><div class="sw" style="background:#cdd0be;color:#fbfaf6;border-color:#cdd0be">border<span>#cdd0be</span></div><div class="sw" style="background:#1c211c;color:#fbfaf6;border-color:#cdd0be">fg<span>#1c211c</span></div><div class="sw" style="background:#5c6459;color:#fbfaf6;border-color:#cdd0be">muted<span>#5c6459</span></div><div class="sw" style="background:#2f6b3f;color:#ffffff;border-color:#cdd0be">primary<span>#2f6b3f</span></div><div class="sw" style="background:#2f6b3f;color:#fbfaf6;border-color:#cdd0be">success<span>#2f6b3f</span></div><div class="sw" style="background:#8a5c00;color:#fbfaf6;border-color:#cdd0be">warning<span>#8a5c00</span></div><div class="sw" style="background:#a5342a;color:#fbfaf6;border-color:#cdd0be">danger<span>#a5342a</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>15.66:1</b></li><li class="ok">muted on bg<b>5.88:1</b></li><li class="ok">fg on surface<b>14.24:1</b></li><li class="ok">muted on surface<b>5.34:1</b></li><li class="ok">primary on bg<b>6.10:1</b></li><li class="ok">onPrimary on primary<b>6.37:1</b></li><li class="ok">success on bg<b>6.10:1</b></li><li class="ok">warning on bg<b>5.57:1</b></li><li class="ok">danger on bg<b>6.44:1</b></li></ul>
+      </div>
+        
+      <div class="mode dark" style="--bg:#10150f;--card:#1a211a;--fg:#eef2e8;--muted:#a2ac9c;--primary:#7cc48d;--on:#0a1a0d;--border:#3d4a3c">
+        <p class="mode-name">dark</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#10150f;color:#eef2e8;border-color:#3d4a3c">bg<span>#10150f</span></div><div class="sw" style="background:#1a211a;color:#eef2e8;border-color:#3d4a3c">surface<span>#1a211a</span></div><div class="sw" style="background:#3d4a3c;color:#10150f;border-color:#3d4a3c">border<span>#3d4a3c</span></div><div class="sw" style="background:#eef2e8;color:#10150f;border-color:#3d4a3c">fg<span>#eef2e8</span></div><div class="sw" style="background:#a2ac9c;color:#10150f;border-color:#3d4a3c">muted<span>#a2ac9c</span></div><div class="sw" style="background:#7cc48d;color:#0a1a0d;border-color:#3d4a3c">primary<span>#7cc48d</span></div><div class="sw" style="background:#7cc48d;color:#10150f;border-color:#3d4a3c">success<span>#7cc48d</span></div><div class="sw" style="background:#e3b455;color:#10150f;border-color:#3d4a3c">warning<span>#e3b455</span></div><div class="sw" style="background:#ff9080;color:#10150f;border-color:#3d4a3c">danger<span>#ff9080</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>16.28:1</b></li><li class="ok">muted on bg<b>7.85:1</b></li><li class="ok">fg on surface<b>14.50:1</b></li><li class="ok">muted on surface<b>6.99:1</b></li><li class="ok">primary on bg<b>8.92:1</b></li><li class="ok">onPrimary on primary<b>8.69:1</b></li><li class="ok">success on bg<b>8.92:1</b></li><li class="ok">warning on bg<b>9.62:1</b></li><li class="ok">danger on bg<b>8.41:1</b></li></ul>
+      </div>
+      </div>
+    </section>
+
+    <section class="pal">
+      <header>
+        <div>
+          <h2>Saffron & charcoal</h2>
+          <p class="idea">Amber-gold accent on graphite. Reads as baking, turmeric, caramel; strong in dark mode.</p>
+        </div>
+        <div class="pick">
+          <code data-copy="primary">#9a6200 / #f0b33c</code>
+          <p class="ok">all pairs pass AA</p>
+        </div>
+      </header>
+      <div class="modes">
+        
+      <div class="mode light" style="--bg:#fdfaf3;--card:#f3ede1;--fg:#232019;--muted:#6a6152;--primary:#9a6200;--on:#ffffff;--border:#d6c9ae">
+        <p class="mode-name">light</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#fdfaf3;color:#232019;border-color:#d6c9ae">bg<span>#fdfaf3</span></div><div class="sw" style="background:#f3ede1;color:#232019;border-color:#d6c9ae">surface<span>#f3ede1</span></div><div class="sw" style="background:#d6c9ae;color:#fdfaf3;border-color:#d6c9ae">border<span>#d6c9ae</span></div><div class="sw" style="background:#232019;color:#fdfaf3;border-color:#d6c9ae">fg<span>#232019</span></div><div class="sw" style="background:#6a6152;color:#fdfaf3;border-color:#d6c9ae">muted<span>#6a6152</span></div><div class="sw" style="background:#9a6200;color:#ffffff;border-color:#d6c9ae">primary<span>#9a6200</span></div><div class="sw" style="background:#2c6b3f;color:#fdfaf3;border-color:#d6c9ae">success<span>#2c6b3f</span></div><div class="sw" style="background:#9a6200;color:#fdfaf3;border-color:#d6c9ae">warning<span>#9a6200</span></div><div class="sw" style="background:#a53b1f;color:#fdfaf3;border-color:#d6c9ae">danger<span>#a53b1f</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>15.59:1</b></li><li class="ok">muted on bg<b>5.85:1</b></li><li class="ok">fg on surface<b>13.94:1</b></li><li class="ok">muted on surface<b>5.23:1</b></li><li class="ok">primary on bg<b>4.89:1</b></li><li class="ok">onPrimary on primary<b>5.10:1</b></li><li class="ok">success on bg<b>6.14:1</b></li><li class="ok">warning on bg<b>4.89:1</b></li><li class="ok">danger on bg<b>6.21:1</b></li></ul>
+      </div>
+        
+      <div class="mode dark" style="--bg:#131210;--card:#1d1b17;--fg:#f2ede2;--muted:#a9a08e;--primary:#f0b33c;--on:#1f1503;--border:#453f34">
+        <p class="mode-name">dark</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#131210;color:#f2ede2;border-color:#453f34">bg<span>#131210</span></div><div class="sw" style="background:#1d1b17;color:#f2ede2;border-color:#453f34">surface<span>#1d1b17</span></div><div class="sw" style="background:#453f34;color:#131210;border-color:#453f34">border<span>#453f34</span></div><div class="sw" style="background:#f2ede2;color:#131210;border-color:#453f34">fg<span>#f2ede2</span></div><div class="sw" style="background:#a9a08e;color:#131210;border-color:#453f34">muted<span>#a9a08e</span></div><div class="sw" style="background:#f0b33c;color:#1f1503;border-color:#453f34">primary<span>#f0b33c</span></div><div class="sw" style="background:#86c98f;color:#131210;border-color:#453f34">success<span>#86c98f</span></div><div class="sw" style="background:#f0b33c;color:#131210;border-color:#453f34">warning<span>#f0b33c</span></div><div class="sw" style="background:#ff9070;color:#131210;border-color:#453f34">danger<span>#ff9070</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>16.04:1</b></li><li class="ok">muted on bg<b>7.23:1</b></li><li class="ok">fg on surface<b>14.73:1</b></li><li class="ok">muted on surface<b>6.64:1</b></li><li class="ok">primary on bg<b>10.00:1</b></li><li class="ok">onPrimary on primary<b>9.61:1</b></li><li class="ok">success on bg<b>9.60:1</b></li><li class="ok">warning on bg<b>10.00:1</b></li><li class="ok">danger on bg<b>8.45:1</b></li></ul>
+      </div>
+      </div>
+    </section>
+
+    <section class="pal">
+      <header>
+        <div>
+          <h2>Tomato & bone</h2>
+          <p class="idea">Bright tomato on cool bone-white. Higher energy than paprika, more "fresh produce".</p>
+        </div>
+        <div class="pick">
+          <code data-copy="primary">#d92b1f / #ff6a5c</code>
+          <p class="ok">all pairs pass AA</p>
+        </div>
+      </header>
+      <div class="modes">
+        
+      <div class="mode light" style="--bg:#fafafa;--card:#f1f1ef;--fg:#17181a;--muted:#5f6165;--primary:#d92b1f;--on:#ffffff;--border:#d9d9d4">
+        <p class="mode-name">light</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#fafafa;color:#17181a;border-color:#d9d9d4">bg<span>#fafafa</span></div><div class="sw" style="background:#f1f1ef;color:#17181a;border-color:#d9d9d4">surface<span>#f1f1ef</span></div><div class="sw" style="background:#d9d9d4;color:#fafafa;border-color:#d9d9d4">border<span>#d9d9d4</span></div><div class="sw" style="background:#17181a;color:#fafafa;border-color:#d9d9d4">fg<span>#17181a</span></div><div class="sw" style="background:#5f6165;color:#fafafa;border-color:#d9d9d4">muted<span>#5f6165</span></div><div class="sw" style="background:#d92b1f;color:#ffffff;border-color:#d9d9d4">primary<span>#d92b1f</span></div><div class="sw" style="background:#1f7a4d;color:#fafafa;border-color:#d9d9d4">success<span>#1f7a4d</span></div><div class="sw" style="background:#96560a;color:#fafafa;border-color:#d9d9d4">warning<span>#96560a</span></div><div class="sw" style="background:#b3271c;color:#fafafa;border-color:#d9d9d4">danger<span>#b3271c</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>17.02:1</b></li><li class="ok">muted on bg<b>5.94:1</b></li><li class="ok">fg on surface<b>15.71:1</b></li><li class="ok">muted on surface<b>5.49:1</b></li><li class="ok">primary on bg<b>4.66:1</b></li><li class="ok">onPrimary on primary<b>4.87:1</b></li><li class="ok">success on bg<b>5.09:1</b></li><li class="ok">warning on bg<b>5.54:1</b></li><li class="ok">danger on bg<b>6.24:1</b></li></ul>
+      </div>
+        
+      <div class="mode dark" style="--bg:#111213;--card:#1a1b1d;--fg:#f3f3f1;--muted:#a3a5a8;--primary:#ff6a5c;--on:#260703;--border:#3d3f42">
+        <p class="mode-name">dark</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#111213;color:#f3f3f1;border-color:#3d3f42">bg<span>#111213</span></div><div class="sw" style="background:#1a1b1d;color:#f3f3f1;border-color:#3d3f42">surface<span>#1a1b1d</span></div><div class="sw" style="background:#3d3f42;color:#111213;border-color:#3d3f42">border<span>#3d3f42</span></div><div class="sw" style="background:#f3f3f1;color:#111213;border-color:#3d3f42">fg<span>#f3f3f1</span></div><div class="sw" style="background:#a3a5a8;color:#111213;border-color:#3d3f42">muted<span>#a3a5a8</span></div><div class="sw" style="background:#ff6a5c;color:#260703;border-color:#3d3f42">primary<span>#ff6a5c</span></div><div class="sw" style="background:#6ec79a;color:#111213;border-color:#3d3f42">success<span>#6ec79a</span></div><div class="sw" style="background:#dfa53f;color:#111213;border-color:#3d3f42">warning<span>#dfa53f</span></div><div class="sw" style="background:#ff8b7d;color:#111213;border-color:#3d3f42">danger<span>#ff8b7d</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>16.88:1</b></li><li class="ok">muted on bg<b>7.60:1</b></li><li class="ok">fg on surface<b>15.51:1</b></li><li class="ok">muted on surface<b>6.98:1</b></li><li class="ok">primary on bg<b>6.67:1</b></li><li class="ok">onPrimary on primary<b>6.70:1</b></li><li class="ok">success on bg<b>9.20:1</b></li><li class="ok">warning on bg<b>8.57:1</b></li><li class="ok">danger on bg<b>8.25:1</b></li></ul>
+      </div>
+      </div>
+    </section>
+
+    <section class="pal">
+      <header>
+        <div>
+          <h2>Espresso & oat</h2>
+          <p class="idea">Coffee brown accent, almost no chroma. Quiet, grown-up; the photo carries the colour.</p>
+        </div>
+        <div class="pick">
+          <code data-copy="primary">#5b3a21 / #c99f76</code>
+          <p class="ok">all pairs pass AA</p>
+        </div>
+      </header>
+      <div class="modes">
+        
+      <div class="mode light" style="--bg:#fbf8f3;--card:#f0e9df;--fg:#241d16;--muted:#6a5c4c;--primary:#5b3a21;--on:#fbf8f3;--border:#d5c8b5">
+        <p class="mode-name">light</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#fbf8f3;color:#241d16;border-color:#d5c8b5">bg<span>#fbf8f3</span></div><div class="sw" style="background:#f0e9df;color:#241d16;border-color:#d5c8b5">surface<span>#f0e9df</span></div><div class="sw" style="background:#d5c8b5;color:#fbf8f3;border-color:#d5c8b5">border<span>#d5c8b5</span></div><div class="sw" style="background:#241d16;color:#fbf8f3;border-color:#d5c8b5">fg<span>#241d16</span></div><div class="sw" style="background:#6a5c4c;color:#fbf8f3;border-color:#d5c8b5">muted<span>#6a5c4c</span></div><div class="sw" style="background:#5b3a21;color:#fbf8f3;border-color:#d5c8b5">primary<span>#5b3a21</span></div><div class="sw" style="background:#3a6b4a;color:#fbf8f3;border-color:#d5c8b5">success<span>#3a6b4a</span></div><div class="sw" style="background:#8a5a12;color:#fbf8f3;border-color:#d5c8b5">warning<span>#8a5a12</span></div><div class="sw" style="background:#9c3222;color:#fbf8f3;border-color:#d5c8b5">danger<span>#9c3222</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>15.70:1</b></li><li class="ok">muted on bg<b>6.10:1</b></li><li class="ok">fg on surface<b>13.80:1</b></li><li class="ok">muted on surface<b>5.37:1</b></li><li class="ok">primary on bg<b>9.57:1</b></li><li class="ok">onPrimary on primary<b>9.57:1</b></li><li class="ok">success on bg<b>5.86:1</b></li><li class="ok">warning on bg<b>5.58:1</b></li><li class="ok">danger on bg<b>6.85:1</b></li></ul>
+      </div>
+        
+      <div class="mode dark" style="--bg:#131010;--card:#1d1918;--fg:#f0e8dd;--muted:#a89a8a;--primary:#c99f76;--on:#221609;--border:#453a33">
+        <p class="mode-name">dark</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#131010;color:#f0e8dd;border-color:#453a33">bg<span>#131010</span></div><div class="sw" style="background:#1d1918;color:#f0e8dd;border-color:#453a33">surface<span>#1d1918</span></div><div class="sw" style="background:#453a33;color:#131010;border-color:#453a33">border<span>#453a33</span></div><div class="sw" style="background:#f0e8dd;color:#131010;border-color:#453a33">fg<span>#f0e8dd</span></div><div class="sw" style="background:#a89a8a;color:#131010;border-color:#453a33">muted<span>#a89a8a</span></div><div class="sw" style="background:#c99f76;color:#221609;border-color:#453a33">primary<span>#c99f76</span></div><div class="sw" style="background:#7fc094;color:#131010;border-color:#453a33">success<span>#7fc094</span></div><div class="sw" style="background:#d9a34a;color:#131010;border-color:#453a33">warning<span>#d9a34a</span></div><div class="sw" style="background:#ff9182;color:#131010;border-color:#453a33">danger<span>#ff9182</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>15.59:1</b></li><li class="ok">muted on bg<b>6.90:1</b></li><li class="ok">fg on surface<b>14.36:1</b></li><li class="ok">muted on surface<b>6.35:1</b></li><li class="ok">primary on bg<b>7.85:1</b></li><li class="ok">onPrimary on primary<b>7.33:1</b></li><li class="ok">success on bg<b>8.90:1</b></li><li class="ok">warning on bg<b>8.37:1</b></li><li class="ok">danger on bg<b>8.68:1</b></li></ul>
+      </div>
+      </div>
+    </section>
+
+    <section class="pal">
+      <header>
+        <div>
+          <h2>Ink & citrus</h2>
+          <p class="idea">Near-black UI with a lime accent. Modern, high contrast, closer to a fitness app than a cookbook.</p>
+        </div>
+        <div class="pick">
+          <code data-copy="primary">#3f6b00 / #c3f53c</code>
+          <p class="ok">all pairs pass AA</p>
+        </div>
+      </header>
+      <div class="modes">
+        
+      <div class="mode light" style="--bg:#fbfbf3;--card:#f0f0e4;--fg:#15170f;--muted:#5e6152;--primary:#3f6b00;--on:#ffffff;--border:#d4d4c2">
+        <p class="mode-name">light</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#fbfbf3;color:#15170f;border-color:#d4d4c2">bg<span>#fbfbf3</span></div><div class="sw" style="background:#f0f0e4;color:#15170f;border-color:#d4d4c2">surface<span>#f0f0e4</span></div><div class="sw" style="background:#d4d4c2;color:#fbfbf3;border-color:#d4d4c2">border<span>#d4d4c2</span></div><div class="sw" style="background:#15170f;color:#fbfbf3;border-color:#d4d4c2">fg<span>#15170f</span></div><div class="sw" style="background:#5e6152;color:#fbfbf3;border-color:#d4d4c2">muted<span>#5e6152</span></div><div class="sw" style="background:#3f6b00;color:#ffffff;border-color:#d4d4c2">primary<span>#3f6b00</span></div><div class="sw" style="background:#3f6b00;color:#fbfbf3;border-color:#d4d4c2">success<span>#3f6b00</span></div><div class="sw" style="background:#8a5c00;color:#fbfbf3;border-color:#d4d4c2">warning<span>#8a5c00</span></div><div class="sw" style="background:#a63325;color:#fbfbf3;border-color:#d4d4c2">danger<span>#a63325</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>17.39:1</b></li><li class="ok">muted on bg<b>6.11:1</b></li><li class="ok">fg on surface<b>15.75:1</b></li><li class="ok">muted on surface<b>5.53:1</b></li><li class="ok">primary on bg<b>6.09:1</b></li><li class="ok">onPrimary on primary<b>6.34:1</b></li><li class="ok">success on bg<b>6.09:1</b></li><li class="ok">warning on bg<b>5.59:1</b></li><li class="ok">danger on bg<b>6.47:1</b></li></ul>
+      </div>
+        
+      <div class="mode dark" style="--bg:#0c0e0a;--card:#161913;--fg:#f0f4e4;--muted:#9ea88b;--primary:#c3f53c;--on:#10160a;--border:#343a2c">
+        <p class="mode-name">dark</p>
+        <div class="preview">
+          <div class="pv-head"><span class="pv-title">Today</span><span class="pv-ring">2590<em>kcal left</em></span></div>
+          <div class="pv-verdict">On track</div>
+          <div class="pv-rows">
+            <div><span>Protein</span><b>82 / 135 g</b></div>
+            <div><span>Carbs</span><b>174 / 351 g</b></div>
+            <div><span>Fat</span><b>38 / 72 g</b></div>
+          </div>
+          <div class="pv-actions"><span class="pv-btn">Add meal</span><span class="pv-ghost">Weekly</span></div>
+        </div>
+        <div class="swatches"><div class="sw" style="background:#0c0e0a;color:#f0f4e4;border-color:#343a2c">bg<span>#0c0e0a</span></div><div class="sw" style="background:#161913;color:#f0f4e4;border-color:#343a2c">surface<span>#161913</span></div><div class="sw" style="background:#343a2c;color:#0c0e0a;border-color:#343a2c">border<span>#343a2c</span></div><div class="sw" style="background:#f0f4e4;color:#0c0e0a;border-color:#343a2c">fg<span>#f0f4e4</span></div><div class="sw" style="background:#9ea88b;color:#0c0e0a;border-color:#343a2c">muted<span>#9ea88b</span></div><div class="sw" style="background:#c3f53c;color:#10160a;border-color:#343a2c">primary<span>#c3f53c</span></div><div class="sw" style="background:#c3f53c;color:#0c0e0a;border-color:#343a2c">success<span>#c3f53c</span></div><div class="sw" style="background:#e0b547;color:#0c0e0a;border-color:#343a2c">warning<span>#e0b547</span></div><div class="sw" style="background:#ff8f7c;color:#0c0e0a;border-color:#343a2c">danger<span>#ff8f7c</span></div></div>
+        <ul class="checks"><li class="ok">fg on bg<b>17.33:1</b></li><li class="ok">muted on bg<b>7.78:1</b></li><li class="ok">fg on surface<b>15.87:1</b></li><li class="ok">muted on surface<b>7.13:1</b></li><li class="ok">primary on bg<b>15.19:1</b></li><li class="ok">onPrimary on primary<b>14.41:1</b></li><li class="ok">success on bg<b>15.19:1</b></li><li class="ok">warning on bg<b>10.04:1</b></li><li class="ok">danger on bg<b>8.75:1</b></li></ul>
+      </div>
+      </div>
+    </section>
+  <footer>
+    All pairs listed are text-on-surface at 4.5:1 or better, except any marked in red — none are
+    listed with a failure. Borders are decorative and sit near 1.5:1 on purpose.
+  </footer>
+</div>
+</body>
+</html>
