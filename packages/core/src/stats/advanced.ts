@@ -265,10 +265,7 @@ function dailySeries(
   return points;
 }
 
-function monthlySeries(
-  rangeStartKey: string,
-  days: Map<string, DayAggregate>,
-): ReportTrendPoint[] {
+function monthlySeries(rangeStartKey: string, days: Map<string, DayAggregate>): ReportTrendPoint[] {
   const byMonth = new Map<string, { energyKcal: number; proteinG: number; meals: number }>();
   for (const [key, day] of days) {
     const monthKey = key.slice(0, 7);
