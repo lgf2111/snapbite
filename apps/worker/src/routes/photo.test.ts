@@ -189,6 +189,42 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(BYTES);
   });
 
+  it('lists a stored-photo meal as hasPhoto (no Telegram file id), and a manual one as not', async () => {
+    const app = createApp();
+    const cookie = await signIn(app, 'photo-list@example.com');
+    const withPhoto = await mealWithPhoto(app, cookie);
+    const manual = (await (
+      await app.request(
+        '/api/meals',
+        {
+          method: 'POST',
+          headers: { cookie, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            meal: {
+              foods: [
+                {
+                  food: { name: 'tea', estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
+                  nutrition: { energyKcal: 5, proteinG: 0, carbsG: 1, fatG: 0, source: 'table' },
+                },
+              ],
+              total: { energyKcal: 5, proteinG: 0, carbsG: 1, fatG: 0, source: 'table' },
+              confidence: 0.9,
+              needsConfirmation: false,
+            },
+          }),
+        },
+        env,
+      )
+    ).json()) as { id: string };
+
+    const list = (await (await app.request('/api/meals', { headers: { cookie } }, env)).json()) as {
+      meals: Array<{ id: string; hasPhoto: boolean }>;
+    };
+    const flag = (id: string) => list.meals.find((m) => m.id === id)?.hasPhoto;
+    expect(flag(withPhoto)).toBe(true);
+    expect(flag(manual.id)).toBe(false);
+  });
+
   it('still 401s with no credentials, and 404s for someone else’s meal', async () => {
     const app = createApp();
     const owner = await signIn(app, 'photo-owner2@example.com');

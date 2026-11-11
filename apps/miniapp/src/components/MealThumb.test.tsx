@@ -51,6 +51,17 @@ describe('MealThumb', () => {
     expect(screen.getByTestId('meal-thumb-placeholder')).toBeTruthy();
   });
 
+  it('renders the placeholder from the start when there is no photo to ask for', () => {
+    for (const src of [undefined, null, '']) {
+      const { container, unmount } = render(<MealThumb src={src} />);
+      expect(container.querySelector('img')).toBeNull();
+      const ph = screen.getByTestId('meal-thumb-placeholder');
+      expect(ph.getAttribute('aria-hidden')).toBe('true');
+      expect(ph.className).toContain('bg-secondary');
+      unmount();
+    }
+  });
+
   it('gives a different url its own chance', () => {
     const { container, rerender } = render(<MealThumb src={URL_A} />);
     fireEvent.error(container.querySelector('img') as HTMLImageElement);
@@ -70,6 +81,55 @@ describe('a meal card on Home', () => {
     aiProvider: 'gemini',
     when: Date.now(),
     ...over,
+  });
+
+  it('a manual meal gets the placeholder, and its slot is the same size as a photo meal', async () => {
+    const backend = {
+      mode: 'local' as const,
+      mealsByDate: vi.fn(async () => [
+        meal('photo', { previewUrl: '/api/meal-photo/photo' }),
+        meal('manual'),
+      ]),
+      mealsInRange: vi.fn(async () => []),
+      mealDates: vi.fn(async () => ({ dates: [], streak: null })),
+      remove: vi.fn(async () => {}),
+      photoUrl: () => null,
+    } as unknown as Backend;
+
+    const { container } = render(
+      <HomeScreen
+        backend={backend}
+        targets={null}
+        date="2026-09-16"
+        onDateChange={vi.fn()}
+        view="daily"
+        onViewChange={vi.fn()}
+        refreshSignal={0}
+        onOpenMeal={vi.fn()}
+        onSetGoal={vi.fn()}
+      />,
+    );
+    const img = await waitFor(() => {
+      const el = container.querySelector('img[src="/api/meal-photo/photo"]');
+      expect(el).not.toBeNull();
+      return el as HTMLImageElement;
+    });
+
+    // Only the meal that has a photo asks for one.
+    expect(container.querySelectorAll('img[src^="/api/meal-photo/"]')).toHaveLength(1);
+    const ph = screen.getByTestId('meal-thumb-placeholder');
+    expect(ph.className).toContain('bg-secondary');
+    // Same slot, so rows keep one height: the photo, the manual placeholder, and a
+    // failed photo's placeholder all share the same size classes.
+    const slot = (el: Element) =>
+      ['size-16', 'shrink-0', 'rounded-md'].filter((c) => el.classList.contains(c));
+    expect(slot(img)).toEqual(['size-16', 'shrink-0', 'rounded-md']);
+    expect(slot(ph)).toEqual(['size-16', 'shrink-0', 'rounded-md']);
+    fireEvent.error(img);
+    expect(screen.getAllByTestId('meal-thumb-placeholder')).toHaveLength(2);
+    for (const p of screen.getAllByTestId('meal-thumb-placeholder')) {
+      expect(slot(p)).toEqual(['size-16', 'shrink-0', 'rounded-md']);
+    }
   });
 
   it('shows the photo when it loads and the placeholder when it does not', async () => {

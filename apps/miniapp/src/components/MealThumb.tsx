@@ -7,18 +7,22 @@ const SLOT = 'size-16 shrink-0 rounded-md';
 /**
  * A meal's thumbnail.
  *
+ * With no `src` (a meal entered by hand) it is the placeholder from the start, so
+ * every row has the same slot and the list never jumps.
+ *
  * A photo that cannot be loaded (a Telegram-only file id with no stored copy, an
  * expired key, a 401) must not show the browser's broken-image glyph. The first
  * failure swaps the image for a placeholder of the same size, so the list does not
  * jump, and it never swaps back: a failing URL is not retried in a loop. The meal's
  * title already names it, so the placeholder is hidden from assistive tech.
  */
-export function MealThumb({ src }: { src: string }) {
+export function MealThumb({ src }: { src?: string | null }) {
   // Remembers WHICH url failed, so a new url (the meal was edited, the photo
   // replaced) gets its own chance.
   const [failed, setFailed] = useState<string | null>(null);
 
-  if (failed === src) {
+  // No photo to ask for (a manually entered meal), or the one we asked for failed.
+  if (!src || failed === src) {
     return (
       <div
         data-testid="meal-thumb-placeholder"
