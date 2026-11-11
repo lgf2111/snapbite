@@ -1,4 +1,11 @@
-import type { DailyTargets, MealImage, MealResult, UserProfile } from '@snapbite/core';
+import type {
+  AdvancedReport,
+  DailyTargets,
+  MealImage,
+  MealResult,
+  ReportRange,
+  UserProfile,
+} from '@snapbite/core';
 
 /** Header the Worker expects the signed initData in (matches the Worker). */
 const INIT_DATA_HEADER = 'x-telegram-init-data';
@@ -333,6 +340,16 @@ export class ApiClient {
     return this.#request<{ dates: string[]; streak: number | null }>(
       `/api/meals/dates?tz=${tzOffsetMinutes()}`,
     );
+  }
+
+  /**
+   * Advanced reports. The Worker answers 403 unless this account has the
+   * supporter tag (bought a pack or is inside the trial); the screen turns that
+   * into the locked state.
+   */
+  analytics(range: ReportRange): Promise<AdvancedReport> {
+    const params = new URLSearchParams({ range, tz: String(tzOffsetMinutes()) });
+    return this.#request<AdvancedReport>(`/api/analytics?${params}`);
   }
 
   getMeal(id: string): Promise<MealDetail> {

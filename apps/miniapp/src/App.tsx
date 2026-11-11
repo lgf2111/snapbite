@@ -27,6 +27,9 @@ const MealDetailScreen = lazy(() =>
 const OnboardingScreen = lazy(() =>
   import('./components/OnboardingScreen.js').then((m) => ({ default: m.OnboardingScreen })),
 );
+const ReportsScreen = lazy(() =>
+  import('./components/ReportsScreen.js').then((m) => ({ default: m.ReportsScreen })),
+);
 
 const backend: Backend = createBackend();
 
@@ -225,6 +228,14 @@ export function App() {
             <Suspense fallback={<ScreenFallback />}>
               <SettingsScreen backend={backend} onProfileSaved={refreshProfile} />
             </Suspense>
+          ) : route.name === 'reports' ? (
+            <Suspense fallback={<ScreenFallback />}>
+              <ReportsScreen
+                backend={backend}
+                onBack={() => navigate({ name: 'day', date: homeDate }, { replace: true })}
+                onSeeCredits={() => navigate({ name: 'settings' })}
+              />
+            </Suspense>
           ) : (
             <HomeScreen
               backend={backend}
@@ -238,6 +249,7 @@ export function App() {
               onViewChange={setHomeView}
               refreshSignal={homeVersion}
               onOpenMeal={openMeal}
+              onOpenReports={() => navigate({ name: 'reports' })}
               onSetGoal={() => setShowOnboarding(true)}
               hideInstallGuide={showOnboarding}
               onToast={toastFn}

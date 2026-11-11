@@ -114,6 +114,7 @@ describe('a meal card on Home', () => {
         onViewChange={vi.fn()}
         refreshSignal={0}
         onOpenMeal={vi.fn()}
+        onOpenReports={vi.fn()}
         onSetGoal={vi.fn()}
       />,
     );
@@ -163,6 +164,7 @@ describe('a meal card on Home', () => {
         onViewChange={vi.fn()}
         refreshSignal={0}
         onOpenMeal={vi.fn()}
+        onOpenReports={vi.fn()}
         onSetGoal={vi.fn()}
       />,
     );

@@ -528,7 +528,7 @@ export interface DayGroup {
  * positive when the zone is behind UTC). Clamped to ±16h; 0 (UTC) on anything
  * invalid or absent — back-compat for older clients that don't send it.
  */
-function parseTzOffset(raw: string | undefined): number {
+export function parseTzOffset(raw: string | undefined): number {
   const n = Number.parseInt(raw ?? '', 10);
   if (!Number.isFinite(n)) return 0;
   return Math.max(-960, Math.min(960, n));

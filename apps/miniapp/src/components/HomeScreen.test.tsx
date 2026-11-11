@@ -65,6 +65,7 @@ function props(backend: Backend, over: Record<string, unknown> = {}) {
     onViewChange: vi.fn(),
     refreshSignal: 0,
     onOpenMeal: vi.fn(),
+    onOpenReports: vi.fn(),
     onSetGoal: vi.fn(),
     ...over,
   };
@@ -432,5 +433,14 @@ describe('HomeScreen', () => {
 
     await waitFor(() => expect(reviseDraft).toHaveBeenCalledWith('x', 'the portion was double'));
     await waitFor(() => expect(update).toHaveBeenCalledWith('x', draft));
+  });
+
+  it('offers Reports under the rings and opens it', async () => {
+    const onOpenReports = vi.fn();
+    render(<HomeScreen {...props(stubBackend(), { targets: TARGETS, onOpenReports })} />);
+
+    expect(await screen.findByText('Trend · Adherence · Report card')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /reports/i }));
+    expect(onOpenReports).toHaveBeenCalledTimes(1);
   });
 });
