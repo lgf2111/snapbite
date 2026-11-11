@@ -127,9 +127,11 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
       } else if (body.delivered) {
         setNotice(`Check ${email} for the sign-in link. It expires in 15 minutes.`);
       } else if (body.link) {
-        // Email is not configured yet: hand the link over instead of hiding it.
+        // Development only: the Worker returns the link when DEV_LOGIN_LINKS=1.
         setNotice('Email is not configured, so here is the link: ');
         window.location.href = body.link;
+      } else {
+        setError('Could not send the sign-in email right now. Try again later.');
       }
     } catch {
       setError('Could not reach the server.');

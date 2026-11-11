@@ -81,6 +81,44 @@ describe('optional sign-in', () => {
     expect(body.link).toContain('/verify?token=');
   });
 
+  it('never returns the link to the requester unless a developer opted in', async () => {
+    // Production has no email provider and no DEV_LOGIN_LINKS: this is its exact situation.
+    const app = createApp();
+    const prod = { ...env, DEV_LOGIN_LINKS: undefined, RESEND_API_KEY: undefined };
+    const res = await app.request(
+      '/api/auth/login',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'victim@example.com' }),
+      },
+      prod,
+    );
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(JSON.parse(text)).toEqual({ ok: true, delivered: false });
+    expect(text).not.toContain('/verify');
+    expect(text).not.toContain('token');
+  });
+
+  it('answers the same for an address that owns an account and one that does not', async () => {
+    const app = createApp();
+    const prod = { ...env, DEV_LOGIN_LINKS: undefined };
+    const ask = async (email: string) =>
+      (
+        await app.request(
+          '/api/auth/login',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ email }),
+          },
+          prod,
+        )
+      ).json();
+    expect(await ask('nobody-here@example.com')).toEqual(await ask('someone@example.com'));
+  });
+
   it('rejects an invalid email address', async () => {
     const app = createApp();
     const res = await submitLogin(app, 'not-an-email');

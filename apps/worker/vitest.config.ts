@@ -34,6 +34,8 @@ export default defineWorkersConfig(async () => {
               ERRORS_THREAD_ID: '',
               FEEDBACK_THREAD_ID: '',
               BROADCAST_THREAD_ID: '',
+              // Tests read the magic link out of the login response; production never sets this.
+              DEV_LOGIN_LINKS: '1',
               TEST_MIGRATIONS: migrations,
             },
           },

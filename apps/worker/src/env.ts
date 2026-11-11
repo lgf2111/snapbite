@@ -33,7 +33,13 @@ export interface Env {
   FEEDBACK_THREAD_ID?: string;
   /** Forum Topic for broadcast records in the admin group. */
   BROADCAST_THREAD_ID?: string;
-  /** Resend API key for sign-in emails. Unset => magic links are returned inline. */
+  /**
+   * Local development only: '1' makes /api/auth/login hand the magic link back in
+   * the response when no email can be sent. Never set it in production: the link
+   * signs in as whatever address was typed.
+   */
+  DEV_LOGIN_LINKS?: string;
+  /** Resend API key for sign-in emails. Unset => no email is sent (and no link is returned). */
   RESEND_API_KEY?: string;
   /** From address for sign-in emails, e.g. "SnapBite <login@example.com>". */
   EMAIL_FROM?: string;

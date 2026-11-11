@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AccountCard } from './AccountCard.js';
 
@@ -128,5 +128,31 @@ describe('AccountCard when signed in', () => {
     );
     await act(async () => {});
     window.history.replaceState({}, '', '/');
+  });
+
+  it('says so when the email could not be sent, instead of staying silent', async () => {
+    vi.stubEnv('VITE_WORKER_URL', 'https://worker.test');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        if (url.endsWith('/providers')) return Response.json({ email: true, google: false });
+        if (url.endsWith('/login') && init?.method === 'POST')
+          return Response.json({ ok: true, delivered: false });
+        return Response.json({
+          signedIn: false,
+          via: null,
+          method: null,
+          email: null,
+          userId: null,
+        });
+      }),
+    );
+    render(<AccountCard />);
+
+    const input = await screen.findByLabelText('Email address');
+    fireEvent.change(input, { target: { value: 'a@b.co' } });
+    fireEvent.click(screen.getByRole('button', { name: /email me a sign-in link/i }));
+
+    expect(await screen.findByText(/could not send the sign-in email/i)).toBeTruthy();
   });
 });
