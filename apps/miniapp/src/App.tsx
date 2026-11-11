@@ -197,7 +197,13 @@ export function App() {
 
       {showOnboarding && (
         <SetupLayer onDismiss={() => finishOnboarding({ skipped: true })}>
-          <Suspense fallback={<ScreenFallback />}>
+          <Suspense
+            fallback={
+              <div className="mx-auto max-w-md px-4 pt-[calc(1rem+env(safe-area-inset-top))]">
+                <ScreenFallback />
+              </div>
+            }
+          >
             <OnboardingScreen
               backend={backend}
               startAtKeyStep={resumeKeyStep}
