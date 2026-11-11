@@ -15,14 +15,19 @@ interface HelpItem {
  * open/close animation and styling behave the same in Safari's in-app webview,
  * Chrome, and the Telegram client.
  */
-export function HelpAccordion({ items, label = 'Need help?' }: { items: HelpItem[]; label?: string }) {
+export function HelpAccordion({
+  items,
+  label = 'Need help?',
+}: { items: HelpItem[]; label?: string }) {
   const baseId = useId();
   const [open, setOpen] = useState<number | null>(null);
 
   return (
     <div className="rounded-xl border border-border/60">
       <div className="flex items-center gap-2 px-4 pt-3 pb-1">
-        <span aria-hidden className="text-sm">💡</span>
+        <span aria-hidden className="text-sm">
+          💡
+        </span>
         <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           {label}
         </span>

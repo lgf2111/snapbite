@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible } from '@/components/ui/collapsible';
 import {
@@ -14,10 +13,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
-import { LinkifiedHint } from './LinkifiedHint.js';
-import { AccountCard } from './AccountCard.js';
 import { cacheKey, getCached, revalidate } from '@/lib/cache';
 import { downloadViaTelegram, openExportUrl } from '@/lib/telegram';
 import { cn } from '@/lib/utils';
@@ -51,7 +49,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { AccountCard } from './AccountCard.js';
 import { InfoDisclosure } from './InfoDisclosure.js';
+import { LinkifiedHint } from './LinkifiedHint.js';
 import { MacroLine } from './MacroLine.js';
 import { ProfileForm } from './ProfileForm.js';
 import { type ProviderConfig, ProviderPicker } from './ProviderPicker.js';

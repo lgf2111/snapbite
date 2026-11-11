@@ -1,12 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
-import {
-  cookies,
-  deviceLookupHash,
-  mintDeviceToken,
-  readCookies,
-} from '../auth/cookies.js';
-import { resolveDeviceToken } from '../db/deviceTokens.js';
+import { cookies, deviceLookupHash, mintDeviceToken, readCookies } from '../auth/cookies.js';
 import { createAuthDb, findOrCreateDeviceUser, findSessionUser } from '../db/auth.js';
+import { resolveDeviceToken } from '../db/deviceTokens.js';
 import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';
 import { INIT_DATA_HEADER } from './auth.js';

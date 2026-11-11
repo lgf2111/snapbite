@@ -50,9 +50,7 @@ export function App() {
   // (A signal, NOT a remount key — so Home keeps its selected day/view.)
   const [homeVersion, setHomeVersion] = useState(0);
   // Home's selected day comes from the URL; the view toggle stays in memory.
-  const [homeDate, setHomeDate] = useState(() =>
-    route.name === 'day' ? route.date : todayKey(),
-  );
+  const [homeDate, setHomeDate] = useState(() => (route.name === 'day' ? route.date : todayKey()));
   const [homeView, setHomeView] = useState<'daily' | 'weekly'>('daily');
   const [captureOpen, setCaptureOpen] = useState(false);
 

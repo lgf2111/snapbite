@@ -203,7 +203,7 @@ body {
   position: relative;
 }
 .hit-slop::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: -10px;
 }

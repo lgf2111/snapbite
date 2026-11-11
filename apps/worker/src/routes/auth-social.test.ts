@@ -1,10 +1,10 @@
 import { env } from 'cloudflare:test';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
-import { createAuthDb, attachEmailToUser } from '../db/auth.js';
-import { createDb } from '../db/users.js';
+import { attachEmailToUser, createAuthDb } from '../db/auth.js';
 import { users } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { createDb } from '../db/users.js';
 
 function cookieOf(setCookie: string | null, name: string): string | null {
   if (!setCookie) return null;

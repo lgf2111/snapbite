@@ -1,5 +1,12 @@
 import { type Context, Hono } from 'hono';
-import { cookies, deviceLookupHash, hashDeviceToken, mintDeviceToken, readCookies } from '../auth/cookies.js';
+import {
+  cookies,
+  deviceLookupHash,
+  hashDeviceToken,
+  mintDeviceToken,
+  readCookies,
+} from '../auth/cookies.js';
+import { google, newState, oauthStateCookie, redirectUriFor } from '../auth/social.js';
 import {
   type AuthDb,
   attachEmailToUser,
@@ -14,12 +21,6 @@ import {
   looksLikeEmail,
   normalizeEmail,
 } from '../db/auth.js';
-import {
-  google,
-  newState,
-  oauthStateCookie,
-  redirectUriFor,
-} from '../auth/social.js';
 import type { AppBindings } from '../env.js';
 
 /** A magic link is useless without somewhere to send it. */
@@ -32,7 +33,11 @@ function canSendEmail(env: AppBindings['Bindings']): boolean {
  * Returns false when delivery is not configured or the API rejects it, so the
  * caller can answer honestly instead of pretending.
  */
-async function sendMagicLink(env: AppBindings['Bindings'], to: string, link: string): Promise<boolean> {
+async function sendMagicLink(
+  env: AppBindings['Bindings'],
+  to: string,
+  link: string,
+): Promise<boolean> {
   if (!canSendEmail(env)) return false;
   try {
     const res = await fetch('https://api.resend.com/emails', {
@@ -156,7 +161,10 @@ export function authRoutes() {
 
     const sessionRaw = await createSession(authDb, userId);
     const opts = cookieOptionsFor(c);
-    c.header('set-cookie', cookies.serialise(cookies.session, sessionRaw, opts, cookies.sessionMaxAge));
+    c.header(
+      'set-cookie',
+      cookies.serialise(cookies.session, sessionRaw, opts, cookies.sessionMaxAge),
+    );
     return c.redirect(`${appOrigin}/?auth=ok`, 302);
   });
 

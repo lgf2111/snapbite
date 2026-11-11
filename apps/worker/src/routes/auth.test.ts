@@ -1,12 +1,12 @@
 import { env } from 'cloudflare:test';
 import { signInitData } from '@snapbite/core';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { attachEmailToUser, createAuthDb, findSessionUser, normalizeEmail } from '../db/auth.js';
-import { INIT_DATA_HEADER } from '../middleware/auth.js';
-import { createDb, upsertUser } from '../db/users.js';
-import { eq } from 'drizzle-orm';
 import { users } from '../db/schema.js';
+import { createDb, upsertUser } from '../db/users.js';
+import { INIT_DATA_HEADER } from '../middleware/auth.js';
 
 const BOT_TOKEN = '123456:LOCAL-DEV-BOT-TOKEN';
 
@@ -93,7 +93,9 @@ describe('optional sign-in', () => {
     // Start anonymous, log a meal so we can prove nothing is lost.
     const anon = await app.request('/api/meals', {}, env);
     const device = cookieOf(anon.headers.get('set-cookie'), 'sb_device') as string;
-    const before = (await (await app.request('/api/me', { headers: { cookie: device } }, env)).json()) as {
+    const before = (await (
+      await app.request('/api/me', { headers: { cookie: device } }, env)
+    ).json()) as {
       userId: string;
     };
 
@@ -102,7 +104,11 @@ describe('optional sign-in', () => {
     };
     const token = new URL(login.link).searchParams.get('token') as string;
 
-    const verify = await app.request(`/api/auth/verify?token=${token}`, { headers: { cookie: device } }, env);
+    const verify = await app.request(
+      `/api/auth/verify?token=${token}`,
+      { headers: { cookie: device } },
+      env,
+    );
     expect(verify.status).toBe(302);
     const session = cookieOf(verify.headers.get('set-cookie'), 'sb_session') as string;
 
@@ -158,7 +164,11 @@ describe('optional sign-in', () => {
     const verify = await app.request(`/api/auth/verify?token=${token}`, {}, env);
     const session = cookieOf(verify.headers.get('set-cookie'), 'sb_session') as string;
 
-    const out = await app.request('/api/auth/logout', { method: 'POST', headers: { cookie: session } }, env);
+    const out = await app.request(
+      '/api/auth/logout',
+      { method: 'POST', headers: { cookie: session } },
+      env,
+    );
     expect(out.status).toBe(200);
     const cleared = out.headers.get('set-cookie') ?? '';
     expect(cleared).toContain('sb_session=');
@@ -195,11 +205,15 @@ describe('optional sign-in', () => {
     const app = createApp();
     const tgId = 9302;
     const headers = await tgHeaders(tgId);
-    const before = (await (await app.request('/api/me', { headers }, env)).json()) as { userId: string };
+    const before = (await (await app.request('/api/me', { headers }, env)).json()) as {
+      userId: string;
+    };
     expect(before.userId).toBeTruthy();
 
     await upsertUser(createDb(env.DB), { id: tgId });
-    const login = (await (await submitLogin(app, 'bot-user@example.com')).json()) as { link: string };
+    const login = (await (await submitLogin(app, 'bot-user@example.com')).json()) as {
+      link: string;
+    };
     const token = new URL(login.link).searchParams.get('token') as string;
     const verify = await app.request(`/api/auth/verify?token=${token}`, {}, env);
     expect(verify.status).toBe(302);
@@ -227,7 +241,11 @@ describe('optional sign-in', () => {
       link: string;
     };
     const token = new URL(login.link).searchParams.get('token') as string;
-    const verify = await app.request(`/api/auth/verify?token=${token}`, { headers: { cookie: device } }, env);
+    const verify = await app.request(
+      `/api/auth/verify?token=${token}`,
+      { headers: { cookie: device } },
+      env,
+    );
     const session = cookieOf(verify.headers.get('set-cookie'), 'sb_session') as string;
 
     const me = (await (
@@ -277,7 +295,10 @@ describe('optional sign-in', () => {
     expect(res.status).toBe(200);
 
     // No second account may end up owning that address.
-    const owners = await createDb(env.DB).select().from(users).where(eq(users.email, 'owner@example.com'));
+    const owners = await createDb(env.DB)
+      .select()
+      .from(users)
+      .where(eq(users.email, 'owner@example.com'));
     expect(owners).toHaveLength(1);
   });
 });

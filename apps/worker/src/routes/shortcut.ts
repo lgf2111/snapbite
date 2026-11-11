@@ -10,8 +10,8 @@ import { describeError, logError } from '../db/errors.js';
 import { countMealsSince, createMealsDb, saveMeal, setMealPhoto } from '../db/meals.js';
 import { recordMealSave } from '../db/metrics.js';
 import { createSettingsDb, getSettings } from '../db/settings.js';
-import { photoKey, r2Store } from '../storage/photos.js';
 import type { AppBindings } from '../env.js';
+import { photoKey, r2Store } from '../storage/photos.js';
 import {
   ALLOWED_MIME,
   type ProviderFactory,
@@ -83,15 +83,26 @@ async function shrinkImage(base64: string, mimeType: string): Promise<Compressed
   if (original.bytes <= MAX_BYTES || !/^image\/(jpeg|png|webp)$/.test(mimeType)) return original;
   // The Workers runtime provides both of these, but @cloudflare/workers-types
   // doesn't declare them yet — narrow casts keep tsc honest without `any`.
-  const canvasCtor = (globalThis as unknown as {
-    OffscreenCanvas?: new (w: number, h: number) => {
-      getContext(t: '2d'): { drawImage(img: unknown, x: number, y: number, w: number, h: number): void } | null;
-      convertToBlob(o: { type: string; quality?: number }): Promise<Blob>;
-    };
-  }).OffscreenCanvas;
-  const decode = (globalThis as unknown as {
-    createImageBitmap?: (src: Blob) => Promise<{ width: number; height: number; close?: () => void }>;
-  }).createImageBitmap;
+  const canvasCtor = (
+    globalThis as unknown as {
+      OffscreenCanvas?: new (
+        w: number,
+        h: number,
+      ) => {
+        getContext(
+          t: '2d',
+        ): { drawImage(img: unknown, x: number, y: number, w: number, h: number): void } | null;
+        convertToBlob(o: { type: string; quality?: number }): Promise<Blob>;
+      };
+    }
+  ).OffscreenCanvas;
+  const decode = (
+    globalThis as unknown as {
+      createImageBitmap?: (
+        src: Blob,
+      ) => Promise<{ width: number; height: number; close?: () => void }>;
+    }
+  ).createImageBitmap;
   if (!canvasCtor || !decode) return original;
 
   try {
@@ -116,7 +127,11 @@ async function shrinkImage(base64: string, mimeType: string): Promise<Compressed
     if (!blob || blob.size >= original.bytes) return original;
 
     const out = new Uint8Array(await blob.arrayBuffer());
-    return { base64: base64FromBytes(out.buffer as ArrayBuffer), mimeType: 'image/jpeg', bytes: out.length };
+    return {
+      base64: base64FromBytes(out.buffer as ArrayBuffer),
+      mimeType: 'image/jpeg',
+      bytes: out.length,
+    };
   } catch {
     return original;
   }
@@ -169,7 +184,10 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
     const tokensDb = createDeviceTokensDb(c.env.DB);
     const resolved = await resolveDeviceToken(tokensDb, await hashDeviceToken(raw));
     if (!resolved) {
-      return c.text('Device token is invalid or revoked. Send /token to the SnapBite bot for a new one.', 401);
+      return c.text(
+        'Device token is invalid or revoked. Send /token to the SnapBite bot for a new one.',
+        401,
+      );
     }
     await touchDeviceToken(tokensDb, resolved.tokenId);
 
@@ -201,7 +219,11 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
         mimeType = sniffMime(bytes) ?? contentType.split(';')[0] ?? '';
         base64 = base64FromBytes(bytes.buffer as ArrayBuffer);
       } else if (contentType.includes('application/json') || contentType === '') {
-        const body = (await c.req.json()) as { base64?: unknown; mimeType?: unknown; hint?: unknown };
+        const body = (await c.req.json()) as {
+          base64?: unknown;
+          mimeType?: unknown;
+          hint?: unknown;
+        };
         base64 = typeof body.base64 === 'string' ? body.base64 : '';
         mimeType = typeof body.mimeType === 'string' ? body.mimeType : '';
         if (typeof body.hint === 'string' && body.hint.trim()) hint = body.hint.trim();

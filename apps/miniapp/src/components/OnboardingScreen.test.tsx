@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { OnboardingScreen } from './OnboardingScreen.js';
 import type { Backend } from '../lib/backend.js';
+import { OnboardingScreen } from './OnboardingScreen.js';
 
 /**
  * The bug this pins: finishing step 1 saved the profile server-side, but the
@@ -40,7 +40,9 @@ describe('OnboardingScreen resume', () => {
     // Fill the profile form and advance.
     const dob = document.querySelector('input[type=date]') as HTMLInputElement;
     fireEvent.change(dob, { target: { value: '1990-05-05' } });
-    const next = screen.getAllByRole('button').find((b) => /set my goal/i.test(b.textContent ?? ''));
+    const next = screen
+      .getAllByRole('button')
+      .find((b) => /set my goal/i.test(b.textContent ?? ''));
     expect(next).toBeTruthy();
     fireEvent.click(next as HTMLButtonElement);
 
@@ -58,7 +60,9 @@ describe('OnboardingScreen resume', () => {
     const onSkip = vi.fn();
     render(<OnboardingScreen backend={backend} startAtKeyStep onDone={vi.fn()} onSkip={onSkip} />);
 
-    const skip = screen.getAllByRole('button').find((b) => /track meals manually/i.test(b.textContent ?? ''));
+    const skip = screen
+      .getAllByRole('button')
+      .find((b) => /track meals manually/i.test(b.textContent ?? ''));
     fireEvent.click(skip as HTMLButtonElement);
 
     await waitFor(() => expect(onSkip).toHaveBeenCalled());

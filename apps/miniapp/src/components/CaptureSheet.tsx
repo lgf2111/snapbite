@@ -1,11 +1,11 @@
+import { cn } from '@/lib/utils';
 import type { MealResult } from '@snapbite/core';
-import { useRef, useState } from 'react';
 import { Camera, ImageIcon, Loader2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import type { Backend } from '../lib/backend.js';
+import { compressPhoto } from '../lib/compress.js';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
-import { compressPhoto } from '../lib/compress.js';
-import type { Backend } from '../lib/backend.js';
-import { cn } from '@/lib/utils';
 
 type Stage = 'idle' | 'analysing' | 'review' | 'saving' | 'error';
 

@@ -40,10 +40,10 @@ async function mountMiniApp(): Promise<void> {
  */
 async function completeSignIn(token: string, apiBase: string): Promise<void> {
   try {
-    const res = await fetch(
-      `${apiBase}/api/auth/verify?token=${encodeURIComponent(token)}`,
-      { credentials: 'include', redirect: 'follow' },
-    );
+    const res = await fetch(`${apiBase}/api/auth/verify?token=${encodeURIComponent(token)}`, {
+      credentials: 'include',
+      redirect: 'follow',
+    });
     const ok = res.ok || res.type === 'opaqueredirect';
     window.location.replace(ok ? '/?auth=ok' : '/?auth=expired');
   } catch {

@@ -59,7 +59,9 @@ export const google: SocialProvider = {
   id: 'google',
 
   configured(env) {
-    return Boolean(cleanCredential(env.GOOGLE_CLIENT_ID) && cleanCredential(env.GOOGLE_CLIENT_SECRET));
+    return Boolean(
+      cleanCredential(env.GOOGLE_CLIENT_ID) && cleanCredential(env.GOOGLE_CLIENT_SECRET),
+    );
   },
 
   authorizeUrl(env, { state, redirectUri }) {

@@ -1,37 +1,79 @@
 import { ExternalLink } from './ExternalLink.js';
-import { ACCENT, HelpAccordion, HelpFigure, MUTED, MockBrowser, SURFACE, Step, TEXT } from './HelpAccordion.js';
-
-
+import {
+  ACCENT,
+  HelpAccordion,
+  HelpFigure,
+  MUTED,
+  MockBrowser,
+  SURFACE,
+  Step,
+  TEXT,
+} from './HelpAccordion.js';
 
 /** Fallbacks for the delete/replace section. */
 function KeyMenuPanel() {
   return (
-    <svg viewBox="0 0 360 160" className="w-full" role="img" aria-label="API key row with the three-dot menu open">
+    <svg
+      viewBox="0 0 360 160"
+      className="w-full"
+      role="img"
+      aria-label="API key row with the three-dot menu open"
+    >
       <rect width="360" height="160" fill="#0b1219" />
       <rect x="16" y="22" width="328" height="112" rx="10" fill={SURFACE} stroke="#22303d" />
-      <text x="32" y="46" fontSize="9" fill={ACCENT} fontFamily="monospace">…By0Q</text>
-      <text x="32" y="60" fontSize="7.5" fill={MUTED} fontFamily="system-ui, sans-serif">SnapBite</text>
+      <text x="32" y="46" fontSize="9" fill={ACCENT} fontFamily="monospace">
+        …By0Q
+      </text>
+      <text x="32" y="60" fontSize="7.5" fill={MUTED} fontFamily="system-ui, sans-serif">
+        SnapBite
+      </text>
       <circle cx="300" cy="44" r="2" fill={MUTED} />
       <circle cx="300" cy="50" r="2" fill={MUTED} />
       <circle cx="300" cy="56" r="2" fill={MUTED} />
       <rect x="248" y="66" width="92" height="52" rx="8" fill="#16222e" stroke="#2b3947" />
-      <text x="260" y="86" fontSize="8" fill={TEXT} fontFamily="system-ui, sans-serif">✎ Rename key</text>
-      <text x="260" y="106" fontSize="8" fill="#ff7b72" fontFamily="system-ui, sans-serif">🗑 Delete key</text>
+      <text x="260" y="86" fontSize="8" fill={TEXT} fontFamily="system-ui, sans-serif">
+        ✎ Rename key
+      </text>
+      <text x="260" y="106" fontSize="8" fill="#ff7b72" fontFamily="system-ui, sans-serif">
+        🗑 Delete key
+      </text>
     </svg>
   );
 }
 
 function DeleteDialogPanel() {
   return (
-    <svg viewBox="0 0 360 170" className="w-full" role="img" aria-label="Delete API key confirmation">
+    <svg
+      viewBox="0 0 360 170"
+      className="w-full"
+      role="img"
+      aria-label="Delete API key confirmation"
+    >
       <rect width="360" height="170" fill="#0b1219" />
       <rect x="20" y="26" width="320" height="118" rx="12" fill={SURFACE} stroke="#22303d" />
-      <text x="36" y="52" fontSize="9.5" fill={TEXT} fontFamily="system-ui, sans-serif">Delete API key?</text>
-      <text x="36" y="70" fontSize="7" fill={MUTED} fontFamily="system-ui, sans-serif">Apps or services using this key will stop working.</text>
-      <text x="36" y="82" fontSize="7" fill={MUTED} fontFamily="system-ui, sans-serif">This action cannot be undone.</text>
-      <text x="228" y="126" fontSize="8" fill={MUTED} fontFamily="system-ui, sans-serif">Cancel</text>
+      <text x="36" y="52" fontSize="9.5" fill={TEXT} fontFamily="system-ui, sans-serif">
+        Delete API key?
+      </text>
+      <text x="36" y="70" fontSize="7" fill={MUTED} fontFamily="system-ui, sans-serif">
+        Apps or services using this key will stop working.
+      </text>
+      <text x="36" y="82" fontSize="7" fill={MUTED} fontFamily="system-ui, sans-serif">
+        This action cannot be undone.
+      </text>
+      <text x="228" y="126" fontSize="8" fill={MUTED} fontFamily="system-ui, sans-serif">
+        Cancel
+      </text>
       <rect x="272" y="112" width="56" height="20" rx="10" fill="#b3261e" />
-      <text x="300" y="126" fontSize="8" fill="#fff" textAnchor="middle" fontFamily="system-ui, sans-serif">Delete</text>
+      <text
+        x="300"
+        y="126"
+        fontSize="8"
+        fill="#fff"
+        textAnchor="middle"
+        fontFamily="system-ui, sans-serif"
+      >
+        Delete
+      </text>
     </svg>
   );
 }
@@ -41,49 +83,128 @@ function SignInPanel() {
   return (
     <svg viewBox="0 0 360 200" className="w-full" role="img" aria-label="Google sign-in page">
       <rect width="360" height="200" fill="#0b1219" />
-      <text x="180" y="52" fontSize="18" fill={TEXT} textAnchor="middle" fontFamily="system-ui, sans-serif">G</text>
-      <text x="180" y="82" fontSize="11" fill={TEXT} textAnchor="middle" fontFamily="system-ui, sans-serif">Sign in</text>
-      <text x="180" y="98" fontSize="7.5" fill={MUTED} textAnchor="middle" fontFamily="system-ui, sans-serif">Use your Google Account</text>
+      <text
+        x="180"
+        y="52"
+        fontSize="18"
+        fill={TEXT}
+        textAnchor="middle"
+        fontFamily="system-ui, sans-serif"
+      >
+        G
+      </text>
+      <text
+        x="180"
+        y="82"
+        fontSize="11"
+        fill={TEXT}
+        textAnchor="middle"
+        fontFamily="system-ui, sans-serif"
+      >
+        Sign in
+      </text>
+      <text
+        x="180"
+        y="98"
+        fontSize="7.5"
+        fill={MUTED}
+        textAnchor="middle"
+        fontFamily="system-ui, sans-serif"
+      >
+        Use your Google Account
+      </text>
       <rect x="60" y="118" width="240" height="22" rx="6" fill={SURFACE} stroke="#2b3947" />
-      <text x="72" y="133" fontSize="7.5" fill={MUTED} fontFamily="system-ui, sans-serif">Email or phone</text>
+      <text x="72" y="133" fontSize="7.5" fill={MUTED} fontFamily="system-ui, sans-serif">
+        Email or phone
+      </text>
       <rect x="240" y="152" width="60" height="20" rx="10" fill={ACCENT} />
-      <text x="270" y="166" fontSize="8" fill="#06121f" textAnchor="middle" fontFamily="system-ui, sans-serif">Next</text>
+      <text
+        x="270"
+        y="166"
+        fontSize="8"
+        fill="#06121f"
+        textAnchor="middle"
+        fontFamily="system-ui, sans-serif"
+      >
+        Next
+      </text>
     </svg>
   );
 }
 
 function ProjectPickerPanel() {
   return (
-    <svg viewBox="0 0 360 200" className="w-full" role="img" aria-label="Create a new key dialog with project dropdown">
+    <svg
+      viewBox="0 0 360 200"
+      className="w-full"
+      role="img"
+      aria-label="Create a new key dialog with project dropdown"
+    >
       <rect width="360" height="200" fill="#0b1219" />
       <rect x="24" y="22" width="312" height="156" rx="12" fill={SURFACE} stroke="#22303d" />
-      <text x="40" y="46" fontSize="9.5" fill={TEXT} fontFamily="system-ui, sans-serif">Create a new key</text>
-      <text x="40" y="64" fontSize="7" fill={MUTED} fontFamily="system-ui, sans-serif">Name your key</text>
+      <text x="40" y="46" fontSize="9.5" fill={TEXT} fontFamily="system-ui, sans-serif">
+        Create a new key
+      </text>
+      <text x="40" y="64" fontSize="7" fill={MUTED} fontFamily="system-ui, sans-serif">
+        Name your key
+      </text>
       <rect x="40" y="68" width="280" height="18" rx="6" fill="#0b1219" stroke="#2b3947" />
-      <text x="50" y="81" fontSize="7.5" fill={TEXT} fontFamily="system-ui, sans-serif">Gemini API Key</text>
-      <text x="40" y="102" fontSize="7" fill={MUTED} fontFamily="system-ui, sans-serif">Choose an imported project</text>
+      <text x="50" y="81" fontSize="7.5" fill={TEXT} fontFamily="system-ui, sans-serif">
+        Gemini API Key
+      </text>
+      <text x="40" y="102" fontSize="7" fill={MUTED} fontFamily="system-ui, sans-serif">
+        Choose an imported project
+      </text>
       <rect x="40" y="106" width="280" height="18" rx="6" fill="#0b1219" stroke={ACCENT} />
-      <text x="50" y="119" fontSize="7.5" fill={TEXT} fontFamily="system-ui, sans-serif">SnapBite</text>
-      <text x="50" y="136" fontSize="7.5" fill={ACCENT} fontFamily="system-ui, sans-serif">Import project</text>
-      <text x="50" y="150" fontSize="7.5" fill={ACCENT} fontFamily="system-ui, sans-serif">+ Create project</text>
+      <text x="50" y="119" fontSize="7.5" fill={TEXT} fontFamily="system-ui, sans-serif">
+        SnapBite
+      </text>
+      <text x="50" y="136" fontSize="7.5" fill={ACCENT} fontFamily="system-ui, sans-serif">
+        Import project
+      </text>
+      <text x="50" y="150" fontSize="7.5" fill={ACCENT} fontFamily="system-ui, sans-serif">
+        + Create project
+      </text>
       <rect x="250" y="156" width="70" height="18" rx="9" fill={ACCENT} />
-      <text x="285" y="169" fontSize="7.5" fill="#06121f" textAnchor="middle" fontFamily="system-ui, sans-serif">Create key</text>
+      <text
+        x="285"
+        y="169"
+        fontSize="7.5"
+        fill="#06121f"
+        textAnchor="middle"
+        fontFamily="system-ui, sans-serif"
+      >
+        Create key
+      </text>
     </svg>
   );
 }
 
 function KeyDetailsPanel() {
   return (
-    <svg viewBox="0 0 360 200" className="w-full" role="img" aria-label="API key details with copy icon">
+    <svg
+      viewBox="0 0 360 200"
+      className="w-full"
+      role="img"
+      aria-label="API key details with copy icon"
+    >
       <rect width="360" height="200" fill="#0b1219" />
       <rect x="20" y="24" width="320" height="150" rx="12" fill={SURFACE} stroke="#22303d" />
-      <text x="36" y="48" fontSize="9.5" fill={TEXT} fontFamily="system-ui, sans-serif">API key details</text>
-      <text x="36" y="72" fontSize="7" fill={MUTED} fontFamily="system-ui, sans-serif">API Key</text>
-      <text x="36" y="88" fontSize="7.5" fill={TEXT} fontFamily="monospace">AQ.Ab8RN6••••••••••••</text>
+      <text x="36" y="48" fontSize="9.5" fill={TEXT} fontFamily="system-ui, sans-serif">
+        API key details
+      </text>
+      <text x="36" y="72" fontSize="7" fill={MUTED} fontFamily="system-ui, sans-serif">
+        API Key
+      </text>
+      <text x="36" y="88" fontSize="7.5" fill={TEXT} fontFamily="monospace">
+        AQ.Ab8RN6••••••••••••
+      </text>
       <rect x="286" y="78" width="14" height="14" rx="3" fill="none" stroke={ACCENT} />
       <rect x="290" y="74" width="14" height="14" rx="3" fill="none" stroke={ACCENT} />
       <circle cx="300" cy="84" r="16" fill="none" stroke="#ffd166" strokeDasharray="3 3" />
-      <text x="36" y="118" fontSize="6.5" fill={MUTED} fontFamily="system-ui, sans-serif">Tap the copy icon — then paste it back in SnapBite.</text>
+      <text x="36" y="118" fontSize="6.5" fill={MUTED} fontFamily="system-ui, sans-serif">
+        Tap the copy icon — then paste it back in SnapBite.
+      </text>
     </svg>
   );
 }
@@ -91,7 +212,12 @@ function KeyDetailsPanel() {
 /** Diagram: the project picker that appears when a key has no project yet. */
 function ProjectPanel() {
   return (
-    <svg viewBox="0 0 360 200" className="w-full" role="img" aria-label="Create a project for the API key">
+    <svg
+      viewBox="0 0 360 200"
+      className="w-full"
+      role="img"
+      aria-label="Create a project for the API key"
+    >
       <rect width="360" height="200" fill="#0b1219" />
       <rect x="24" y="22" width="312" height="156" rx="12" fill={SURFACE} stroke="#22303d" />
       <text x="40" y="46" fontSize="9.5" fill={TEXT} fontFamily="system-ui, sans-serif">
@@ -146,7 +272,16 @@ function StudioPanel() {
       <text x="262" y="48" fontSize="8" fill="#06121f" fontFamily="system-ui, sans-serif">
         Create API key
       </text>
-      <rect x="250" y="26" width="100" height="36" rx="12" fill="none" stroke="#ffd166" strokeDasharray="4 3" />
+      <rect
+        x="250"
+        y="26"
+        width="100"
+        height="36"
+        rx="12"
+        fill="none"
+        stroke="#ffd166"
+        strokeDasharray="4 3"
+      />
       {/* key list */}
       <rect x="18" y="72" width="324" height="46" rx="8" fill={SURFACE} stroke="#22303d" />
       <text x="30" y="90" fontSize="8" fill={MUTED} fontFamily="system-ui, sans-serif">
@@ -169,7 +304,12 @@ function StudioPanel() {
 /** Diagram: where the key goes once copied. */
 function PasteDiagram() {
   return (
-    <svg viewBox="0 0 360 140" className="w-full" role="img" aria-label="Paste the key into SnapBite">
+    <svg
+      viewBox="0 0 360 140"
+      className="w-full"
+      role="img"
+      aria-label="Paste the key into SnapBite"
+    >
       <rect width="360" height="140" fill="#0b1219" />
       <text x="16" y="24" fontSize="9" fill={TEXT} fontFamily="system-ui, sans-serif">
         Back in SnapBite
@@ -259,8 +399,8 @@ export function KeyHelp() {
                 <Step n={4} title="Create the project (only if you had none)">
                   <p className="text-muted-foreground text-xs">
                     Name it anything — <code className="font-mono">SnapBite</code> is fine. Press{' '}
-                    <strong className="text-foreground">Create project</strong> and wait for
-                    “New project created!”.
+                    <strong className="text-foreground">Create project</strong> and wait for “New
+                    project created!”.
                   </p>
                   <p className="text-muted-foreground text-xs">
                     <strong className="text-foreground">Organisation is optional</strong> — ignore
@@ -337,8 +477,8 @@ export function KeyHelp() {
                   <span className="text-primary-text">2.</span>
                   <span>
                     In the project dropdown choose{' '}
-                    <strong className="text-foreground">+ Create project</strong> (it is the
-                    bottom item in the list).
+                    <strong className="text-foreground">+ Create project</strong> (it is the bottom
+                    item in the list).
                   </span>
                 </li>
                 <li className="flex gap-2">
@@ -367,8 +507,7 @@ export function KeyHelp() {
                 >
                   console.cloud.google.com/projectcreate
                 </ExternalLink>{' '}
-                — then go back to AI Studio and press the refresh icon next to the project
-                dropdown.
+                — then go back to AI Studio and press the refresh icon next to the project dropdown.
               </p>
             </div>
           ),
@@ -380,8 +519,7 @@ export function KeyHelp() {
             <div className="flex flex-col gap-3">
               <p className="text-muted-foreground text-xs">
                 Do this if a key leaked, or if you want to move to another project. In SnapBite the
-                new key goes in{' '}
-                <strong className="text-foreground">Settings → AI key</strong>.
+                new key goes in <strong className="text-foreground">Settings → AI key</strong>.
               </p>
 
               <div className="flex flex-col gap-2">
@@ -439,7 +577,9 @@ export function KeyHelp() {
                 <ol className="flex flex-col gap-2 text-xs">
                   <li className="flex gap-2">
                     <span className="text-primary-text">1.</span>
-                    <span>Make a new key first — press Create API key, exactly as in the steps above.</span>
+                    <span>
+                      Make a new key first — press Create API key, exactly as in the steps above.
+                    </span>
                   </li>
                   <li className="flex gap-2">
                     <span className="text-primary-text">2.</span>

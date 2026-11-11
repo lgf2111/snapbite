@@ -28,8 +28,8 @@ import type { SettingsRow } from '../db/schema.js';
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';
-import { TelegramBotClient } from '../telegram/botClient.js';
 import { photoKey, r2Store } from '../storage/photos.js';
+import { TelegramBotClient } from '../telegram/botClient.js';
 import type { BotClientFactory } from './webhook.js';
 
 const defaultBotClientFactory: BotClientFactory = (token) => new TelegramBotClient(token);

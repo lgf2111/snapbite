@@ -34,7 +34,7 @@ export function LinkifiedHint({ text, className }: { text: string; className?: s
             {part.value}
           </ExternalLink>
         ) : (
-          <span key={`t-${i}`}>{part.value}</span>
+          <span key={`text-${part.value}`}>{part.value}</span>
         ),
       )}
     </p>

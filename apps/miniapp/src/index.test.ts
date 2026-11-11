@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
 
 /**
  * The token file is the design system; these tests keep it honest.
@@ -16,9 +16,7 @@ const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
 /** Reads a custom property from a named block (`:root` or the dark media query). */
 function readBlock(mode: 'light' | 'dark'): Record<string, string> {
   const start =
-    mode === 'light'
-      ? css.indexOf(':root {')
-      : css.indexOf('@media (prefers-color-scheme: dark)');
+    mode === 'light' ? css.indexOf(':root {') : css.indexOf('@media (prefers-color-scheme: dark)');
   expect(start, `${mode} block exists`).toBeGreaterThan(-1);
   const end = css.indexOf('}', css.indexOf('--ring', start));
   const block = css.slice(start, end);
@@ -32,7 +30,7 @@ function readBlock(mode: 'light' | 'dark'): Record<string, string> {
 
 function luminance(hex: string): number {
   const clean = hex.replace('#', '');
-  const [ri, gi, bi] = [0, 2, 4].map((i) => parseInt(clean.slice(i, i + 2), 16) / 255) as [
+  const [ri, gi, bi] = [0, 2, 4].map((i) => Number.parseInt(clean.slice(i, i + 2), 16) / 255) as [
     number,
     number,
     number,
