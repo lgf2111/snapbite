@@ -7,7 +7,7 @@ import { createPushDb, upsertSubscription } from './db/push.js';
 import { pushSubscriptions } from './db/schema.js';
 import { createDb, upsertUser } from './db/users.js';
 import { INIT_DATA_HEADER } from './middleware/auth.js';
-import { runReminders } from './reminders.js';
+import { TEST_PUSH, pushReminder, runReminders } from './reminders.js';
 import { browserSubscription, vapidEnv } from './test/pushFixtures.js';
 
 const BOT_TOKEN = '123456:LOCAL-DEV-BOT-TOKEN';
@@ -20,6 +20,33 @@ async function headers(userId: number): Promise<Record<string, string>> {
     'content-type': 'application/json',
   };
 }
+
+describe('push reminder copy', () => {
+  it('puts the reminder in the title and the instruction in the body, never the app name', () => {
+    for (const slot of ['breakfast', 'lunch', 'dinner', 'tea break']) {
+      const { title, body } = pushReminder(slot);
+      expect(title).toBe(slot.charAt(0).toUpperCase() + slot.slice(1));
+      expect(title.toLowerCase()).not.toContain('snapbite');
+      expect(body.toLowerCase()).not.toContain('snapbite');
+      expect(body.length).toBeGreaterThan(0);
+      expect(body.length).toBeLessThan(90);
+    }
+  });
+
+  it('varies the body by slot and falls back for a custom one', () => {
+    const bodies = new Set(['breakfast', 'lunch', 'dinner'].map((s) => pushReminder(s).body));
+    expect(bodies.size).toBe(3);
+    expect(pushReminder('lunch').body).toBe('Log your meal while it is fresh.');
+    expect(pushReminder('tea break').body).toBe('Log your meal while it is fresh.');
+  });
+
+  it('keeps the test notification obviously a test', () => {
+    expect(TEST_PUSH).toEqual({
+      title: 'Test reminder',
+      body: 'Reminders will look like this.',
+    });
+  });
+});
 
 describe('runReminders', () => {
   it('DMs a user whose local time hits an enabled slot, once', async () => {
