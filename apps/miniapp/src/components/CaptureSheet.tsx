@@ -1,9 +1,10 @@
 import { cn } from '@/lib/utils';
 import type { MealResult } from '@snapbite/core';
-import { Camera, ImageIcon, Keyboard, Loader2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { type RefObject, useRef, useState } from 'react';
 import type { Backend } from '../lib/backend.js';
 import { compressPhoto } from '../lib/compress.js';
+import { type CaptureAction, CaptureMenu } from './CaptureMenu.js';
 import { ManualMealDialog } from './ManualMealDialog.js';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
@@ -12,8 +13,11 @@ type Stage = 'idle' | 'analysing' | 'review' | 'saving' | 'error';
 
 interface Props {
   backend: Backend;
+  /** The add-a-meal menu (CaptureMenu) is open. */
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The camera button the menu grows out of. */
+  triggerRef: RefObject<HTMLElement | null>;
   onLogged: (result: MealResult) => void;
   /** A meal was logged through the by-hand form (no AI result to hand back). */
   onManualLogged: () => void;
@@ -21,7 +25,10 @@ interface Props {
 }
 
 /**
- * Photo capture, as a state machine rather than one gesture.
+ * The add-a-meal flow: the four-card menu, the hidden file inputs it drives, and
+ * the sheet that shows a photo being read and then reviewed.
+ *
+ * Photo capture is a state machine rather than one gesture.
  *
  * The old path called /analyze and POST /meals back to back, so a failure in the
  * second call threw the analysis away behind a toast, and nothing survived the
@@ -36,11 +43,13 @@ export function CaptureSheet({
   backend,
   open,
   onOpenChange,
+  triggerRef,
   onLogged,
   onManualLogged,
   onToast,
 }: Props) {
-  const [manualOpen, setManualOpen] = useState(false);
+  /** The by-hand form, opened plain or straight onto the saved-meals list. */
+  const [manual, setManual] = useState<'manual' | 'saved' | null>(null);
   const [stage, setStage] = useState<Stage>('idle');
   const [draft, setDraft] = useState<MealResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,10 +68,8 @@ export function CaptureSheet({
   }
 
   async function handleFile(file: File | undefined) {
-    if (!file) {
-      onOpenChange(false);
-      return;
-    }
+    // Picker cancelled: nothing to read.
+    if (!file) return;
     if (preview.current) URL.revokeObjectURL(preview.current);
     preview.current = URL.createObjectURL(file);
     setStage('analysing');
@@ -87,7 +94,6 @@ export function CaptureSheet({
       await backend.logWithPhoto(draft, photo.current);
       onLogged(draft);
       toastDone(draft);
-      onOpenChange(false);
       reset();
     } catch (err) {
       // Keep the draft: a retry must not re-run the AI call.
@@ -101,6 +107,18 @@ export function CaptureSheet({
   }
 
   const busy = stage === 'analysing' || stage === 'saving';
+
+  /**
+   * A card was tapped. The menu closes at once so a file picker or a dialog is
+   * not competing with an overlay; the picker's `click()` stays inside this tap,
+   * which iOS requires.
+   */
+  function pick(action: CaptureAction) {
+    if (action === 'photo') cameraInput.current?.click();
+    else if (action === 'upload') libraryInput.current?.click();
+    else setManual(action);
+    onOpenChange(false);
+  }
 
   return (
     <>
@@ -122,28 +140,32 @@ export function CaptureSheet({
         onChange={(e) => void handleFile(e.target.files?.[0])}
       />
 
-      <Dialog
+      <CaptureMenu
         open={open}
+        onClose={() => onOpenChange(false)}
+        onPick={pick}
+        triggerRef={triggerRef}
+      />
+
+      <Dialog
+        open={stage !== 'idle'}
         onOpenChange={(next) => {
           // Closing mid-save would hide a failure the person needs to see.
           if (!next && stage === 'saving') return;
           if (!next) reset();
-          onOpenChange(next);
         }}
       >
         <DialogContent className="sheet-safe bottom-0 top-auto max-w-md translate-y-0 rounded-b-none rounded-t-xl duration-200 data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2 data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100">
           <DialogHeader>
             <DialogTitle className="text-title">
-              {stage === 'review' || stage === 'saving' ? 'Log this meal?' : 'Add a meal'}
+              {stage === 'review' || stage === 'saving' ? 'Log this meal?' : 'Add a meal photo'}
             </DialogTitle>
             <DialogDescription>
               {stage === 'analysing'
                 ? 'Reading the photo…'
                 : stage === 'review' || stage === 'saving'
                   ? 'Check the estimate, then save it.'
-                  : stage === 'error'
-                    ? 'That did not work.'
-                    : 'Take a photo, choose one, or enter it by hand.'}
+                  : 'That did not work.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -212,35 +234,9 @@ export function CaptureSheet({
             )}
 
             {(stage === 'review' || stage === 'error') && (
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  onOpenChange(false);
-                  reset();
-                }}
-              >
+              <Button variant="ghost" onClick={reset}>
                 Discard
               </Button>
-            )}
-
-            {stage === 'idle' && (
-              <>
-                <Button onClick={() => cameraInput.current?.click()}>
-                  <Camera className="size-4" aria-hidden /> Take a photo
-                </Button>
-                <Button variant="outline" onClick={() => libraryInput.current?.click()}>
-                  <ImageIcon className="size-4" aria-hidden /> Choose from library
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    onOpenChange(false);
-                    setManualOpen(true);
-                  }}
-                >
-                  <Keyboard className="size-4" aria-hidden /> Enter it by hand
-                </Button>
-              </>
             )}
           </div>
         </DialogContent>
@@ -248,8 +244,11 @@ export function CaptureSheet({
 
       <ManualMealDialog
         backend={backend}
-        open={manualOpen}
-        onOpenChange={setManualOpen}
+        open={manual !== null}
+        onOpenChange={(next) => {
+          if (!next) setManual(null);
+        }}
+        startWithSaved={manual === 'saved'}
         onLogged={onManualLogged}
         onToast={onToast}
       />
