@@ -287,8 +287,24 @@ body {
   padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
 }
 
+/*
+ * How much of the bottom of the screen the floating chrome covers, written once.
+ *
+ * The tab bar is --spacing-bar tall (plus the home-indicator inset), and the
+ * camera button stands above it: it is 4rem tall and sits -top-5 (1.25rem) above
+ * the bar's top edge, so its top is bar + 1.25rem from the bottom. 3.25rem is that
+ * overhang plus breathing room. Anything that scrolls under the bar, or is
+ * positioned above the button, uses this instead of re-deriving it:
+ * `scroll-reserve.test.ts` fails if it ever stops clearing the button.
+ */
+:root {
+  --scroll-reserve: calc(var(--spacing-bar) + 3.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* The scroller's own bottom padding, so the last card clears the button at the
+   very end of the scroll and there is no extra space between cards. */
 .reserve-bar {
-  padding-bottom: calc(var(--spacing-bar) + env(safe-area-inset-bottom, 0px) + 1rem);
+  padding-bottom: var(--scroll-reserve);
 }
 
 /*

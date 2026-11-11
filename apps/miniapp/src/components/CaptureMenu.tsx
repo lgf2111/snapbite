@@ -198,15 +198,15 @@ export function CaptureMenu({ open, onClose, onPick, triggerRef }: Props) {
       />
 
       {/*
-        Above the tab bar and its safe-area inset, clear of the button's
-        overhang; held below the status bar / Dynamic Island by `top`. Taps in
+        Above the tab bar, its safe-area inset and the button's overhang
+        (`--scroll-reserve`); held below the status bar / Dynamic Island by `top`. Taps in
         the gaps fall through to the scrim.
       */}
       <div
         className="pointer-events-none fixed inset-x-0 z-[35] flex flex-col justify-end overflow-y-auto"
         style={{
           top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-          bottom: 'calc(var(--spacing-bar) + env(safe-area-inset-bottom, 0px) + 32px)',
+          bottom: 'var(--scroll-reserve)',
         }}
       >
         <div
