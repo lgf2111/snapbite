@@ -12,7 +12,7 @@ import type { SettingsView } from './lib/api.js';
 import { type Backend, type RecentMeal, createBackend } from './lib/backend.js';
 import { cacheKey, getCached, revalidate } from './lib/cache.js';
 import { readConfig } from './lib/config.js';
-import { keyDecision, markKeyDecision } from './lib/onboarding.js';
+import { markKeyDecision } from './lib/onboarding.js';
 import { type Route, navigate, onRouteChange, parseRoute } from './lib/router.js';
 import { todayKey } from './lib/weekPrefs.js';
 
@@ -61,11 +61,12 @@ export function App() {
   // Profile/targets drive the Home rings + onboarding gate.
   const [targets, setTargets] = useState<DailyTargets | null>(null);
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
+  // What the SERVER said about this account, as opposed to `hasProfile`, which a
+  // cached copy may have seeded. Only this opens the welcome: a cache written by
+  // another account (the anonymous one, before signing in) must not.
+  const [serverProfile, setServerProfile] = useState<boolean | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingSkipped, setOnboardingSkipped] = useState(false);
-  // True when the profile is saved but the optional AI key is still missing and
-  // the user had reached that step — a reload must not restart the flow.
-  const [resumeKeyStep, setResumeKeyStep] = useState(false);
 
   const refreshProfile = () => {
     // Seed instantly from cache (no flash of the onboarding gate on reopen),
@@ -79,13 +80,9 @@ export function App() {
       .then((s) => {
         setTargets(s.targets ?? null);
         setHasProfile(Boolean(s.profile));
-        // Profile saved but no key yet: reopen at the key step — unless the
-        // person already answered that question, in which case asking again on
-        // every launch is the bug this guards.
-        if (s.profile && !s.connected && keyDecision() === null) {
-          setResumeKeyStep(true);
-          setShowOnboarding(true);
-        }
+        // An account with a profile never sees setup on launch, whatever this
+        // device remembers: a missing AI key is not a reason to start over.
+        setServerProfile(Boolean(s.profile));
       })
       .catch(() => {
         // Could not reach the server: we do not know whether this account has a
@@ -143,10 +140,10 @@ export function App() {
   // decided before this opens (`meSettled`), so setup mounts already knowing
   // whether to start on the form.
   useEffect(() => {
-    if (meSettled && hasProfile === false && targets === null && !onboardingSkipped) {
+    if (meSettled && serverProfile === false && targets === null && !onboardingSkipped) {
       setShowOnboarding(true);
     }
-  }, [meSettled, hasProfile, targets, onboardingSkipped]);
+  }, [meSettled, serverProfile, targets, onboardingSkipped]);
 
   const openMeal = (meal: RecentMeal) => {
     setDetailMeal(meal);
@@ -166,9 +163,9 @@ export function App() {
       markKeyDecision('set');
       if (opts.targets) setTargets(opts.targets);
       setHasProfile(true);
+      setServerProfile(true);
     }
     setShowOnboarding(false);
-    setResumeKeyStep(false);
     setHomeVersion((v) => v + 1);
   };
 
@@ -246,7 +243,6 @@ export function App() {
           >
             <OnboardingScreen
               backend={backend}
-              startAtKeyStep={resumeKeyStep}
               account={me?.signedIn ? { email: me.email } : null}
               onDone={(t) => finishOnboarding({ targets: t })}
               onSkip={() => finishOnboarding({ skipped: true })}
