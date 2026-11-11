@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DateSelector } from './DateSelector.js';
 import { InstallGuide } from './InstallGuide.js';
 import { MacroLegend, MacroLine } from './MacroLine.js';
+import { MealThumb } from './MealThumb.js';
 import { ProgressRing } from './ProgressRing.js';
 import { SwipeableRow } from './SwipeableRow.js';
 import { ReviseWithAiDialog } from './UpdateWithAi.js';
@@ -384,11 +385,7 @@ export function HomeScreen({
               <Card className="overflow-hidden">
                 <CardContent className="flex items-center gap-3 p-3">
                   {m.previewUrl ? (
-                    <img
-                      src={m.previewUrl}
-                      alt=""
-                      className="size-16 shrink-0 rounded-md object-cover"
-                    />
+                    <MealThumb src={m.previewUrl} />
                   ) : (
                     <div className="bg-muted size-16 shrink-0 rounded-md" aria-hidden />
                   )}

@@ -11,6 +11,8 @@ import {
   verifyInitData,
 } from '@snapbite/core';
 import { Hono } from 'hono';
+import { cookies, deviceLookupHash, readCookies } from '../auth/cookies.js';
+import { createAuthDb, findDeviceUser, findSessionUser } from '../db/auth.js';
 import { describeError, logError } from '../db/errors.js';
 import {
   type MealDetail,
@@ -505,17 +507,37 @@ export function detailToAnalysis(detail: MealDetail): AIFoodAnalysis {
 export function mealPhotoRoutes(botClientFactory: BotClientFactory = defaultBotClientFactory) {
   const app = new Hono<AppBindings>();
 
-  // GET /api/meal-photo/:id?initData=...
+  // GET /api/meal-photo/:id
+  //
+  // An <img> cannot send headers, so it is authorised by what the browser attaches
+  // on its own: Telegram initData in the query (inside Telegram), or else the
+  // session / device cookie (a browser or the installed app). Either way the meal
+  // must belong to the account it resolves to; nothing here widens who can read what.
   app.get('/:id', async (c) => {
-    const initData = c.req.query('initData') ?? '';
-    if (!initData || !c.env.TELEGRAM_BOT_TOKEN) return c.text('Unauthorized', 401);
-    const verified = await verifyInitData(initData, c.env.TELEGRAM_BOT_TOKEN);
-    if (!verified.ok) return c.text('Unauthorized', 401);
+    let userId: string | null = null;
 
-    const db = createDb(c.env.DB);
-    const user = await upsertUser(db, verified.data.user);
+    const initData = c.req.query('initData') ?? '';
+    if (initData && c.env.TELEGRAM_BOT_TOKEN) {
+      const verified = await verifyInitData(initData, c.env.TELEGRAM_BOT_TOKEN);
+      if (verified.ok) userId = (await upsertUser(createDb(c.env.DB), verified.data.user)).id;
+    }
+
+    if (!userId) {
+      const jar = readCookies(c.req.header('cookie'));
+      const authDb = createAuthDb(c.env.DB);
+      const deviceRaw = jar[cookies.device];
+      const session = await findSessionUser(authDb, jar[cookies.session] ?? '');
+      if (session) userId = session.id;
+      else if (deviceRaw) {
+        // Look up only: a photo request must never mint an account.
+        const device = await findDeviceUser(authDb, await deviceLookupHash(deviceRaw));
+        if (device) userId = device.id;
+      }
+    }
+    if (!userId) return c.text('Unauthorized', 401);
+
     const mealsDb = createMealsDb(c.env.DB);
-    const detail = await getMealDetail(mealsDb, c.req.param('id'), user.id);
+    const detail = await getMealDetail(mealsDb, c.req.param('id'), userId);
     if (!detail) return c.text('Not found', 404);
 
     // The PWA renders photos from a different origin than the API (Pages vs
