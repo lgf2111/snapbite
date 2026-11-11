@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { KeyHelp } from './KeyHelp.js';
 import { LinkifiedHint } from './LinkifiedHint.js';
+import { markKeyDecision } from '../lib/onboarding.js';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Backend } from '@/lib/backend';
@@ -122,6 +123,7 @@ export function OnboardingScreen({ backend, onDone, onSkip, onToast, startAtKeyS
 
   function finishWithTargets() {
     writeResume(null);
+    markKeyDecision('set');
     if (savedTargets) onDone(savedTargets);
     else onSkip();
   }

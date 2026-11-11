@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible } from '@/components/ui/collapsible';
 import {
@@ -538,10 +539,11 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-semibold">Settings</h1>
+      <h1 className="text-title">Settings</h1>
 
-      {/* Optional sign-in: the app works without it. */}
-      <AccountCard />
+      <h2 className="text-caption text-muted-foreground mt-1 font-medium uppercase tracking-wide">
+        Today&rsquo;s targets
+      </h2>
 
       <Card>
         <CardContent className="flex flex-col gap-3">
@@ -575,9 +577,6 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             </>
           ) : (
             <>
-              <p className="text-muted-foreground text-sm">
-                Set your details and goal to get daily calorie and macro targets.
-              </p>
               <Button onClick={() => setEditingProfile(true)}>Set your goal</Button>
             </>
           )}
@@ -590,12 +589,9 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             <Bell className="text-primary size-5" />
             <span className="font-medium">Meal reminders</span>
           </div>
-          <p className="text-muted-foreground text-xs">
-            A daily Telegram nudge to log each meal. Toggle the ones you want and set their times —
-            you'll be reminded once per slot per day, in your device's timezone. Times snap to the
-            nearest {REMINDER_STEP_MINUTES} minutes ({REMINDER_STEP_MINUTES}-min steps, e.g. 8:00 /
-            8:15 / 8:30), because reminders are checked every {REMINDER_STEP_MINUTES} minutes — so a
-            time like 8:07 rounds to 8:00.
+          <p className="text-muted-foreground text-caption">
+            Once per slot, in your device&rsquo;s timezone. Times snap to the nearest{' '}
+            {REMINDER_STEP_MINUTES} minutes.
           </p>
           <div className="flex flex-col gap-2 pt-1">
             {(['breakfast', 'lunch', 'dinner'] as const).map((label) => (
@@ -698,28 +694,16 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
           <div className="flex flex-col gap-1.5">
             <Label>Week is</Label>
-            <div className="bg-muted flex gap-1 rounded-md p-1">
-              {(
-                [
-                  { value: 'rolling', label: 'Last 7 days' },
-                  { value: 'calendar', label: 'Calendar week' },
-                ] as Array<{ value: WeekMode; label: string }>
-              ).map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => updateWeekPrefs({ mode: o.value })}
-                  className={cn(
-                    'flex-1 rounded px-2 py-1.5 text-sm font-medium transition-colors',
-                    weekPrefs.mode === o.value
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground',
-                  )}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
+            <ToggleGroup
+              type="single"
+              value={weekPrefs.mode}
+              onValueChange={(v) => v && updateWeekPrefs({ mode: v as WeekMode })}
+              block
+              aria-label="How a week is counted"
+            >
+              <ToggleGroupItem value="rolling">Last 7 days</ToggleGroupItem>
+              <ToggleGroupItem value="calendar">Calendar week</ToggleGroupItem>
+            </ToggleGroup>
             <p className="text-muted-foreground text-xs">
               {weekPrefs.mode === 'rolling'
                 ? 'Today and the previous 6 days.'
@@ -757,11 +741,15 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
         </CardContent>
       </Card>
 
+      <h2 className="text-caption text-muted-foreground mt-2 font-medium uppercase tracking-wide">
+        Logging &amp; AI
+      </h2>
+
       {isLocal ? (
         <Card>
           <CardContent>
             <p className="text-muted-foreground text-sm">
-              Running in demo mode with a mock analyzer — no API key needed.
+              Demo mode: meals are analysed by a mock, so no key is needed.
             </p>
           </CardContent>
         </Card>
@@ -812,10 +800,9 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               <p className="text-muted-foreground text-xs">
                 Your key is sent over HTTPS, encrypted at rest, and never shown again or logged.
               </p>
-              <p className="text-muted-foreground text-xs">
-                Heads up: free tiers have limits — Gemini's free tier allows about 20 requests/day
-                on <code>gemini-3.6-flash</code> plus a per-minute cap, and returns a "quota
-                exceeded" error once hit. Add billing to your key, or set a fallback below.
+              <p className="text-muted-foreground text-caption">
+                Free keys stop at about 20 requests a day and return a &ldquo;quota exceeded&rdquo;
+                error. Add billing, or set a fallback below.
               </p>
             </CardContent>
           </Card>
@@ -910,6 +897,12 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           </Card>
         </>
       )}
+
+      <h2 className="text-caption text-muted-foreground mt-2 font-medium uppercase tracking-wide">
+        Account &amp; data
+      </h2>
+
+      <AccountCard />
 
       <Card>
         <CardContent className="flex flex-col gap-3">

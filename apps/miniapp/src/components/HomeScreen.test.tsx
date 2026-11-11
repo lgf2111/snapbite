@@ -75,10 +75,11 @@ describe('HomeScreen', () => {
   });
 
   it('shows an empty-day state when there are no meals', async () => {
+    // With targets, the verdict slot carries the empty state.
     const backend = stubBackend();
-    render(<HomeScreen {...props(backend)} />);
+    render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
 
-    await waitFor(() => expect(screen.getByText('No meals this day')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Nothing logged yet')).toBeInTheDocument());
   });
 
   it('shows the current logging streak when the backend reports one', async () => {
@@ -87,24 +88,33 @@ describe('HomeScreen', () => {
     });
     render(<HomeScreen {...props(backend)} />);
 
-    await waitFor(() => expect(screen.getByText('🔥 5-day logging streak')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('🔥 5-day streak')).toBeInTheDocument());
   });
 
   it('prompts to set a goal when no targets are configured', async () => {
     const backend = stubBackend();
     render(<HomeScreen {...props(backend)} />);
 
-    expect(screen.getByText(/set a goal for daily targets/i)).toBeInTheDocument();
+    expect(screen.getByText('Set a goal to see your rings')).toBeInTheDocument();
     // Let the background meals fetch settle so no state update escapes the test.
-    await waitFor(() => expect(screen.getByText('No meals this day')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Nothing logged yet/)).toBeInTheDocument());
   });
 
   it('shows progress rings instead of the goal prompt when targets are set', async () => {
     const backend = stubBackend();
     render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
 
-    await waitFor(() => expect(screen.getByText('No meals this day')).toBeInTheDocument());
-    expect(screen.queryByText(/set a goal for daily targets/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Nothing logged yet')).toBeInTheDocument());
+    expect(screen.queryByText('Set a goal to see your rings')).not.toBeInTheDocument();
+  });
+
+  it('states a verdict and flags an over-target day', async () => {
+    const backend = stubBackend({
+      mealsByDate: vi.fn(async () => [meal({ energyKcal: 2400, proteinG: 140 })]),
+    });
+    render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    await waitFor(() => expect(screen.getByText('Over by 400')).toBeInTheDocument());
   });
 
   it('fires onOpenMeal when a meal row is tapped', async () => {
@@ -131,26 +141,25 @@ describe('HomeScreen', () => {
   });
 
   it('shows the total/daily-average toggle only in weekly view', async () => {
-    const backend = stubBackend();
-    const { rerender } = render(<HomeScreen {...props(backend)} />);
+    const backend = stubBackend({ mealsInRange: vi.fn(async () => [meal({ id: 'w1' })]) });
+    const { rerender } = render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
     // Daily view: no weekly toggle.
-    expect(screen.queryByRole('button', { name: 'Daily avg' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Daily avg')).not.toBeInTheDocument();
 
-    rerender(<HomeScreen {...props(backend, { view: 'weekly' })} />);
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Daily avg' })).toBeInTheDocument(),
-    );
+    rerender(<HomeScreen {...props(backend, { targets: TARGETS, view: 'weekly' })} />);
+    await waitFor(() => expect(screen.getByText('Daily avg')).toBeInTheDocument());
     expect(screen.getByText(/week total/i)).toBeInTheDocument();
   });
 
   it('switches the weekly label to a daily average when toggled', async () => {
-    const backend = stubBackend({ mealsInRange: vi.fn(async () => [] as RecentMeal[]) });
-    render(<HomeScreen {...props(backend, { view: 'weekly' })} />);
+    const backend = stubBackend({ mealsInRange: vi.fn(async () => [meal({ id: 'w1' })]) });
+    render(<HomeScreen {...props(backend, { targets: TARGETS, view: 'weekly' })} />);
 
-    const avg = await screen.findByRole('button', { name: 'Daily avg' });
+    const avg = await screen.findByText('Daily avg');
     await userEvent.click(avg);
     expect(screen.getByText(/daily average/i)).toBeInTheDocument();
-    expect(avg).toHaveAttribute('aria-pressed', 'true');
+    // Radix marks the active toggle item with data-state, not aria-pressed.
+    expect(avg.closest('[data-state]')).toHaveAttribute('data-state', 'on');
   });
 
   it('edits a meal with AI inline from Home (no navigation)', async () => {

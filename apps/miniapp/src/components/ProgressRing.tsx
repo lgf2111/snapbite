@@ -13,13 +13,18 @@ interface ProgressRingProps {
   icon?: string;
   /** Tailwind text-color class for the ring stroke + accents. */
   colorClass?: string;
+  /** Renders the remaining amount in the display face (the verdict ring). */
+  hero?: boolean;
 }
 
 /**
- * A circular progress ring showing how much of a daily target remains. The ring
- * fills with the consumed fraction; the center shows the remaining amount (or
- * "over by N" when the target is exceeded). Uses currentColor so the caller
- * controls the hue via a text-color class.
+ * A circular progress ring showing how much of a target remains.
+ *
+ * The arc stops at a full circle, but "over" is drawn as a second arc that runs
+ * past twelve o'clock instead of being thrown away: the old version clamped the
+ * fraction, so 100% and 140% looked identical and the only difference was a hue
+ * change. Here the overflow is a visible amount, up to one extra turn, and the
+ * centre states the number either way.
  */
 export function ProgressRing({
   consumed,
@@ -28,15 +33,18 @@ export function ProgressRing({
   size = 96,
   icon,
   colorClass = 'text-primary',
+  hero = false,
 }: ProgressRingProps) {
   const stroke = Math.max(6, Math.round(size * 0.09));
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const safeTarget = target > 0 ? target : 0;
-  const fraction = safeTarget > 0 ? Math.min(1, consumed / safeTarget) : 0;
+  const ratio = safeTarget > 0 ? consumed / safeTarget : 0;
+  const filled = Math.min(1, ratio);
+  const overflow = Math.max(0, Math.min(1, ratio - 1));
   const over = safeTarget > 0 && consumed > safeTarget;
   const remaining = Math.round(safeTarget - consumed);
-  const dashOffset = circumference * (1 - fraction);
+  const dashOffset = circumference * (1 - filled);
 
   const center = size / 2;
 
@@ -57,35 +65,63 @@ export function ProgressRing({
             r={radius}
             fill="none"
             strokeWidth={stroke}
-            className="text-muted/40"
+            className="text-muted-foreground/25"
             stroke="currentColor"
           />
-          <circle
-            cx={center}
-            cy={center}
-            r={radius}
-            fill="none"
-            strokeWidth={stroke}
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={dashOffset}
-            transform={`rotate(-90 ${center} ${center})`}
-            style={{ transition: 'stroke-dashoffset 400ms ease' }}
-          />
+          {/* A round cap on a zero-length arc still paints a dot, which reads
+              as a rendering fault at the top of an empty ring. */}
+          {filled > 0 && (
+            <circle
+              cx={center}
+              cy={center}
+              r={radius}
+              fill="none"
+              strokeWidth={stroke}
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={dashOffset}
+              transform={`rotate(-90 ${center} ${center})`}
+              style={{ transition: 'stroke-dashoffset 400ms ease' }}
+            />
+          )}
+          {/* Overflow: a second arc from twelve o'clock, so "over" is a shape. */}
+          {overflow > 0 && (
+            <circle
+              cx={center}
+              cy={center}
+              r={radius - stroke - 3}
+              fill="none"
+              strokeWidth={Math.max(3, Math.round(stroke * 0.55))}
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeDasharray={2 * Math.PI * (radius - stroke - 3)}
+              strokeDashoffset={2 * Math.PI * (radius - stroke - 3) * (1 - overflow)}
+              transform={`rotate(-90 ${center} ${center})`}
+              opacity={0.75}
+            />
+          )}
         </svg>
         <div
           className="absolute inset-0 flex flex-col items-center justify-center leading-none"
           aria-hidden="true"
         >
           {icon && <span className="text-sm">{icon}</span>}
-          <span className={cn('font-bold', size >= 96 ? 'text-lg' : 'text-sm')}>
+          <span
+            className={cn(
+              'tabular',
+              hero ? 'font-display text-display' : 'font-semibold',
+              !hero && (size >= 96 ? 'text-lg' : 'text-sm'),
+            )}
+          >
             {over ? Math.abs(remaining) : Math.max(0, remaining)}
           </span>
-          <span className="text-muted-foreground text-[10px]">{over ? 'over' : 'left'}</span>
+          <span className={cn('text-muted-foreground', hero ? 'text-caption' : 'text-[10px]')}>
+            {hero ? `${label} ${over ? 'over' : 'left'}` : over ? 'over' : 'left'}
+          </span>
         </div>
       </div>
-      <span className="text-muted-foreground text-xs">{label}</span>
+      {!hero && <span className="text-muted-foreground text-caption">{label}</span>}
     </div>
   );
 }

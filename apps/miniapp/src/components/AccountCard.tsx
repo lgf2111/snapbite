@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readConfig } from '../lib/config.js';
+import { Button } from './ui/button.js';
+import { Card, CardContent } from './ui/card.js';
+import { Input } from './ui/input.js';
 
 interface Providers {
   email: boolean;
@@ -102,71 +105,57 @@ export function AccountCard() {
   if (!workerUrl) return null;
 
   return (
-    <div className="rounded-xl border border-[var(--tg-theme-secondary-bg-color,#223140)] p-4">
-      <h3 className="text-sm font-semibold">Account</h3>
+    <Card>
+      <CardContent className="flex flex-col gap-3">
+        <span className="font-medium">Account</span>
 
-      {me?.signedIn ? (
-        <>
-          <p className="mt-1 text-xs text-[var(--tg-theme-hint-color,#9fb2c4)]">
-            Signed in as {me.email ?? 'your account'}
-          </p>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void signOut()}
-            className="mt-3 w-full rounded-lg border border-[var(--tg-theme-secondary-bg-color,#223140)] px-3 py-2 text-xs font-medium disabled:opacity-60"
-          >
-            Sign out
-          </button>
-        </>
-      ) : (
-        <>
-          <p className="mt-1 text-xs text-[var(--tg-theme-hint-color,#9fb2c4)]">
-            Optional. You can log meals without an account — signing in only keeps them when you
-            change phone or clear your browser.
-          </p>
-
-          {providers.google && (
-            <a
-              href={`${workerUrl}/api/auth/start/google`}
-              className="mt-3 block w-full rounded-lg bg-[var(--tg-theme-button-color,#3aa0ff)] px-3 py-2.5 text-center text-xs font-semibold text-[var(--tg-theme-button-text-color,#06121f)]"
-            >
-              Continue with Google
-            </a>
-          )}
-
-          {providers.email && (
-            <div className="mt-3 flex flex-col gap-2">
-              <input
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="rounded-lg border border-[var(--tg-theme-secondary-bg-color,#223140)] bg-transparent px-3 py-2 text-xs"
-              />
-              <button
-                type="button"
-                disabled={busy || !email.includes('@')}
-                onClick={() => void requestLink()}
-                className="rounded-lg border border-[var(--tg-theme-secondary-bg-color,#223140)] px-3 py-2 text-xs font-medium disabled:opacity-50"
-              >
-                Email me a sign-in link
-              </button>
-            </div>
-          )}
-
-          {!providers.google && !providers.email && (
-            <p className="mt-2 text-xs text-[var(--tg-theme-hint-color,#9fb2c4)]">
-              No sign-in method is configured on the server yet.
+        {me?.signedIn ? (
+          <>
+            <p className="text-muted-foreground text-caption">
+              Signed in as {me.email ?? 'your account'}
             </p>
-          )}
-        </>
-      )}
+            <Button variant="secondary" disabled={busy} onClick={() => void signOut()}>
+              Sign out
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-muted-foreground text-caption">
+              Optional — signing in keeps your meals when you change phone or clear your browser.
+            </p>
 
-      {notice && <p className="mt-2 text-xs text-emerald-400">{notice}</p>}
-      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
-    </div>
+            {providers.google && (
+              <Button asChild>
+                <a href={`${workerUrl}/api/auth/start/google`}>Continue with Google</a>
+              </Button>
+            )}
+
+            {providers.email && (
+              <>
+                <Input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  aria-label="Email address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                <Button
+                  variant="secondary"
+                  disabled={busy || !email.trim()}
+                  onClick={() => void requestLink()}
+                >
+                  {busy ? 'Sending…' : 'Email me a sign-in link'}
+                </Button>
+              </>
+            )}
+
+            {notice && <p className="text-caption text-[var(--success)]">{notice}</p>}
+            {error && <p className="text-caption text-destructive">{error}</p>}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

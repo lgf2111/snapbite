@@ -1,34 +1,89 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
-
 /*
- * shadcn/ui theme tokens. Defaults are a dark palette (the Mini App runs in
- * Telegram, usually dark). Telegram theme params override --background /
- * --foreground / --primary etc. at runtime via applyTelegramTheme().
+ * SnapBite design tokens.
+ *
+ * Two materials, one system:
+ *   - Warm paper surfaces carry appetite (background, card, muted).
+ *   - A calibrated instrument layer carries measurement (foreground, border,
+ *     the status tokens), so a verdict never relies on hue alone.
+ *
+ * Light is the default; the OS setting chooses dark through a media query.
+ * There is deliberately no `.dark` class and no in-app appearance switch:
+ * `prefers-color-scheme` is the only input. Every text/surface pair below is
+ * contrast-checked in `src/index.test.ts`.
  */
+
 :root {
-  --radius: 0.65rem;
-  --background: oklch(0.16 0.02 250);
-  --foreground: oklch(0.97 0 0);
-  --card: oklch(0.2 0.02 250);
-  --card-foreground: oklch(0.97 0 0);
-  --popover: oklch(0.2 0.02 250);
-  --popover-foreground: oklch(0.97 0 0);
-  --primary: oklch(0.7 0.14 250);
-  --primary-foreground: oklch(0.15 0.02 250);
-  --secondary: oklch(0.27 0.02 250);
-  --secondary-foreground: oklch(0.97 0 0);
-  --muted: oklch(0.27 0.02 250);
-  --muted-foreground: oklch(0.72 0.03 250);
-  --accent: oklch(0.27 0.03 250);
-  --accent-foreground: oklch(0.97 0 0);
-  --destructive: oklch(0.62 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.32 0.02 250);
-  --input: oklch(0.32 0.02 250);
-  --ring: oklch(0.7 0.14 250);
+  color-scheme: light;
+
+  --background: #fffcf7;
+  --foreground: #1f1a16;
+
+  --card: #f6efe6;
+  --card-foreground: #1f1a16;
+  --popover: #fffcf7;
+  --popover-foreground: #1f1a16;
+
+  /* Paprika — the only brand colour, never used to mean "bad". */
+  --primary: #b8371a;
+  --primary-foreground: #ffffff;
+
+  --secondary: #efe4d6;
+  --secondary-foreground: #1f1a16;
+
+  /* `muted` is a surface; `muted-foreground` is text — shadcn's contract. */
+  --muted: #f1e8dc;
+  --muted-foreground: #6b5f53;
+
+  /* `accent` stays shadcn's hover/selected surface, not the brand colour. */
+  --accent: #efe4d6;
+  --accent-foreground: #1f1a16;
+
+  --destructive: #a3231b;
+  --destructive-foreground: #ffffff;
+  --success: #2a6b4f;
+  --warning: #8a5200;
+
+  --border: #d8c6b0;
+  --input: #d8c6b0;
+  --ring: #b8371a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --background: #14100d;
+    --foreground: #f4ede3;
+
+    --card: #1e1814;
+    --card-foreground: #f4ede3;
+    --popover: #1e1814;
+    --popover-foreground: #f4ede3;
+
+    --primary: #ff7a52;
+    --primary-foreground: #2a0e05;
+
+    --secondary: #2a221c;
+    --secondary-foreground: #f4ede3;
+
+    --muted: #241d18;
+    --muted-foreground: #a99a8b;
+
+    --accent: #2a221c;
+    --accent-foreground: #f4ede3;
+
+    --destructive: #ff8a7a;
+    --destructive-foreground: #2a0e05;
+    --success: #6fc49b;
+    --warning: #e0a83c;
+
+    --border: #4b3d33;
+    --input: #4b3d33;
+    --ring: #ff7a52;
+  }
 }
 
 @theme inline {
@@ -48,13 +103,35 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Type: New York (ui-serif) is the single display voice; SF carries the UI. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, ui-sans-serif, sans-serif;
+  --font-display: ui-serif, "New York", Georgia, "Times New Roman", serif;
+
+  --text-display: 2.75rem;
+  --text-display--line-height: 1.02;
+  --text-display--letter-spacing: -0.02em;
+  --text-title: 1.375rem;
+  --text-title--line-height: 1.2;
+  --text-title--letter-spacing: -0.01em;
+  --text-body: 1rem;
+  --text-body--line-height: 1.45;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.35;
+
+  /* Three radius steps; components take a step instead of inventing one. */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  /* Bottom bar height, shared by the bar and the scroll reserve. */
+  --spacing-bar: 4.5rem;
 }
 
 * {
@@ -65,7 +142,31 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numerals must not shift as they change: the totals and rings rely on it. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/*
+ * Safe-area helpers. `env()` needs `viewport-fit=cover` in the viewport meta;
+ * index.html sets it, and if it were missing these resolve to 0 rather than
+ * breaking the layout.
+ */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+/* Named to avoid Tailwind's spacing scale: `pb-bar` is also a generated utility
+   (`--spacing-bar`), and the duplicate rule dropped the safe-area inset. */
+.reserve-bar {
+  padding-bottom: calc(var(--spacing-bar) + env(safe-area-inset-bottom, 0px) + 1rem);
 }
 
 /*
@@ -82,4 +183,28 @@ body {
 }
 .dob-input::-webkit-calendar-picker-indicator {
   margin-left: auto;
+}
+
+/*
+ * Expands a control's touch area without changing what it looks like. A switch
+ * is 24px tall; Apple's floor is 44, and padding the visual track would make it
+ * a different control.
+ */
+.hit-slop {
+  position: relative;
+}
+.hit-slop::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
