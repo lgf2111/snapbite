@@ -17,6 +17,9 @@ coverage/
 .deploy-secrets
 *.local
 
+# Tooling
+.opencode/
+
 # Editor / OS
 .DS_Store
 .idea/

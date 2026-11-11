@@ -4,6 +4,8 @@ import type { TelegramUser } from '@snapbite/core';
 export interface Env {
   /** D1 database binding (configured in wrangler.toml). */
   DB: D1Database;
+  /** R2 bucket holding meal photo bytes. Optional: without it no photos are stored. */
+  PHOTOS?: R2Bucket;
   /** Telegram bot token — verifies initData and sends bot messages. */
   TELEGRAM_BOT_TOKEN: string;
   /** AES-GCM master key (base64) for BYOK encryption. Used from Task 7. */
@@ -31,6 +33,21 @@ export interface Env {
   FEEDBACK_THREAD_ID?: string;
   /** Forum Topic for broadcast records in the admin group. */
   BROADCAST_THREAD_ID?: string;
+  /** Resend API key for sign-in emails. Unset => magic links are returned inline. */
+  RESEND_API_KEY?: string;
+  /** From address for sign-in emails, e.g. "SnapBite <login@example.com>". */
+  EMAIL_FROM?: string;
+  /** Public origin of the app, used to build magic links. */
+  APP_ORIGIN?: string;
+  /** Google OAuth client id (sign-in with Google). */
+  GOOGLE_CLIENT_ID?: string;
+  /** Google OAuth client secret. */
+  GOOGLE_CLIENT_SECRET?: string;
+  /**
+   * Origin of the Pages site when it differs from the Worker's (the PWA case).
+   * Set => session cookies must be SameSite=None; Secure for cross-site sends.
+   */
+  PAGE_ORIGIN?: string;
 }
 
 /** Parses ADMIN_TELEGRAM_ID into a positive number, or null when unset/invalid. */
@@ -59,7 +76,8 @@ export function parseThreadId(raw: string | undefined): number | null {
 
 /** Variables attached to the Hono context after auth. */
 export interface Variables {
-  telegramUser: TelegramUser;
+  /** Null for email/device accounts that never touched the bot. */
+  telegramUser: TelegramUser | null;
   /** The resolved application user id (row id in `users`). */
   userId: string;
 }

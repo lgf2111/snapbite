@@ -13,6 +13,9 @@ export interface SaveMealInput {
   userId: string;
   meal: MealResult;
   telegramFileId?: string;
+  /** R2 key + mime for a photo whose bytes we store. */
+  photoKey?: string | null;
+  photoMime?: string | null;
   loggedAt?: number;
   /** AI provider that analyzed this meal (e.g. 'gemini'); omit for manual. */
   aiProvider?: string | null;
@@ -36,6 +39,8 @@ export async function saveMeal(db: MealsDb, input: SaveMealInput): Promise<strin
       id: mealId,
       userId: input.userId,
       telegramFileId: input.telegramFileId ?? null,
+      photoKey: input.photoKey ?? null,
+      photoMime: input.photoMime ?? null,
       title: m.title ?? null,
       notes: m.notes ?? null,
       confidence: m.confidence,
@@ -395,6 +400,36 @@ export async function mealOwnedBy(db: MealsDb, mealId: string, userId: string): 
   return rows.length > 0;
 }
 
+/**
+ * Attaches stored photo bytes to an already-saved meal (write-then-analyse
+ * ordering means the row exists first). No-op when the row isn't owned.
+ */
+export async function setMealPhoto(
+  db: MealsDb,
+  mealId: string,
+  userId: string,
+  key: string,
+  mime: string,
+): Promise<void> {
+  await db
+    .update(meals)
+    .set({ photoKey: key, photoMime: mime })
+    .where(and(eq(meals.id, mealId), eq(meals.userId, userId)));
+}
+
+/** Sets the stored-photo columns by meal id alone (admin backfill path). */
+export async function setMealPhotoById(
+  d1: D1Database,
+  mealId: string,
+  key: string,
+  mime: string,
+): Promise<void> {
+  await d1
+    .prepare('UPDATE meals SET photo_key = ?, photo_mime = ? WHERE id = ?')
+    .bind(key, mime, mealId)
+    .run();
+}
+
 export interface MealDetail {
   id: string;
   loggedAt: number;
@@ -403,6 +438,10 @@ export interface MealDetail {
   notes: string | null;
   confidence: number | null;
   telegramFileId: string | null;
+  /** R2 key of the stored photo, when we own the bytes. */
+  photoKey: string | null;
+  /** True when any source can render this photo (R2 or a Telegram file_id). */
+  hasPhoto: boolean;
   aiProvider: string | null;
   telegramChatId: number | null;
   telegramMessageId: number | null;
@@ -458,6 +497,8 @@ export async function getMealDetail(
     notes: meal.notes,
     confidence: meal.confidence,
     telegramFileId: meal.telegramFileId,
+    photoKey: meal.photoKey ?? null,
+    hasPhoto: Boolean(meal.photoKey || meal.telegramFileId),
     aiProvider: meal.aiProvider,
     telegramChatId: meal.telegramChatId,
     telegramMessageId: meal.telegramMessageId,

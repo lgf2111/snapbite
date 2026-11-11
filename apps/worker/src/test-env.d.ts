@@ -3,6 +3,7 @@ declare module 'cloudflare:test' {
 
   interface ProvidedEnv {
     DB: D1Database;
+    PHOTOS: R2Bucket;
     TELEGRAM_BOT_TOKEN: string;
     ENCRYPTION_KEY?: string;
     MINI_APP_URL?: string;

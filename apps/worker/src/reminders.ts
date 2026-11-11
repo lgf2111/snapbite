@@ -37,10 +37,13 @@ async function loadEnabledReminders(db: D1Database): Promise<UserReminder[]> {
   const out: UserReminder[] = [];
   for (const r of rows) {
     const reminders = parsePreferences(r.preferencesJson).reminders;
+    if (r.telegramUserId == null) continue;
     if (reminders?.enabled) {
       out.push({
         userId: r.userId,
-        telegramUserId: r.telegramUserId,
+        // Skip accounts with no Telegram identity (email/device accounts):
+        // every one of these jobs delivers through the bot.
+        telegramUserId: r.telegramUserId as number,
         reminders,
         preferencesJson: r.preferencesJson,
       });

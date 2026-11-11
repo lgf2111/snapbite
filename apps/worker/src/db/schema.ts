@@ -13,7 +13,15 @@ export const users = sqliteTable(
   'users',
   {
     id: text('id').primaryKey(),
-    telegramUserId: integer('telegram_user_id').notNull(),
+    /** Null for accounts created by email sign-in (they never touch the bot). */
+    telegramUserId: integer('telegram_user_id'),
+    /**
+     * Optional sign-in credential. A Telegram user can attach an email and keep
+     * the same row (same meals); a browser user gets a row with no Telegram id.
+     * Null means "no email credential for this person".
+     */
+    email: text('email'),
+    emailVerifiedAt: integer('email_verified_at'),
     createdAt: integer('created_at').notNull(),
     /** The user's DM chat id + message id of the last update broadcast we sent
      * them, so a newer update can EDIT it in place while still editable (<48h).
@@ -25,6 +33,7 @@ export const users = sqliteTable(
   },
   (t) => ({
     telegramIdx: uniqueIndex('users_telegram_user_id_idx').on(t.telegramUserId),
+    emailIdx: uniqueIndex('users_email_idx').on(t.email),
   }),
 );
 
@@ -50,6 +59,10 @@ export const meals = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     telegramFileId: text('telegram_file_id'),
+    /** R2 key of the photo we own the bytes for (null for bot-only/photo-less meals). */
+    photoKey: text('photo_key'),
+    /** Mime type of the stored photo object. */
+    photoMime: text('photo_mime'),
     /** Short, shareable meal name (2–4 words) for the UI + share card. */
     title: text('title'),
     notes: text('notes'),
@@ -251,6 +264,63 @@ export const userActivity = sqliteTable(
     pk: primaryKey({ columns: [t.userId, t.week] }),
   }),
 );
+
+/** Server sessions for browser sign-in (cookie holds the raw token). */
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    createdAt: integer('created_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    lastUsedAt: integer('last_used_at'),
+  },
+  (t) => ({
+    tokenIdx: uniqueIndex('sessions_token_idx').on(t.tokenHash),
+    userIdx: index('sessions_user_idx').on(t.userId),
+  }),
+);
+
+/** Single-use magic-link tokens (hashed, 15-minute TTL). */
+export const loginTokens = sqliteTable(
+  'login_tokens',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    email: text('email').notNull(),
+    createdAt: integer('created_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    consumedAt: integer('consumed_at'),
+  },
+  (t) => ({
+    emailIdx: index('login_tokens_email_idx').on(t.email),
+  }),
+);
+
+/** Bearer tokens for surfaces that cannot produce Telegram initData (iOS
+ * Shortcut, future PWA session). Only the SHA-256 hash is stored. */
+export const deviceTokens = sqliteTable(
+  'device_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    label: text('label'),
+    createdAt: integer('created_at').notNull(),
+    lastUsedAt: integer('last_used_at'),
+    revokedAt: integer('revoked_at'),
+  },
+  (t) => ({
+    hashIdx: uniqueIndex('device_tokens_hash_idx').on(t.tokenHash),
+    userIdx: index('device_tokens_user_idx').on(t.userId),
+  }),
+);
+
+export type DeviceTokenRow = typeof deviceTokens.$inferSelect;
 
 export type MetricsRow = typeof metrics.$inferSelect;
 export type UserActivityRow = typeof userActivity.$inferSelect;

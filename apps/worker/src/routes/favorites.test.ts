@@ -30,8 +30,10 @@ function meal(name: string, kcal = 120) {
 }
 
 describe('/api/favorites', () => {
-  it('requires auth', async () => {
-    const res = await createApp().request('/api/favorites', {}, env);
+  it('rejects a bad device token (sign-in itself is optional)', async () => {
+    const res = await createApp().request('/api/favorites', {
+      headers: { authorization: 'Bearer sb_bogus' },
+    }, env);
     expect(res.status).toBe(401);
   });
 

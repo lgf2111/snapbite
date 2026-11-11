@@ -69,10 +69,13 @@ async function loadAdaptiveUsers(db: D1Database): Promise<AdaptiveUser[]> {
 
   const out: AdaptiveUser[] = [];
   for (const r of rows) {
+    if (r.telegramUserId == null) continue;
     if (parsePreferences(r.preferencesJson).adaptive?.enabled) {
       out.push({
         userId: r.userId,
-        telegramUserId: r.telegramUserId,
+        // Skip accounts with no Telegram identity (email/device accounts):
+        // every one of these jobs delivers through the bot.
+        telegramUserId: r.telegramUserId as number,
         preferencesJson: r.preferencesJson,
       });
     }

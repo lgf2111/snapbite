@@ -60,17 +60,24 @@ describe('GET /api/me', () => {
     expect(second.userId).toBe(first.userId);
   });
 
-  it('rejects a missing initData with 401', async () => {
+  it('serves an anonymous account when initData is missing (sign-in is optional)', async () => {
     const app = createApp();
     const res = await app.request('/api/me', {}, env);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { userId: string; telegramUserId: number | null };
+    expect(body.userId).toBeTruthy();
+    expect(body.telegramUserId).toBeNull();
   });
 
-  it('rejects a tampered initData with 401', async () => {
+  it('falls back to an anonymous account on a tampered initData', async () => {
     const app = createApp();
     const good = await validInitData(42);
     const tampered = `${good}&user=${encodeURIComponent('{"id":99}')}`;
     const res = await app.request('/api/me', { headers: { [INIT_DATA_HEADER]: tampered } }, env);
-    expect(res.status).toBe(401);
+    // A bad signature is not trusted, but it is also not a hard 401 any more:
+    // the request continues as anonymous.
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { telegramUserId: number | null };
+    expect(body.telegramUserId).toBeNull();
   });
 });
