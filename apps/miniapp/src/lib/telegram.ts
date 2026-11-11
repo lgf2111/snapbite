@@ -14,7 +14,6 @@ import {
   hapticFeedback,
   init,
   mainButton,
-  openLink,
   retrieveRawInitData,
   themeParams,
   viewport,
@@ -267,38 +266,6 @@ export function downloadViaTelegram(url: string, fileName: string): boolean {
     // fall through
   }
   return false;
-}
-
-/**
- * Opens a public HTTPS URL so the platform (not the in-app webview) handles it.
- * Used for the data export on clients without native `downloadFile`: the URL's
- * `Content-Disposition: attachment` header makes the browser save the JSON.
- *
- * Tries Telegram's `openLink` (opens in the external browser) first, then falls
- * back to `window.open`, then a top-level navigation. Never uses a blob URL, so
- * it can't strand a blob: link in the webview. Must be called synchronously
- * from a user gesture (Telegram requires it for openLink).
- */
-export function openExportUrl(url: string): void {
-  try {
-    if (available(openLink)) {
-      openLink(url);
-      return;
-    }
-  } catch {
-    // fall through to plain web APIs
-  }
-  try {
-    const win = window.open(url, '_blank');
-    if (win) return;
-  } catch {
-    // popup blocked or unavailable
-  }
-  try {
-    window.location.assign(url);
-  } catch {
-    // nothing more we can do
-  }
 }
 
 // ---------------------------------------------------------------------------
