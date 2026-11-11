@@ -14,6 +14,9 @@ vi.mock('../lib/shortcut.js', async (importOriginal) => ({
   },
 }));
 
+const nav = vi.hoisted(() => ({ to: vi.fn() }));
+vi.mock('../lib/navigate.js', () => ({ navigateTo: nav.to }));
+
 const RAW = 'sb_TEST-RAW-TOKEN-VALUE';
 
 function stub(initial: DeviceTokenInfo[] = []) {
@@ -55,6 +58,7 @@ afterEach(() => {
   cleanup();
   Reflect.deleteProperty(window, 'matchMedia');
   icloud.url = '';
+  nav.to.mockClear();
 });
 
 describe('ShortcutCard', () => {
@@ -439,5 +443,104 @@ describe('ShortcutCard: telling tokens apart', () => {
       (b) => b.getAttribute('aria-label') as string,
     );
     expect(new Set(names).size).toBe(2);
+  });
+});
+
+describe('ShortcutCard: the pre-flight dialog', () => {
+  const PATH = '/shortcut/snapbite-log-meal.shortcut';
+  const USED: DeviceTokenInfo = { ...OLD, id: 't-used', lastUsedAt: Date.UTC(2026, 1, 1) };
+  const add = () => screen.getByRole('link', { name: 'Add the Shortcut' });
+
+  it('opens a dialog instead of navigating, with the three lines in order and nothing more', async () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    await userEvent.click(add());
+
+    const dialog = await screen.findByRole('dialog');
+    expect(nav.to).not.toHaveBeenCalled();
+    const lines = [...dialog.querySelectorAll('p')].map((p) => p.textContent);
+    expect(lines).toEqual([
+      'You will leave SnapBite for a moment.',
+      'Tap Open in Shortcuts, then Add Shortcut.',
+      'Come back here and paste your token into the Authorization field.',
+    ]);
+  });
+
+  it('Continue navigates to the file in the same tap, and closes the dialog', async () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    await userEvent.click(add());
+    const dialog = await screen.findByRole('dialog');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue' }));
+    expect(nav.to).toHaveBeenCalledTimes(1);
+    expect(nav.to).toHaveBeenCalledWith(PATH);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('Cancel closes it without navigating, and is before Continue in the DOM, and focused', async () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    await userEvent.click(add());
+    const dialog = await screen.findByRole('dialog');
+    const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
+    const cont = within(dialog).getByRole('button', { name: 'Continue' });
+    expect(cancel.compareDocumentPosition(cont) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(cancel));
+
+    await userEvent.click(cancel);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(nav.to).not.toHaveBeenCalled();
+  });
+
+  it('is built on the dialog primitive: scrim, 16px insets, 24px padding', async () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    await userEvent.click(add());
+    const dialog = await screen.findByRole('dialog');
+    expect(document.querySelector('[data-slot=dialog-overlay]')).toBeTruthy();
+    expect(dialog.className).toContain('w-[calc(100%-2rem)]');
+    expect(dialog.className).toContain('p-6');
+  });
+
+  /** Whether the click on "Add the Shortcut" was cancelled by the time it reached the document. */
+  async function clickAndSeeIfPrevented() {
+    const seen: boolean[] = [];
+    const onClick = (e: Event) => {
+      // Stop jsdom from trying to follow the link; what we want is what the card did.
+      seen.push(e.defaultPrevented);
+      e.preventDefault();
+    };
+    document.addEventListener('click', onClick);
+    await userEvent.click(add());
+    document.removeEventListener('click', onClick);
+    return seen[0];
+  }
+
+  it('is skipped once a token has been used: the link just goes, with no dialog', async () => {
+    const { backend } = stub([USED]);
+    render(<ShortcutCard backend={backend} />);
+    await userEvent.click(await screen.findByText('How it works'));
+
+    expect(await clickAndSeeIfPrevented()).toBe(false);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(add().getAttribute('href')).toBe(
+      'https://snapbite.leeguanfeng.com/shortcut/snapbite-log-meal.shortcut',
+    );
+  });
+
+  it('holds the link back, to show the dialog, until a token has been used', async () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    expect(await clickAndSeeIfPrevented()).toBe(true);
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+  });
+
+  it('still shows it for a token that exists but has never been used', async () => {
+    const { backend } = stub([OLD]); // lastUsedAt: null
+    render(<ShortcutCard backend={backend} />);
+    await userEvent.click(await screen.findByText('How it works'));
+    await userEvent.click(add());
+    expect(await screen.findByRole('dialog')).toBeTruthy();
   });
 });

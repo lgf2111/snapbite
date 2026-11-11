@@ -4,7 +4,9 @@ import type { CreatedDeviceToken, DeviceTokenInfo } from '../lib/api.js';
 import type { Backend } from '../lib/backend.js';
 import { readConfig } from '../lib/config.js';
 import { isStandalone } from '../lib/install.js';
+import { navigateTo } from '../lib/navigate.js';
 import {
+  SHORTCUT_FILE_PATH,
   SHORTCUT_FILE_URL,
   SHORTCUT_ICLOUD_URL,
   SHORTCUT_TOKEN_FIELD,
@@ -138,6 +140,8 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
   const urlRef = useRef<HTMLElement | null>(null);
   const fileRef = useRef<HTMLElement | null>(null);
   const cancelRef = useRef<HTMLButtonElement | null>(null);
+  const preflightCancelRef = useRef<HTMLButtonElement | null>(null);
+  const [preflight, setPreflight] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -193,6 +197,10 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
   const icloud = SHORTCUT_ICLOUD_URL;
   const addHref = icloud || SHORTCUT_FILE_URL;
   const hasToken = tokens != null && tokens.length > 0;
+  // A returning user has been through this: a token that has actually been used.
+  const hasUsedToken = tokens?.some((t) => t.lastUsedAt != null) ?? false;
+  // Where Continue goes: Apple's import page when we have one, else the file itself.
+  const target = icloud || SHORTCUT_FILE_PATH;
   // Three steps, visible. Once there is a token the person has been through them, so
   // they fold into one line (and only then).
   const collapse = hasToken && !fresh;
@@ -203,8 +211,19 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
         <p className="font-medium">1. Get the shortcut</p>
         <Button asChild>
           {/* A plain https link: no fetch, no blob, no download attribute, and not the
-              shortcuts:// scheme, which iOS 26 rejects for a file URL. */}
-          <a href={addHref}>Add the Shortcut</a>
+              shortcuts:// scheme, which iOS 26 rejects for a file URL. Until a token has
+              been used it first explains the hand-off (the page it lands on looks like
+              nothing); after that the link just works. */}
+          <a
+            href={addHref}
+            onClick={(e) => {
+              if (hasUsedToken) return;
+              e.preventDefault();
+              setPreflight(true);
+            }}
+          >
+            Add the Shortcut
+          </a>
         </Button>
         <p className="text-muted-foreground text-caption">
           {icloud
@@ -377,6 +396,50 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
           </div>
         )}
       </CardContent>
+
+      <Dialog open={preflight} onOpenChange={setPreflight}>
+        <DialogContent
+          className="p-6"
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            preflightCancelRef.current?.focus();
+          }}
+        >
+          <DialogTitle className="sr-only">Before you add the shortcut</DialogTitle>
+          <DialogDescription asChild>
+            <div className="text-foreground flex flex-col gap-3 text-body">
+              <p>You will leave SnapBite for a moment.</p>
+              <p>
+                {icloud
+                  ? 'Tap Get Shortcut, then Add Shortcut.'
+                  : 'Tap Open in Shortcuts, then Add Shortcut.'}
+              </p>
+              <p>Come back here and paste your token into the {SHORTCUT_TOKEN_FIELD} field.</p>
+            </div>
+          </DialogDescription>
+          {/* Cancel first in the DOM; Continue below it, the primary action. */}
+          <DialogFooter className="-mx-6 -mb-6 flex-col px-6 pb-6">
+            <Button
+              ref={preflightCancelRef}
+              variant="secondary"
+              className="w-full"
+              onClick={() => setPreflight(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="w-full"
+              onClick={() => {
+                // Inside the tap, so it is a navigation and not a blocked popup.
+                navigateTo(target);
+                setPreflight(false);
+              }}
+            >
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirm !== null} onOpenChange={(open) => !open && !busy && setConfirm(null)}>
         <DialogContent
