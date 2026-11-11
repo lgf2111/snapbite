@@ -34,6 +34,31 @@ type Confirm = { kind: 'one'; token: DeviceTokenInfo } | { kind: 'all' } | null;
 
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString();
 
+/** `iPhone Shortcut · a3f9`: the device, and a short suffix to tell two tokens apart. */
+export function newTokenLabel(): string {
+  const ua = navigator.userAgent;
+  const device = /iPad/.test(ua)
+    ? 'iPad'
+    : /iPhone|iPod/.test(ua)
+      ? 'iPhone'
+      : /Android/.test(ua)
+        ? 'Android'
+        : 'Browser';
+  const suffix = Array.from(crypto.getRandomValues(new Uint8Array(2)), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
+  return `${device} Shortcut · ${suffix}`;
+}
+
+/**
+ * What to call a token on screen. New ones carry their own suffix; older ones were all
+ * just "iOS Shortcut", so the start of the id stands in and two of them can be told apart.
+ */
+export function tokenName(t: DeviceTokenInfo): string {
+  const label = t.label ?? 'Token';
+  return / · [0-9a-f]{4}$/.test(label) ? label : `${label} · ${t.id.slice(0, 4)}`;
+}
+
 /**
  * Copies `text` and reports it for two seconds. When the Clipboard API is
  * missing or refuses (some installed-PWA contexts), the visible text is
@@ -112,6 +137,7 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
   const tokenRef = useRef<HTMLElement | null>(null);
   const urlRef = useRef<HTMLElement | null>(null);
   const fileRef = useRef<HTMLElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -130,7 +156,7 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
     setBusy(true);
     setError(null);
     try {
-      setFresh(await backend.createDeviceToken());
+      setFresh(await backend.createDeviceToken(newTokenLabel()));
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create a token');
@@ -314,14 +340,14 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
               {tokens.map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-2">
                   <span className="text-muted-foreground text-caption min-w-0">
-                    {t.label ?? 'Token'} · {fmtDate(t.createdAt)} ·{' '}
+                    {tokenName(t)} · {fmtDate(t.createdAt)} ·{' '}
                     {t.lastUsedAt ? `used ${fmtDate(t.lastUsedAt)}` : 'never used'}
                   </span>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    aria-label={`Revoke ${t.label ?? 'token'} from ${fmtDate(t.createdAt)}`}
+                    aria-label={`Revoke ${tokenName(t)} from ${fmtDate(t.createdAt)}`}
                     onClick={() => setConfirm({ kind: 'one', token: t })}
                   >
                     Revoke
@@ -343,7 +369,16 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
       </CardContent>
 
       <Dialog open={confirm !== null} onOpenChange={(open) => !open && !busy && setConfirm(null)}>
-        <DialogContent>
+        <DialogContent
+          // 24px of padding; the footer's negative margins follow it so its pinned
+          // background still reaches the panel's edges.
+          className="p-6"
+          onOpenAutoFocus={(e) => {
+            // The safe choice is the one that has focus.
+            e.preventDefault();
+            cancelRef.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>
               {confirm?.kind === 'all' ? 'Revoke all tokens?' : 'Revoke this token?'}
@@ -354,11 +389,32 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
                 : 'Any Shortcut using it stops working until you make a new one.'}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="secondary" disabled={busy} onClick={() => setConfirm(null)}>
+          {confirm?.kind === 'one' && (
+            <p
+              data-testid="revoke-target"
+              className="bg-secondary text-secondary-foreground text-caption min-w-0 rounded-md px-3 py-2 font-medium break-words [overflow-wrap:anywhere]"
+            >
+              {tokenName(confirm.token)} · {fmtDate(confirm.token.createdAt)}
+            </p>
+          )}
+          {/* Cancel first in the DOM (and so in the tab order and to a screen reader),
+              and above the destructive action on screen: the iOS order. */}
+          <DialogFooter className="-mx-6 -mb-6 flex-col px-6 pb-6">
+            <Button
+              ref={cancelRef}
+              variant="secondary"
+              className="w-full"
+              disabled={busy}
+              onClick={() => setConfirm(null)}
+            >
               Cancel
             </Button>
-            <Button variant="destructive" disabled={busy} onClick={() => void runConfirmed()}>
+            <Button
+              variant="destructive"
+              className="w-full"
+              disabled={busy}
+              onClick={() => void runConfirmed()}
+            >
               {busy ? 'Revoking…' : 'Revoke'}
             </Button>
           </DialogFooter>

@@ -287,3 +287,121 @@ describe('ShortcutCard: the three steps', () => {
     expect(container.textContent).not.toMatch(/configure|authenticate/i);
   });
 });
+
+describe('ShortcutCard: revoke confirmation', () => {
+  const LONG: DeviceTokenInfo = {
+    ...OLD,
+    id: 't-long',
+    label: 'iPhone 15 Pro Max Shortcut for the kitchen counter and the gym bag and the car',
+  };
+
+  async function openOne(rows: DeviceTokenInfo[] = [OLD]) {
+    const { backend, spies } = stub(rows);
+    render(<ShortcutCard backend={backend} />);
+    await userEvent.click(
+      (await screen.findAllByRole('button', { name: /^Revoke / }))[0] as HTMLElement,
+    );
+    return { dialog: await screen.findByRole('dialog'), spies };
+  }
+
+  it('is built on the dialog primitive: a dimming, blurred scrim covers the screen behind it', async () => {
+    await openOne();
+    const scrim = document.querySelector('[data-slot=dialog-overlay]') as HTMLElement;
+    expect(scrim).toBeTruthy();
+    expect(scrim.className).toContain('fixed');
+    expect(scrim.className).toContain('inset-0');
+    expect(scrim.className).toContain('bg-background/80');
+    expect(scrim.className).toContain('backdrop-blur');
+    // Above the tab bar (z-40), so nothing behind the panel stays readable.
+    expect(scrim.className).toContain('z-50');
+  });
+
+  it('names the token it applies to, with a one-line title and one sentence of consequence', async () => {
+    const { dialog } = await openOne();
+    expect(within(dialog).getByText('Revoke this token?')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText('Any Shortcut using it stops working until you make a new one.'),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByTestId('revoke-target').textContent).toContain('iOS Shortcut');
+  });
+
+  it('cannot clip a very long token label: the panel is inset, padded and scrolls, the label wraps', async () => {
+    const { dialog } = await openOne([LONG]);
+    const target = within(dialog).getByTestId('revoke-target');
+    expect(target.textContent).toContain('for the kitchen counter and the gym bag');
+    expect(target.className).toContain('break-words');
+    expect(target.className).toContain('min-w-0');
+    expect(target.className).not.toContain('truncate');
+
+    expect(dialog.className).toContain('w-[calc(100%-2rem)]');
+    expect(dialog.className).toContain('p-6');
+    expect(dialog.className).toContain('overflow-y-auto');
+    expect(dialog.className).toContain('max-h-[calc(100svh-');
+  });
+
+  it('puts Cancel before Revoke in the DOM, both full width and 44px tall, Revoke destructive', async () => {
+    const { dialog } = await openOne();
+    const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
+    const revoke = within(dialog).getByRole('button', { name: 'Revoke' });
+    expect(cancel.compareDocumentPosition(revoke) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const b of [cancel, revoke]) {
+      expect(b.className).toContain('w-full');
+      expect(b.className).toContain('h-11');
+    }
+    expect(revoke.className).toContain('bg-destructive');
+    expect(revoke.className).toContain('text-destructive-foreground');
+    expect(cancel.className).toContain('bg-secondary');
+    // Rendered top to bottom as the DOM reads: Cancel above the destructive action.
+    const footer = dialog.querySelector('[data-slot=dialog-footer]') as HTMLElement;
+    expect(footer.className).toContain('flex-col');
+    expect(footer.className).not.toContain('flex-col-reverse');
+  });
+
+  it('opens with focus on Cancel, and a backdrop tap or Escape cancels without revoking', async () => {
+    const { dialog, spies } = await openOne();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Cancel' })),
+    );
+
+    await userEvent.click(document.querySelector('[data-slot=dialog-overlay]') as HTMLElement);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(spies.revokeDeviceToken).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getAllByRole('button', { name: /^Revoke / })[0] as HTMLElement);
+    await screen.findByRole('dialog');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(spies.revokeDeviceToken).not.toHaveBeenCalled();
+  });
+});
+
+describe('ShortcutCard: telling tokens apart', () => {
+  it('labels a new token with the device and a short suffix', async () => {
+    Object.defineProperty(navigator, 'userAgent', {
+      value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+      configurable: true,
+    });
+    try {
+      const { backend, spies } = stub();
+      render(<ShortcutCard backend={backend} />);
+      await userEvent.click(screen.getByRole('button', { name: 'Create Shortcut token' }));
+      await screen.findByText(RAW);
+      expect(spies.createDeviceToken).toHaveBeenCalledWith(
+        expect.stringMatching(/^iPhone Shortcut · [0-9a-f]{4}$/),
+      );
+    } finally {
+      Reflect.deleteProperty(navigator, 'userAgent');
+    }
+  });
+
+  it('two old tokens with the same label and date read differently', async () => {
+    const A = { ...OLD, id: 'aaaa-1' };
+    const B = { ...OLD, id: 'bbbb-2' };
+    const { backend } = stub([A, B]);
+    render(<ShortcutCard backend={backend} />);
+    const names = (await screen.findAllByRole('button', { name: /^Revoke (?!all)/ })).map(
+      (b) => b.getAttribute('aria-label') as string,
+    );
+    expect(new Set(names).size).toBe(2);
+  });
+});
