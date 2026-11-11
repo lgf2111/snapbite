@@ -15,11 +15,10 @@ import {
   weekRange,
 } from '@/lib/weekPrefs';
 import { type DailyTargets, type MealResult, PROVIDER_PRESETS } from '@snapbite/core';
-import { Keyboard, RefreshCw, Sparkles } from 'lucide-react';
+import { RefreshCw, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DateSelector } from './DateSelector.js';
 import { MacroLegend, MacroLine } from './MacroLine.js';
-import { ManualMealDialog } from './ManualMealDialog.js';
 import { ProgressRing } from './ProgressRing.js';
 import { SwipeableRow } from './SwipeableRow.js';
 import { ReviseWithAiDialog } from './UpdateWithAi.js';
@@ -52,6 +51,10 @@ interface HomeScreenProps {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
+/** Consumed as a 0–100 share of the target; a missing target reads as empty. */
+const macroPercent = (have: number, target: number) =>
+  target > 0 ? Math.min(100, Math.max(0, (have / target) * 100)) : 0;
+
 /**
  * Home answers one question: am I on track today?
  *
@@ -72,7 +75,6 @@ export function HomeScreen({
   onSetGoal,
   onToast,
 }: HomeScreenProps) {
-  const [addOpen, setAddOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   /** The meal being edited with AI inline from Home (null = dialog closed). */
   const [aiMeal, setAiMeal] = useState<RecentMeal | null>(null);
@@ -232,14 +234,6 @@ export function HomeScreen({
           >
             <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Add a meal by hand"
-            onClick={() => setAddOpen(true)}
-          >
-            <Keyboard className="size-4" aria-hidden />
-          </Button>
         </div>
       </header>
 
@@ -296,7 +290,7 @@ export function HomeScreen({
                 ['Carbs', consumed.carbsG, viewTargets.carbsG, 'g'],
                 ['Fat', consumed.fatG, viewTargets.fatG, 'g'],
               ].map(([label, have, target, unit]) => (
-                <div key={String(label)} className="flex items-baseline justify-between gap-2">
+                <div key={String(label)} className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1">
                   <dt className="text-muted-foreground text-caption">{label}</dt>
                   <dd className="tabular text-caption font-medium">
                     {Math.round(Number(have))}
@@ -305,6 +299,18 @@ export function HomeScreen({
                       {Math.round(Number(target))}
                       {unit}
                     </span>
+                  </dd>
+                  {/* Progress as length, so it never rests on colour alone. The
+                      numbers above stay the source of truth. */}
+                  <dd
+                    aria-hidden
+                    data-slot="macro-bar"
+                    className="bg-muted ring-border/60 col-span-2 h-[3px] overflow-hidden rounded-full ring-1"
+                  >
+                    <div
+                      className="bg-primary h-full rounded-full"
+                      style={{ width: `${macroPercent(Number(have), Number(target))}%` }}
+                    />
                   </dd>
                 </div>
               ))}
@@ -329,7 +335,11 @@ export function HomeScreen({
         <section className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
           <div className="min-w-0">
             <p className="text-body font-medium">Set a goal to see your rings</p>
-            <p className="text-muted-foreground text-caption">Meals are logged either way.</p>
+            <p className="text-muted-foreground text-caption">
+              {meals && meals.length === 0
+                ? 'Nothing logged yet — tap the camera to add one.'
+                : 'Meals are logged either way.'}
+            </p>
           </div>
           <Button size="sm" onClick={onSetGoal}>
             Set goal
@@ -338,12 +348,6 @@ export function HomeScreen({
       )}
 
       {error && <p className="text-destructive text-caption">{error}</p>}
-
-      {!viewTargets && meals && meals.length === 0 && (
-        <p className="text-muted-foreground text-caption">
-          Nothing logged yet — tap the camera to add one.
-        </p>
-      )}
 
       {!meals && !error && (
         <div className="flex flex-col gap-2">
@@ -405,14 +409,6 @@ export function HomeScreen({
           <MacroLegend className="justify-center pt-1" />
         </div>
       )}
-
-      <ManualMealDialog
-        backend={backend}
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        onLogged={refresh}
-        onToast={onToast}
-      />
 
       {aiMeal && (
         <ReviseWithAiDialog

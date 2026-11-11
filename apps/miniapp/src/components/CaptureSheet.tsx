@@ -1,9 +1,10 @@
 import { cn } from '@/lib/utils';
 import type { MealResult } from '@snapbite/core';
-import { Camera, ImageIcon, Loader2 } from 'lucide-react';
+import { Camera, ImageIcon, Keyboard, Loader2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { Backend } from '../lib/backend.js';
 import { compressPhoto } from '../lib/compress.js';
+import { ManualMealDialog } from './ManualMealDialog.js';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
@@ -14,6 +15,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onLogged: (result: MealResult) => void;
+  /** A meal was logged through the by-hand form (no AI result to hand back). */
+  onManualLogged: () => void;
   onToast: (kind: 'success' | 'error' | 'info', msg: string) => void;
 }
 
@@ -29,7 +32,15 @@ interface Props {
  *   idle → analysing → review → saving → closed
  *                    ↘ error → (retry reuses the same photo)
  */
-export function CaptureSheet({ backend, open, onOpenChange, onLogged, onToast }: Props) {
+export function CaptureSheet({
+  backend,
+  open,
+  onOpenChange,
+  onLogged,
+  onManualLogged,
+  onToast,
+}: Props) {
+  const [manualOpen, setManualOpen] = useState(false);
   const [stage, setStage] = useState<Stage>('idle');
   const [draft, setDraft] = useState<MealResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,7 +134,7 @@ export function CaptureSheet({ backend, open, onOpenChange, onLogged, onToast }:
         <DialogContent className="sheet-safe bottom-0 top-auto max-w-md translate-y-0 rounded-b-none rounded-t-xl">
           <DialogHeader>
             <DialogTitle className="text-title">
-              {stage === 'review' || stage === 'saving' ? 'Log this meal?' : 'Add a meal photo'}
+              {stage === 'review' || stage === 'saving' ? 'Log this meal?' : 'Add a meal'}
             </DialogTitle>
             <DialogDescription>
               {stage === 'analysing'
@@ -132,7 +143,7 @@ export function CaptureSheet({ backend, open, onOpenChange, onLogged, onToast }:
                   ? 'Check the estimate, then save it.'
                   : stage === 'error'
                     ? 'That did not work.'
-                    : 'Take a photo or choose one from your library.'}
+                    : 'Take a photo, choose one, or enter it by hand.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -176,7 +187,7 @@ export function CaptureSheet({ backend, open, onOpenChange, onLogged, onToast }:
           )}
 
           {error && (
-            <p className="text-caption" role="alert" style={{ color: 'var(--destructive)' }}>
+            <p className="text-destructive text-caption" role="alert">
               {error}
             </p>
           )}
@@ -220,11 +231,28 @@ export function CaptureSheet({ backend, open, onOpenChange, onLogged, onToast }:
                 <Button variant="outline" onClick={() => libraryInput.current?.click()}>
                   <ImageIcon className="size-4" aria-hidden /> Choose from library
                 </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    onOpenChange(false);
+                    setManualOpen(true);
+                  }}
+                >
+                  <Keyboard className="size-4" aria-hidden /> Enter it by hand
+                </Button>
               </>
             )}
           </div>
         </DialogContent>
       </Dialog>
+
+      <ManualMealDialog
+        backend={backend}
+        open={manualOpen}
+        onOpenChange={setManualOpen}
+        onLogged={onManualLogged}
+        onToast={onToast}
+      />
     </>
   );
 }

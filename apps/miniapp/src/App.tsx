@@ -184,6 +184,7 @@ export function App() {
         open={captureOpen}
         onOpenChange={setCaptureOpen}
         onLogged={() => setHomeVersion((v) => v + 1)}
+        onManualLogged={() => setHomeVersion((v) => v + 1)}
         onToast={toastFn}
       />
 
@@ -195,7 +196,7 @@ export function App() {
           if (!next) finishOnboarding({ skipped: true });
         }}
       >
-        <DialogContent className="sheet-safe bottom-0 top-auto max-h-[92svh] max-w-md translate-y-0 overflow-y-auto rounded-b-none rounded-t-xl">
+        <DialogContent className="sheet-safe bottom-0 top-auto max-h-[92svh] max-w-md translate-y-0 scroll-pb-28 overflow-y-auto rounded-b-none rounded-t-xl">
           <DialogTitle className="sr-only">Set up SnapBite</DialogTitle>
           <Suspense fallback={<ScreenFallback />}>
             <OnboardingScreen
