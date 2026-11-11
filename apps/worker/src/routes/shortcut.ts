@@ -1,6 +1,13 @@
-import { type MealImage, decryptSecret, resolveMeal } from '@snapbite/core';
+import { type MealImage, resolveMeal } from '@snapbite/core';
 import { type Context, Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import {
+  type ProviderFactory,
+  ProviderSetupError,
+  QuotaExceeded,
+  defaultProviderFactory,
+  resolveProviderForUser,
+} from '../billing/provider.js';
 import {
   createDeviceTokensDb,
   hashDeviceToken,
@@ -10,15 +17,9 @@ import {
 import { describeError, logError } from '../db/errors.js';
 import { countMealsSince, createMealsDb, saveMeal, setMealPhoto } from '../db/meals.js';
 import { recordMealSave } from '../db/metrics.js';
-import { createSettingsDb, getSettings } from '../db/settings.js';
 import type { AppBindings } from '../env.js';
 import { photoKey, r2Store } from '../storage/photos.js';
-import {
-  ALLOWED_MIME,
-  type ProviderFactory,
-  defaultProviderFactory,
-  primaryProviderChoice,
-} from './meals.js';
+import { ALLOWED_MIME } from './meals.js';
 
 const BEARER = /^Bearer\s+/i;
 
@@ -173,7 +174,9 @@ export function oneLine({ kcal, label, macros }: Logged): string {
   return `${lead}${title}\nP ${g(macros.proteinG)} g · C ${g(macros.carbsG)} g · F ${g(macros.fatG)} g`;
 }
 
-type Reply = { ok: true; logged: Logged; mealId: string } | { ok: false; message: string };
+type Reply =
+  | { ok: true; logged: Logged; mealId: string; notice?: string }
+  | { ok: false; message: string };
 
 /**
  * Plain text by default (the Shortcut shows the body in a notification verbatim);
@@ -186,7 +189,7 @@ function reply(c: Context<AppBindings>, r: Reply, status: ContentfulStatusCode =
       r.ok
         ? {
             ok: true,
-            message: oneLine(r.logged),
+            message: r.notice ? `${oneLine(r.logged)}\n${r.notice}` : oneLine(r.logged),
             mealId: r.mealId,
             label: r.logged.label,
             kcal: Math.round(r.logged.kcal),
@@ -195,14 +198,19 @@ function reply(c: Context<AppBindings>, r: Reply, status: ContentfulStatusCode =
               carbsG: Math.round(r.logged.macros.carbsG),
               fatG: Math.round(r.logged.macros.fatG),
             },
+            ...(r.notice ? { notice: r.notice } : {}),
           }
         : { ok: false, message: r.message },
       status,
     );
   }
-  return c.body(r.ok ? oneLine(r.logged) : r.message, status, {
-    'Content-Type': 'text/plain; charset=utf-8',
-  });
+  return c.body(
+    r.ok ? `${oneLine(r.logged)}${r.notice ? `\n${r.notice}` : ''}` : r.message,
+    status,
+    {
+      'Content-Type': 'text/plain; charset=utf-8',
+    },
+  );
 }
 
 const fail = (c: Context<AppBindings>, message: string, status: ContentfulStatusCode) =>
@@ -317,26 +325,12 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
     base64 = shrunk.base64;
     mimeType = shrunk.mimeType;
 
-    /* -------- key -------- */
-    const settings = await getSettings(createSettingsDb(c.env.DB), resolved.userId);
-    if (!settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
-      return fail(c, 'add your AI key in Settings first', 400);
-    }
-
-    let apiKey: string;
-    try {
-      apiKey = await decryptSecret(
-        { ciphertext: settings.apiKeyCiphertext, iv: settings.apiKeyIv },
-        c.env.ENCRYPTION_KEY,
-      );
-    } catch {
-      return fail(c, 'could not decrypt your saved AI key, add it again in Settings', 500);
-    }
-
     /* -------- analyse + save -------- */
     const image: MealImage = { base64, mimeType: mimeType as MealImage['mimeType'] };
     try {
-      const provider = providerFactory(primaryProviderChoice(settings, apiKey));
+      const provider = await resolveProviderForUser(c.env.DB, c.env, resolved.userId, {
+        providerFactory,
+      });
       const analysis = await provider.analyzeMeal(image, hint ? { hint } : {});
       const meal = resolveMeal(analysis);
 
@@ -345,7 +339,7 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
       const mealId = await saveMeal(db, {
         userId: resolved.userId,
         meal,
-        aiProvider: settings.aiProvider,
+        aiProvider: provider.id,
       });
 
       // Store the bytes we were given, so the app can show the photo. Best
@@ -373,8 +367,17 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
         ok: true,
         mealId,
         logged: { kcal: energyKcal, label, macros: { proteinG, carbsG, fatG } },
+        ...(provider.notice ? { notice: provider.notice } : {}),
       });
     } catch (err) {
+      if (err instanceof QuotaExceeded) {
+        return fail(
+          c,
+          err.reason === 'no-access' ? 'add your AI key in Settings first' : err.userMessage,
+          err.status,
+        );
+      }
+      if (err instanceof ProviderSetupError) return fail(c, err.userMessage, 500);
       const desc = describeError(err);
       await logError(c.env.DB, {
         telegramUserId: resolved.telegramUserId,

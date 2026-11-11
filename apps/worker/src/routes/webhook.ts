@@ -47,6 +47,13 @@ import {
 import { type Context, Hono } from 'hono';
 import { adminNotify } from '../adminNotify.js';
 import {
+  HOSTED_PROVIDER_ID,
+  type ProviderFactory,
+  ProviderSetupError,
+  QuotaExceeded,
+  resolveProviderForUser,
+} from '../billing/provider.js';
+import {
   EXPORT_LINK_THRESHOLD_MEALS,
   createAccountDb,
   deleteAccount,
@@ -109,12 +116,7 @@ import { lookupBarcode } from '../openfoodfacts.js';
 import { enqueuePhotoRetry } from '../photoRetry.js';
 import { photoKey, r2Store } from '../storage/photos.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
-import {
-  type ProviderFactory,
-  detailToAnalysis,
-  localDayKey,
-  primaryProviderChoice,
-} from './meals.js';
+import { detailToAnalysis, localDayKey } from './meals.js';
 
 /** The bot-client surface the webhook uses (so tests can mock just these). */
 export interface BotClient {
@@ -796,10 +798,10 @@ function localDayStartMs(nowMs: number, tzOffsetMinutes: number): number {
  */
 async function buildCoachContext(
   c: Context<AppBindings>,
-  settings: SettingsRow,
+  settings: SettingsRow | undefined,
   userId: string,
 ): Promise<string> {
-  const prefs = parsePreferences(settings.preferencesJson);
+  const prefs = parsePreferences(settings?.preferencesJson ?? null);
   const tz = prefs.adaptive?.tzOffsetMinutes ?? prefs.reminders?.tzOffsetMinutes ?? 0;
   const now = Date.now();
 
@@ -862,33 +864,30 @@ async function handleCoachCommand(
   const userDb = createDb(c.env.DB);
   const user = await upsertUser(userDb, { id: parsed.fromId as number });
   const settings = await getSettings(settingsDb, user.id);
-  if (!c.env.ENCRYPTION_KEY || !settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
-    await bot.sendMessage(chatId, {
-      text: 'Add your AI key first: open SnapBite → Settings, then ask again.',
-      ...(miniAppUrl
-        ? {
-            replyMarkup: {
-              inline_keyboard: [[{ text: '⚙️ Open SnapBite', web_app: { url: miniAppUrl } }]],
-            },
-          }
-        : {}),
-    });
-    return;
-  }
 
   try {
-    const apiKey = await decryptSecret(
-      { ciphertext: settings.apiKeyCiphertext, iv: settings.apiKeyIv },
-      c.env.ENCRYPTION_KEY,
-    );
+    const provider = await resolveProviderForUser(c.env.DB, c.env, user.id, { providerFactory });
     const context = await buildCoachContext(c, settings, user.id);
     await bot.sendChatAction?.(chatId, 'typing');
-    const provider = providerFactory(primaryProviderChoice(settings, apiKey));
     const answer = await provider.coachReply(context, question);
-    await bot.sendMessage(chatId, {
-      text: answer || "I couldn't come up with an answer — try rephrasing.",
-    });
+    const text = [answer || "I couldn't come up with an answer — try rephrasing.", provider.notice]
+      .filter(Boolean)
+      .join('\n\n');
+    await bot.sendMessage(chatId, { text });
   } catch (err) {
+    if (err instanceof QuotaExceeded || err instanceof ProviderSetupError) {
+      await bot.sendMessage(chatId, {
+        text: err.userMessage,
+        ...(miniAppUrl
+          ? {
+              replyMarkup: {
+                inline_keyboard: [[{ text: '⚙️ Open SnapBite', web_app: { url: miniAppUrl } }]],
+              },
+            }
+          : {}),
+      });
+      return;
+    }
     const e = err as ProviderErrorLike;
     const desc = describeError(e);
     await logError(c.env.DB, {
@@ -1394,22 +1393,8 @@ async function handleTextRevise(
   const userDb = createDb(c.env.DB);
   const user = await upsertUser(userDb, { id: fromId as number });
 
-  // Need a key to run the AI revise.
   const settingsDb = createSettingsDb(c.env.DB);
   const settings = await getSettings(settingsDb, user.id);
-  if (!c.env.ENCRYPTION_KEY || !settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
-    await bot.sendMessage(chatId, {
-      text: keylessAnalysisMessage(),
-      ...(miniAppUrl
-        ? {
-            replyMarkup: {
-              inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]],
-            },
-          }
-        : {}),
-    });
-    return;
-  }
 
   const mealsDb = createMealsDb(c.env.DB);
 
@@ -1464,15 +1449,25 @@ async function handleTextRevise(
     return;
   }
 
-  const apiKey = await decryptSecret(
-    { ciphertext: settings.apiKeyCiphertext, iv: settings.apiKeyIv },
-    c.env.ENCRYPTION_KEY,
-  );
-
   await bot.sendChatAction?.(chatId, 'typing');
-  const provider = providerFactory(primaryProviderChoice(settings, apiKey));
-  const analysis = await provider.reviseMeal(detailToAnalysis(detail), instruction, {});
-  const meal = resolveMeal(analysis);
+  let provider: Awaited<ReturnType<typeof resolveProviderForUser>>;
+  let meal: ReturnType<typeof resolveMeal>;
+  try {
+    provider = await resolveProviderForUser(c.env.DB, c.env, user.id, { providerFactory });
+    const analysis = await provider.reviseMeal(detailToAnalysis(detail), instruction, {});
+    meal = resolveMeal(analysis);
+  } catch (err) {
+    if (err instanceof QuotaExceeded || err instanceof ProviderSetupError) {
+      await bot.sendMessage(chatId, {
+        text:
+          err instanceof QuotaExceeded && err.reason === 'no-access'
+            ? keylessAnalysisMessage()
+            : err.userMessage,
+      });
+      return;
+    }
+    throw err;
+  }
   await updateMeal(mealsDb, target.id, user.id, meal);
 
   const foods = meal.foods.map((f) => f.food.name);
@@ -1486,6 +1481,7 @@ async function handleTextRevise(
       fiberG: meal.total.fiberG,
     },
     { miniAppUrl },
+    [provider.notice],
   );
   // Edit the original confirmation in place when we can; otherwise send fresh.
   const ref =
@@ -1539,24 +1535,6 @@ async function logTextMeal(
 ): Promise<void> {
   const { chatId } = parsed;
   const miniAppUrl = c.env.MINI_APP_URL ?? '';
-  if (!c.env.ENCRYPTION_KEY || !settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
-    await bot.sendMessage(chatId, {
-      text: keylessAnalysisMessage(),
-      ...(miniAppUrl
-        ? {
-            replyMarkup: {
-              inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]],
-            },
-          }
-        : {}),
-    });
-    return;
-  }
-
-  const apiKey = await decryptSecret(
-    { ciphertext: settings.apiKeyCiphertext, iv: settings.apiKeyIv },
-    c.env.ENCRYPTION_KEY,
-  );
 
   await bot.sendChatAction?.(chatId, 'typing');
   const ack = await bot.sendMessage(chatId, { text: '📝 Logging your meal…' });
@@ -1564,7 +1542,7 @@ async function logTextMeal(
   const mealsDb = createMealsDb(c.env.DB);
 
   try {
-    const provider = providerFactory(primaryProviderChoice(settings, apiKey));
+    const provider = await resolveProviderForUser(c.env.DB, c.env, userId, { providerFactory });
     const analysis = await provider.analyzeText(description);
     const meal = resolveMeal(analysis);
 
@@ -1586,7 +1564,7 @@ async function logTextMeal(
         fiberG: meal.total.fiberG,
       },
       { miniAppUrl },
-      [goalNudge, streak.line, offer],
+      [goalNudge, streak.line, offer, provider.notice],
     );
     // Low confidence → offer one-tap portion correction (deterministic rescale).
     const withPortions = isLowConfidence(meal.confidence)
@@ -1601,7 +1579,8 @@ async function logTextMeal(
     await saveMeal(mealsDb, {
       userId,
       meal,
-      aiProvider: provider.id,
+      aiProvider:
+        provider.source === 'hosted' ? HOSTED_PROVIDER_ID : (settings?.aiProvider ?? provider.id),
       telegramChatId: chatId,
       telegramMessageId: confirmMessageId,
     });
@@ -1610,6 +1589,15 @@ async function logTextMeal(
       await recordMealSave(c.env.DB, parsed.fromId, isFirstMeal).catch(() => {});
     }
   } catch (err) {
+    if (err instanceof QuotaExceeded || err instanceof ProviderSetupError) {
+      await replyOrEdit(bot, chatId, ack.messageId, {
+        text:
+          err instanceof QuotaExceeded && err.reason === 'no-access'
+            ? keylessAnalysisMessage()
+            : err.userMessage,
+      });
+      return;
+    }
     const e = err as ProviderErrorLike;
     const desc = describeError(e);
     await logError(c.env.DB, {
@@ -2193,26 +2181,8 @@ async function handlePhoto(
   const userDb = createDb(c.env.DB);
   const user = await upsertUser(userDb, { id: fromId });
 
-  // Need the user's encrypted key.
-  if (!c.env.ENCRYPTION_KEY) {
-    await bot.sendMessage(chatId, { text: 'Server not configured for analysis yet.' });
-    return;
-  }
   const settingsDb = createSettingsDb(c.env.DB);
   const settings = await getSettings(settingsDb, user.id);
-  if (!settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
-    await bot.sendMessage(chatId, {
-      text: keylessAnalysisMessage(),
-      ...(miniAppUrl
-        ? {
-            replyMarkup: {
-              inline_keyboard: [[{ text: '🍽️ Open SnapBite', web_app: { url: miniAppUrl } }]],
-            },
-          }
-        : {}),
-    });
-    return;
-  }
 
   // Generous per-user rate limit: cap photos logged per rolling hour so a flood
   // can't run up D1 writes + Telegram downloads. Well above any real meal cadence
@@ -2230,10 +2200,24 @@ async function handlePhoto(
     return;
   }
 
-  const apiKey = await decryptSecret(
-    { ciphertext: settings.apiKeyCiphertext, iv: settings.apiKeyIv },
-    c.env.ENCRYPTION_KEY,
-  );
+  // Resolve who pays before the "Analyzing…" ack: a keyless free account must
+  // get the canonical free-key message as the only reply.
+  let provider: Awaited<ReturnType<typeof resolveProviderForUser>>;
+  try {
+    provider = await resolveProviderForUser(c.env.DB, c.env, user.id, { providerFactory });
+  } catch (err) {
+    await replyOrEdit(bot, chatId, job.statusMessageId ?? null, {
+      text:
+        err instanceof QuotaExceeded
+          ? err.reason === 'no-access'
+            ? keylessAnalysisMessage()
+            : err.userMessage
+          : err instanceof ProviderSetupError
+            ? err.userMessage
+            : friendlyPhotoError(err as ProviderErrorLike),
+    });
+    return;
+  }
 
   // Let the user know we're on it — a transient "uploading photo…" status plus
   // a quick acknowledgement message that we later EDIT IN PLACE into the result
@@ -2258,7 +2242,6 @@ async function handlePhoto(
     return;
   }
 
-  const provider = providerFactory(primaryProviderChoice(settings, apiKey));
   const image = { base64: file.base64, mimeType: file.mimeType as 'image/jpeg' };
   // Captured for the archive step below (the bytes are already downloaded).
   const photoBytes = Uint8Array.from(atob(file.base64), (ch) => ch.charCodeAt(0));
@@ -2268,15 +2251,20 @@ async function handlePhoto(
   // Analyze on the primary, retrying transient 503s a few times, then fall over
   // to the fallback provider on any failover-worthy error.
   let analysis: Awaited<ReturnType<typeof provider.analyzeMeal>>;
-  let usedProvider = settings.aiProvider;
+  let usedProvider = settings?.aiProvider ?? provider.id;
   try {
     analysis = await analyzeWithRetry(provider, image, opts);
+    if (provider.source === 'hosted') usedProvider = HOSTED_PROVIDER_ID;
   } catch (err) {
     try {
       const fb = await tryFallback(c, err, image, opts, providerFactory, user.id);
       analysis = fb.analysis;
       usedProvider = fb.provider;
     } catch (finalErr) {
+      if (finalErr instanceof QuotaExceeded || finalErr instanceof ProviderSetupError) {
+        await replyOrEdit(bot, chatId, job.statusMessageId, { text: finalErr.userMessage });
+        return;
+      }
       // Primary (after inline retries) AND fallback both failed. If it's a
       // transient overload, queue a DELAYED auto-retry (cron re-analyzes in a
       // few minutes and edits this message into the result) instead of making
@@ -2330,7 +2318,7 @@ async function handlePhoto(
       fiberG: meal.total.fiberG,
     },
     { miniAppUrl },
-    [goalNudge, streak.line, offer],
+    [goalNudge, streak.line, offer, provider.notice],
   );
   // Portion sizing is the weak point of AI estimates. When overall confidence
   // is low, offer one-tap multipliers (¼/½/1×/2×) that rescale deterministically
