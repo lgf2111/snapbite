@@ -70,16 +70,19 @@ jobs:
           echo "BACKUP_FILE=$file" >> "$GITHUB_ENV"
           echo "BACKUP_DAY=$day" >> "$GITHUB_ENV"
 
-      - name: Refuse a blank backup
-        # An empty database exports to a few KB. A green run that saved nothing is
-        # worse than a red one, so anything under 100 KB fails the job.
+      - name: Refuse an empty backup
+        # A byte threshold is the wrong test: this database legitimately exports
+        # to ~36 KB. Check the content instead — a dump with no meal or user rows
+        # is the failure that matters, and it is invisible in a file size.
         shell: bash
         run: |
           set -euo pipefail
+          meals=$(grep -cE 'INSERT INTO "?meals"?' "$BACKUP_FILE" || true)
+          users=$(grep -cE 'INSERT INTO "?users"?' "$BACKUP_FILE" || true)
           bytes=$(stat -c%s "$BACKUP_FILE")
-          echo "$BACKUP_FILE is $bytes bytes"
-          if [ "$bytes" -lt 102400 ]; then
-            echo "::error::$BACKUP_FILE is only $bytes bytes (< 100 KB). The database looks empty or the export failed."
+          echo "$BACKUP_FILE is $bytes bytes — $meals meal inserts, $users user inserts"
+          if [ "$meals" -lt 1 ] || [ "$users" -lt 1 ]; then
+            echo "::error::$BACKUP_FILE has no meal or user rows. The export is empty or truncated; do not rely on it."
             exit 1
           fi
 
