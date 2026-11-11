@@ -102,6 +102,11 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
   const [sex, setSex] = useState<Sex>(initial?.sex ?? 'male');
   const [birthDate, setBirthDate] = useState<string>(() => seedBirthDate(initial));
   const [activity, setActivity] = useState<ActivityLevel>(initial?.activity ?? 'moderate');
+  const activityIndex = Math.max(
+    0,
+    ACTIVITIES.findIndex((a) => a.value === activity),
+  );
+  const activityLabel = ACTIVITIES[activityIndex]?.label ?? 'Moderate';
   const [goal, setGoal] = useState<Goal>(initial?.goal ?? 'maintain');
   const [units, setUnits] = useState<Units>(initial?.units ?? 'metric');
   const [advanced, setAdvanced] = useState<boolean>(initial?.mode === 'advanced');
@@ -269,22 +274,41 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
         )}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label>Activity</Label>
-        <div className="flex flex-col gap-1">
-          {ACTIVITIES.map((a) => (
-            <button
-              key={a.value}
-              type="button"
-              onClick={() => setActivity(a.value)}
-              className={cn(
-                'rounded-md border px-3 py-2 text-left text-sm transition-colors',
-                activity === a.value ? 'border-primary bg-primary/10' : 'border-input',
-              )}
-            >
-              {a.label}
-            </button>
-          ))}
+      {/*
+        Activity as a slider, matching Goal: five ordered stops are a scale, and a
+        scale belongs on a track. The stacked buttons made the reader compare five
+        rows to find the middle one.
+      */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="activity">Activity</Label>
+          <span
+            key={activityLabel}
+            className="text-primary-text animate-in text-sm font-medium fade-in-0 slide-in-from-bottom-1 duration-200"
+          >
+            {activityLabel}
+          </span>
+        </div>
+        <input
+          id="activity"
+          type="range"
+          min={0}
+          max={ACTIVITIES.length - 1}
+          step={1}
+          value={activityIndex}
+          onChange={(e) => setActivity(ACTIVITIES[Number(e.target.value)]?.value ?? 'moderate')}
+          className="range"
+          aria-label="Activity level"
+          aria-valuetext={activityLabel}
+          style={
+            {
+              '--range-progress': `${(activityIndex / (ACTIVITIES.length - 1)) * 100}%`,
+            } as React.CSSProperties
+          }
+        />
+        <div className="text-muted-foreground flex justify-between text-[10px]">
+          <span>Sedentary</span>
+          <span>Very active</span>
         </div>
       </div>
 
@@ -301,8 +325,13 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
           step={1}
           value={GOAL_STAGES.indexOf(goal)}
           onChange={(e) => setGoal(GOAL_STAGES[Number(e.target.value)] ?? 'maintain')}
-          className="accent-primary w-full"
+          className="range"
           aria-label="Goal"
+          style={
+            {
+              '--range-progress': `${(GOAL_STAGES.indexOf(goal) / (GOAL_STAGES.length - 1)) * 100}%`,
+            } as React.CSSProperties
+          }
         />
         <div className="text-muted-foreground flex justify-between text-[10px]">
           <span>Lose</span>

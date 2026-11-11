@@ -104,9 +104,13 @@ export function App() {
     [],
   );
 
-  // First-run onboarding (skippable): show once when we know there's no profile.
+  // First-run onboarding (skippable): open on the first load with no profile.
+  // Dismissing records a decision, so later launches land on Home with the
+  // "Set goal" card instead of re-opening the sheet every time.
   useEffect(() => {
-    if (hasProfile === false && !onboardingSkipped) setShowOnboarding(true);
+    if (hasProfile === false && !onboardingSkipped && keyDecision() === null) {
+      setShowOnboarding(true);
+    }
   }, [hasProfile, onboardingSkipped]);
 
   const openMeal = (meal: RecentMeal) => {
@@ -196,7 +200,7 @@ export function App() {
           if (!next) finishOnboarding({ skipped: true });
         }}
       >
-        <DialogContent className="sheet-safe bottom-0 top-auto max-h-[92svh] max-w-md translate-y-0 scroll-pb-28 overflow-y-auto rounded-b-none rounded-t-xl">
+        <DialogContent className="sheet-safe bottom-0 top-auto max-h-[92svh] max-w-md translate-y-0 scroll-pb-28 overflow-y-auto rounded-b-none rounded-t-xl duration-200 data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2 data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100">
           <DialogTitle className="sr-only">Set up SnapBite</DialogTitle>
           <Suspense fallback={<ScreenFallback />}>
             <OnboardingScreen

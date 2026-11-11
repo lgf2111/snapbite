@@ -727,7 +727,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                     type="button"
                     onClick={() => updateWeekPrefs({ weekStart: o.value })}
                     className={cn(
-                      'flex-1 rounded px-2 py-1.5 text-sm font-medium transition-colors',
+                      'min-h-9 flex-1 rounded px-2 py-1.5 text-sm font-medium transition-[transform,background-color,color,box-shadow] duration-[160ms] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100',
                       weekPrefs.weekStart === o.value
                         ? 'bg-background text-foreground shadow-sm'
                         : 'text-muted-foreground',
