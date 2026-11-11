@@ -72,7 +72,11 @@ export function DateSelector({ value, onChange, loggedDates }: DateSelectorProps
             <span className="font-medium">{label(value)}</span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-2" align="center">
+        <PopoverContent
+          className="w-auto max-w-[calc(100vw-2rem)] p-2"
+          align="center"
+          collisionPadding={16}
+        >
           <Suspense fallback={<Skeleton className="h-64 w-64 rounded-md" />}>
             <Calendar
               mode="single"
