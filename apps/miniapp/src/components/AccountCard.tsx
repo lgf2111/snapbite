@@ -1,5 +1,7 @@
+import { Mail } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { readConfig } from '../lib/config.js';
+import { GoogleIcon } from './icons/GoogleIcon.js';
 import { Button } from './ui/button.js';
 import { Card, CardContent } from './ui/card.js';
 import { Input } from './ui/input.js';
@@ -126,8 +128,11 @@ export function AccountCard() {
             </p>
 
             {providers.google && (
-              <Button asChild>
-                <a href={`${workerUrl}/api/auth/start/google`}>Continue with Google</a>
+              <Button asChild variant="outline">
+                <a href={`${workerUrl}/api/auth/start/google`}>
+                  <GoogleIcon />
+                  Continue with Google
+                </a>
               </Button>
             )}
 
@@ -147,6 +152,7 @@ export function AccountCard() {
                   disabled={busy || !email.trim()}
                   onClick={() => void requestLink()}
                 >
+                  <Mail className="size-4" aria-hidden />
                   {busy ? 'Sending…' : 'Email me a sign-in link'}
                 </Button>
               </>
