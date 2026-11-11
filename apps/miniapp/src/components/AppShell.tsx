@@ -24,8 +24,8 @@ interface Props {
  */
 export function AppShell({ active, onNavigate, onCapture, captureBusy = false, children }: Props) {
   return (
-    <div className="pt-safe mx-auto flex min-h-svh w-full max-w-md flex-col bg-background">
-      <main className="reserve-bar flex-1 px-4 pt-3">{children}</main>
+    <div className="pt-top mx-auto flex min-h-svh w-full max-w-md flex-col bg-background">
+      <main className="reserve-bar flex-1 px-4 pt-5">{children}</main>
 
       <nav
         aria-label="Main"

@@ -5,6 +5,15 @@ const FOCUSABLE = 'a[href],button,input,select,textarea,summary,[tabindex]:not([
 /** Marks the history entry this layer pushed, so a real Back is told apart from our own. */
 const MARK = 'sbSetup';
 
+/**
+ * Layers currently mounted. React's dev-mode StrictMode mounts, unmounts and
+ * remounts every effect; without this, that unmount's `history.back()` (which
+ * resolves a tick later, relative to the entry it was called on) would land on
+ * the page before ours and read as a Back press, dismissing setup the moment it
+ * opened.
+ */
+let mounted = 0;
+
 interface Props {
   /** Escape, or Back on the phone. Same meaning the old dialog's dismissal had. */
   onDismiss: () => void;
@@ -50,7 +59,9 @@ export function SetupLayer({ onDismiss, children }: Props) {
 
   // Back button / swipe-back / hardware back.
   useEffect(() => {
-    window.history.pushState({ [MARK]: true }, '');
+    mounted += 1;
+    // A StrictMode remount finds the entry its first mount pushed: reuse it.
+    if (!window.history.state?.[MARK]) window.history.pushState({ [MARK]: true }, '');
     const onPop = () => {
       // Our entry is still current (e.g. the traversal landed on a sibling
       // entry we pushed): not a dismissal.
@@ -60,9 +71,13 @@ export function SetupLayer({ onDismiss, children }: Props) {
     window.addEventListener('popstate', onPop);
     return () => {
       window.removeEventListener('popstate', onPop);
+      mounted -= 1;
       // Closed by a button, not by Back: take our entry off the stack so the
-      // next Back leaves the app screen instead of re-visiting setup.
-      if (window.history.state?.[MARK]) window.history.back();
+      // next Back leaves the app screen instead of re-visiting setup. Decided a
+      // microtask later so a StrictMode remount can claim the entry first.
+      queueMicrotask(() => {
+        if (mounted === 0 && window.history.state?.[MARK]) window.history.back();
+      });
     };
   }, []);
 
