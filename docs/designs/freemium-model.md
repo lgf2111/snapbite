@@ -121,6 +121,42 @@ Adopted: grace window, then a **usable floor** — manual entry, full log, date 
 9. No priority queue, no history limits, no health-platform integration.
 10. Anonymous accounts can still log meals; taking the plan requires a verified identity, and sign-in must **claim the existing anonymous account and its meals** rather than mint an empty one.
 
+## Credits: the model that replaces a subscription
+
+The owner's intent, restated: this is **prepaid credit for our Gemini key**, not a subscription. A user pays once, gets a number of analyses, and spends them when they log. No recurring charge, no plan to cancel, no feature lockout — credits buy one thing, an analysis we pay for.
+
+That changes the arithmetic completely, because a subscription is priced against a month of usage while credits are priced against a **fixed per-transaction fee that dominates small purchases**. Stripe charges roughly 2.9% + $0.30. On a $1 purchase that fee is 33% of revenue, before a single model call; on a $35 purchase it is under 4%. Any pack priced near $1 is a loss no matter how the margin is set.
+
+### Decided rates
+
+Model cost used here: **$0.005 per analysis** (Gemini Flash class, mid-2026 rates, with the shrink pipeline and a capped output). All figures per pack, at cost.
+
+| Pack | Credits | Price | Stripe fee | AI cost | Gross margin | Effective per credit |
+|---|---|---|---|---|---|---|
+| Starter | 100 | $4.99 | $0.44 | $0.50 | **$4.05 (81%)** | $0.050 |
+| Regular | 300 | $11.99 | $0.65 | $1.50 | **$9.84 (82%)** | $0.040 |
+| Bulk | 1000 | $34.99 | $1.31 | $5.00 | **$28.68 (82%)** | $0.035 |
+
+Rules that follow from the arithmetic:
+
+- **No pack below $4.99.** Below that the fixed fee is the largest line item and the pack cannot be profitable at any honest credit count.
+- **Never advertise a credit count you do not deliver.** The draft idea of quoting 200 credits and silently giving 500 is a refund magnet and, worse, a lie in the one place a user is paying attention. The number on the button is the number of analyses they get.
+- **The margin is high because credits also cover storage, the analytics views, refunds and the 2027 provider price rise.** If Gemini doubles, per-credit cost goes to ~$0.01 and the Starter pack still clears 70%.
+- **Prices are quoted excluding tax.** Stripe Tax adds GST/VAT at checkout per jurisdiction; the owner's tax obligation is not a hidden line in the pack price.
+- **Credits do not expire for 24 months**, and unused credits stay visible in Settings. Expiring them is free money and bad faith.
+- **A failed analysis is not charged.** The decrement and the `ai_usage` row are written only when a meal is returned; a 503 or a timeout refunds the credit in the same transaction.
+
+### What this replaces
+
+- The convenience subscription is **replaced** by credits. There is no monthly plan, no trial-to-subscription conversion, and therefore none of the cancellation, grace-period or dunning machinery — the strongest simplification in this document.
+- Entitlement is a **balance**, not a boolean: `credit_balance` on `billing_accounts`, decremented atomically per analysis, with `ai_usage` as the ledger. A zero balance is the free floor (BYOK), never a locked app.
+- The registration trial becomes **20 free credits**, granted once per verified identity. Same anti-abuse rule: verified identity, not a device account.
+- Advanced analytics: the owner still wants them to be a paid differentiator. Under credits the honest version is that analytics are **free to read** and the *generated report* costs credits only if it calls the model — pure computed views cost us a query, so they stay free. If the owner prefers them gated, it must be stated as a product choice, not funded by credit sales.
+
+### What the pricing page says
+
+One sentence per pack, no tiers named after metals, no "best value" badge: *100 photo analyses — $4.99*. A user should be able to work out the per-photo price in their head.
+
 ## Roadmap: trials and eligibility
 
 ### A trial at registration
