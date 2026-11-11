@@ -21,6 +21,7 @@ import {
   lbToKg,
 } from '@snapbite/core';
 import { useMemo, useState } from 'react';
+import { ExternalLink } from './ExternalLink.js';
 import { InfoDisclosure } from './InfoDisclosure.js';
 import { MacroLine } from './MacroLine.js';
 import { NumberField } from './NumberField.js';
@@ -426,14 +427,12 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
         <p>
           <strong>Macros:</strong> protein 1.8 g/kg · fat 25% of calories · carbs the rest.
         </p>
-        <a
+        <ExternalLink
           href="https://pubmed.ncbi.nlm.nih.gov/2305711/"
-          target="_blank"
-          rel="noopener noreferrer"
           className="text-primary-text underline"
         >
           Source: Mifflin–St Jeor (1990)
-        </a>
+        </ExternalLink>
       </InfoDisclosure>
 
       <Button disabled={saving} onClick={() => onSubmit(profile)}>
