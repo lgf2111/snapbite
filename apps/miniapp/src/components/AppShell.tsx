@@ -31,7 +31,7 @@ export function AppShell({ active, onNavigate, onCapture, captureBusy = false, c
         aria-label="Main"
         className="pb-safe fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md border-t border-border bg-background/95 backdrop-blur"
       >
-        <div className="flex h-[var(--spacing-bar)] items-stretch justify-around px-2">
+        <div className="relative flex h-[var(--spacing-bar)] items-stretch justify-around px-2">
           <NavButton
             label="Home"
             icon={<Home className="size-5" aria-hidden />}
@@ -39,19 +39,26 @@ export function AppShell({ active, onNavigate, onCapture, captureBusy = false, c
             onClick={() => onNavigate('home')}
           />
 
-          <div className="flex w-16 items-start justify-center">
+          {/*
+            The capture button is deliberately larger than the bar and breaks out
+            of it: a control that is the same height as the chrome competes with
+            navigation, one that overshoots it reads as the primary action. The
+            negative top offset is calm on purpose — it clears the bar edge
+            without touching the safe area or the last row of content.
+          */}
+          <div className="relative flex w-20 items-start justify-center">
             <button
               type="button"
               onClick={onCapture}
               disabled={captureBusy}
-              aria-label="Log a meal photo"
+              aria-label="Log a meal"
               className={cn(
-                'mt-1.5 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform',
+                'absolute -top-5 flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl ring-4 ring-background transition-transform',
                 'active:scale-95 disabled:opacity-60',
                 'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
               )}
             >
-              <Camera className="size-6" aria-hidden />
+              <Camera className="size-7" aria-hidden />
             </button>
           </div>
 

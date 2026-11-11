@@ -35,7 +35,8 @@ export function CaptureSheet({ backend, open, onOpenChange, onLogged, onToast }:
   const [error, setError] = useState<string | null>(null);
   const photo = useRef<{ base64: string; mimeType: string } | null>(null);
   const preview = useRef<string | null>(null);
-  const input = useRef<HTMLInputElement | null>(null);
+  const cameraInput = useRef<HTMLInputElement | null>(null);
+  const libraryInput = useRef<HTMLInputElement | null>(null);
 
   function reset() {
     setStage('idle');
@@ -92,11 +93,20 @@ export function CaptureSheet({ backend, open, onOpenChange, onLogged, onToast }:
 
   return (
     <>
+      {/* `capture` forces the camera; without it iOS offers the photo library.
+          Two inputs are the only way to offer both from one sheet. */}
       <input
-        ref={input}
+        ref={cameraInput}
         type="file"
         accept="image/*"
         capture="environment"
+        className="hidden"
+        onChange={(e) => void handleFile(e.target.files?.[0])}
+      />
+      <input
+        ref={libraryInput}
+        type="file"
+        accept="image/*"
         className="hidden"
         onChange={(e) => void handleFile(e.target.files?.[0])}
       />
@@ -185,7 +195,7 @@ export function CaptureSheet({ backend, open, onOpenChange, onLogged, onToast }:
             )}
 
             {stage === 'error' && !draft && (
-              <Button onClick={() => input.current?.click()} disabled={busy}>
+              <Button onClick={() => libraryInput.current?.click()} disabled={busy}>
                 Choose another photo
               </Button>
             )}
@@ -204,10 +214,10 @@ export function CaptureSheet({ backend, open, onOpenChange, onLogged, onToast }:
 
             {stage === 'idle' && (
               <>
-                <Button onClick={() => input.current?.click()}>
+                <Button onClick={() => cameraInput.current?.click()}>
                   <Camera className="size-4" aria-hidden /> Take a photo
                 </Button>
-                <Button variant="outline" onClick={() => input.current?.click()}>
+                <Button variant="outline" onClick={() => libraryInput.current?.click()}>
                   <ImageIcon className="size-4" aria-hidden /> Choose from library
                 </Button>
               </>
