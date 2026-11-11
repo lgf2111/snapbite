@@ -74,7 +74,6 @@ describe('ShortcutCard', () => {
     expect(await screen.findByText(RAW)).toBeInTheDocument();
     expect(spies.createDeviceToken).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/will not be shown again/i)).toBeInTheDocument();
-    expect(screen.getAllByRole('listitem').length).toBeGreaterThanOrEqual(4);
   });
 
   it('removes the token from the DOM once dismissed', async () => {
@@ -133,69 +132,127 @@ describe('ShortcutCard', () => {
   });
 });
 
-describe('ShortcutCard: the three steps', () => {
-  const HREF = '/shortcut/snapbite-log-meal.shortcut';
+const EASY = 'Install with the Shortcuts app';
+const HAND = 'Set it up by hand';
+const FILE = 'https://snapbite.leeguanfeng.com/shortcut/snapbite-log-meal.shortcut';
+const accordion = (name: string) => screen.getByRole('button', { name, expanded: undefined });
+const openEasy = async () => {
+  const btn = accordion(EASY);
+  if (btn.getAttribute('aria-expanded') !== 'true') await userEvent.click(btn);
+};
+/** The text of the numbered steps inside one accordion's panel, in order. */
+const stepsOf = (name: string) => {
+  const panel = document.getElementById(accordion(name).getAttribute('aria-controls') as string);
+  return [...(panel?.querySelectorAll(':scope > ol > li') ?? [])].map((li) =>
+    (li.textContent ?? '').replace(/\s+/g, ' ').trim(),
+  );
+};
+const asUserAgent = (ua: string) =>
+  Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true });
 
-  it('shows all three steps, in order, before there is any token', () => {
+describe('ShortcutCard: the two accordions', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'userAgent');
+  });
+
+  it('are both closed to begin with, content mounted but hidden', () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    for (const name of [EASY, HAND]) {
+      const btn = accordion(name);
+      expect(btn.getAttribute('aria-expanded')).toBe('false');
+      const panel = document.getElementById(btn.getAttribute('aria-controls') as string);
+      expect(panel?.hasAttribute('hidden')).toBe(true);
+      expect(panel?.querySelector('ol')).toBeTruthy(); // mounted, just collapsed
+    }
+  });
+
+  it('opens the first one by itself on a phone that reports iOS, and leaves the second closed', () => {
+    asUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15');
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    expect(accordion(EASY).getAttribute('aria-expanded')).toBe('true');
+    expect(accordion(HAND).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('opening one closes the other, and a second tap closes it', async () => {
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
 
-    const headings = [
-      '1. Get the shortcut',
-      '2. Put your token in it',
-      '3. Point the Action Button at it',
-    ].map((t) => screen.getByText(t));
-    for (let i = 1; i < headings.length; i++) {
-      expect(
-        (headings[i - 1] as HTMLElement).compareDocumentPosition(headings[i] as HTMLElement) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    }
-    // Visible by default: not folded away behind "How it works".
-    expect(screen.queryByText('How it works')).toBeNull();
+    await userEvent.click(accordion(EASY));
+    expect(accordion(EASY).getAttribute('aria-expanded')).toBe('true');
+
+    await userEvent.click(accordion(HAND));
+    expect(accordion(HAND).getAttribute('aria-expanded')).toBe('true');
+    expect(accordion(EASY).getAttribute('aria-expanded')).toBe('false');
+
+    await userEvent.click(accordion(HAND));
+    expect(accordion(HAND).getAttribute('aria-expanded')).toBe('false');
   });
 
-  const FILE = 'https://snapbite.leeguanfeng.com/shortcut/snapbite-log-meal.shortcut';
-  const asUserAgent = (ua: string) =>
-    Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true });
+  it('"Install with the Shortcuts app" has its four numbered steps in order, and the closing line', () => {
+    const { backend } = stub();
+    const { container } = render(<ShortcutCard backend={backend} />);
+    expect(stepsOf(EASY)).toEqual([
+      'Add the Shortcut.',
+      'Tap Open in Shortcuts, then Add Shortcut.',
+      'Open the shortcut, tap Authorization, replace PASTE_YOUR_TOKEN_HERE with your token from above, keeping the word Bearer and one space.',
+      'Settings → Action Button → Shortcut → SnapBite Log Meal.',
+    ]);
+    const text = container.textContent ?? '';
+    expect(text).toContain('SnapBite gives you a ready-made shortcut. You only add your token.');
+    expect(text).toContain(
+      'Hold the Action Button, take a photo, the notification tells you what was logged.',
+    );
+  });
 
-  afterEach(() => {
-    Reflect.deleteProperty(navigator, 'userAgent');
+  it('"Set it up by hand" has its four actions in order, each naming its fields', () => {
+    const { backend } = stub();
+    const { container } = render(<ShortcutCard backend={backend} />);
+    const steps = stepsOf(HAND);
+    expect(steps).toHaveLength(4);
+    expect(steps[0]).toBe('Take Photo — turn on Show Camera Preview.');
+    expect(steps[1]).toBe('Convert Image → JPEG, quality 0.6.');
+    expect(steps[2]).toContain('Get Contents of URL');
+    expect(steps[2]).toContain('https://snapbite.leeguanfeng.com/api/shortcut/log');
+    expect(steps[2]).toContain('Method POST, Request Body Form.');
+    expect(steps[2]).toContain('New field photo, type File, value Converted Image.');
+    expect(steps[2]).toContain('Header Authorization = Bearer, a space, then your token.');
+    expect(steps[3]).toBe(
+      'Show Notification → Title Meal logged, Body Contents of URL, Attachment Converted Image.',
+    );
+    expect(container.textContent).toContain(
+      'Convert Image is not optional: iPhones shoot HEIC and the server only accepts JPEG.',
+    );
+  });
+
+  it('keeps the token above both, where the steps say "from above"', () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    const create = screen.getByRole('button', { name: 'Create Shortcut token' });
+    expect(
+      create.compareDocumentPosition(accordion(EASY)) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('puts nothing a phone has to scroll sideways for: long strings wrap', () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    expect(screen.getByTestId('shortcut-file-url').className).toContain('[overflow-wrap:anywhere]');
+    const hand = document.getElementById(accordion(HAND).getAttribute('aria-controls') as string);
+    expect(hand?.className).toContain('min-w-0');
+    expect(hand?.innerHTML).toContain('[overflow-wrap:anywhere]');
   });
 
   it('step 1 is a plain link to the https file, never the shortcuts:// scheme', async () => {
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
+    await openEasy();
     const link = screen.getByRole('link', { name: 'Add the Shortcut' });
     expect(link.getAttribute('href')).toBe(FILE);
     expect(link.getAttribute('href')).not.toContain('shortcuts://');
     expect(link.hasAttribute('target')).toBe(false);
     expect(link.hasAttribute('download')).toBe(false);
-    expect(
-      screen.getByText('It opens a file preview — tap Open in Shortcuts, then Add Shortcut.'),
-    ).toBeTruthy();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Create Shortcut token' }));
-    await screen.findByText(RAW);
-    expect(
-      screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href'),
-    ).not.toContain(RAW);
-  });
-
-  it('the same link is the same on every device, and shown as text', () => {
-    for (const ua of [
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)',
-      'Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0',
-    ]) {
-      asUserAgent(ua);
-      const { backend } = stub();
-      const view = render(<ShortcutCard backend={backend} />);
-      expect(screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href')).toBe(
-        FILE,
-      );
-      expect(screen.getByTestId('shortcut-file-url').textContent).toBe(FILE);
-      view.unmount();
-    }
   });
 
   it('"Copy link" copies that same https string', async () => {
@@ -203,6 +260,7 @@ describe('ShortcutCard: the three steps', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
+    await openEasy();
     await userEvent.click(screen.getByRole('button', { name: 'Copy link' }));
     expect(writeText).toHaveBeenCalledWith(FILE);
     expect(screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href')).toBe(
@@ -213,15 +271,16 @@ describe('ShortcutCard: the three steps', () => {
   it('with an iCloud link set, the primary button leads with it and the file stays as the other way', async () => {
     const ICLOUD = 'https://www.icloud.com/shortcuts/0123456789abcdef';
     icloud.url = ICLOUD;
-    const writeText = vi.fn(async () => {});
+    const writeText = vi.fn(async (_text: string) => {});
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
+    await openEasy();
 
     expect(screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href')).toBe(
       ICLOUD,
     );
-    expect(screen.getByText(/tap Get Shortcut, then Add Shortcut/)).toBeTruthy();
+    expect(stepsOf(EASY)[1]).toBe('Tap Get Shortcut, then Add Shortcut.');
     expect(
       screen.getByRole('link', { name: 'Use the file link instead' }).getAttribute('href'),
     ).toBe(FILE);
@@ -233,71 +292,6 @@ describe('ShortcutCard: the three steps', () => {
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
     expect(screen.queryByText(/iCloud/i)).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Use the file link instead' })).toBeNull();
-  });
-
-  it('says the token step happens after the shortcut is added, in the Shortcuts app', () => {
-    const { backend } = stub();
-    const { container } = render(<ShortcutCard backend={backend} />);
-    expect(container.textContent).toContain(
-      'after the shortcut is added, inside the Shortcuts app — not in SnapBite',
-    );
-  });
-
-  it('step 2 names the field and the text to replace exactly, and says the token is shown once', () => {
-    const { backend } = stub();
-    const { container } = render(<ShortcutCard backend={backend} />);
-    const text = container.textContent ?? '';
-    expect(text).toContain('tap the Authorization field');
-    expect(screen.getByText('PASTE_YOUR_TOKEN_HERE')).toBeTruthy();
-    expect(text).toContain('replace PASTE_YOUR_TOKEN_HERE with your token');
-    expect(text).toContain('sb_');
-    expect(text).toMatch(/shown only once/i);
-  });
-
-  it('tells the person how to fill in Show Notification so it looks like the card', () => {
-    const { backend } = stub();
-    const { container } = render(<ShortcutCard backend={backend} />);
-    const text = container.textContent ?? '';
-    expect(text).toContain('Title to Meal logged');
-    expect(text).toContain('Body to Contents of URL');
-    expect(text).toContain('Attachment to Photo');
-    expect(text).toContain('Title Meal logged, Body Contents of URL, Attachment Photo');
-  });
-
-  it('step 3 gives the Action Button path in order, and the card says why', () => {
-    const { backend } = stub();
-    const { container } = render(<ShortcutCard backend={backend} />);
-    expect(container.textContent).toContain(
-      'Settings → Action Button → Shortcut → SnapBite Log Meal',
-    );
-    expect(
-      screen.getByText(
-        'Hold the Action Button, take a photo, and the notification says what was logged.',
-      ),
-    ).toBeTruthy();
-  });
-
-  it('folds into one "How it works" line only once the person has a token', async () => {
-    const { backend } = stub([OLD]);
-    render(<ShortcutCard backend={backend} />);
-
-    const summary = await screen.findByText('How it works');
-    const details = summary.closest('details') as HTMLDetailsElement;
-    expect(details.open).toBe(false);
-    expect(details.contains(screen.getByText('1. Get the shortcut'))).toBe(true);
-
-    // Making a new token brings the steps back into view.
-    await userEvent.click(screen.getByRole('button', { name: 'Create Shortcut token' }));
-    await screen.findByText(RAW);
-    expect(screen.queryByText('How it works')).toBeNull();
-  });
-
-  it('keeps the by-hand route for a phone that cannot add the file', () => {
-    const { backend } = stub();
-    render(<ShortcutCard backend={backend} />);
-    expect(screen.getByText("Can't add it? Set it up by hand")).toBeTruthy();
-    expect(screen.getByText(/Take Photo → Convert Image/)).toBeTruthy();
   });
 
   it('tells a browser visitor to add SnapBite to the Home Screen first, but not the installed app', () => {
@@ -316,15 +310,6 @@ describe('ShortcutCard: the three steps', () => {
     })) as unknown as typeof window.matchMedia;
     render(<ShortcutCard backend={backend} />);
     expect(screen.queryByText(note)).toBeNull();
-  });
-
-  it('starts every step with a verb, in plain words', () => {
-    const { backend } = stub();
-    const { container } = render(<ShortcutCard backend={backend} />);
-    for (const word of ['Get', 'Put', 'Point']) {
-      expect(container.textContent).toMatch(new RegExp(`\\d\\. ${word} `));
-    }
-    expect(container.textContent).not.toMatch(/configure|authenticate/i);
   });
 });
 
@@ -450,10 +435,15 @@ describe('ShortcutCard: the pre-flight dialog', () => {
   const PATH = '/shortcut/snapbite-log-meal.shortcut';
   const USED: DeviceTokenInfo = { ...OLD, id: 't-used', lastUsedAt: Date.UTC(2026, 1, 1) };
   const add = () => screen.getByRole('link', { name: 'Add the Shortcut' });
+  const start = async (rows?: DeviceTokenInfo[]) => {
+    const { backend, spies } = stub(rows);
+    render(<ShortcutCard backend={backend} />);
+    await openEasy();
+    return { backend, spies };
+  };
 
   it('opens a dialog instead of navigating, with the three lines in order and nothing more', async () => {
-    const { backend } = stub();
-    render(<ShortcutCard backend={backend} />);
+    await start();
     await userEvent.click(add());
 
     const dialog = await screen.findByRole('dialog');
@@ -467,8 +457,7 @@ describe('ShortcutCard: the pre-flight dialog', () => {
   });
 
   it('Continue navigates to the file in the same tap, and closes the dialog', async () => {
-    const { backend } = stub();
-    render(<ShortcutCard backend={backend} />);
+    await start();
     await userEvent.click(add());
     const dialog = await screen.findByRole('dialog');
 
@@ -479,8 +468,7 @@ describe('ShortcutCard: the pre-flight dialog', () => {
   });
 
   it('Cancel closes it without navigating, and is before Continue in the DOM, and focused', async () => {
-    const { backend } = stub();
-    render(<ShortcutCard backend={backend} />);
+    await start();
     await userEvent.click(add());
     const dialog = await screen.findByRole('dialog');
     const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
@@ -494,8 +482,7 @@ describe('ShortcutCard: the pre-flight dialog', () => {
   });
 
   it('is built on the dialog primitive: scrim, 16px insets, 24px padding', async () => {
-    const { backend } = stub();
-    render(<ShortcutCard backend={backend} />);
+    await start();
     await userEvent.click(add());
     const dialog = await screen.findByRole('dialog');
     expect(document.querySelector('[data-slot=dialog-overlay]')).toBeTruthy();
@@ -518,9 +505,10 @@ describe('ShortcutCard: the pre-flight dialog', () => {
   }
 
   it('is skipped once a token has been used: the link just goes, with no dialog', async () => {
-    const { backend } = stub([USED]);
-    render(<ShortcutCard backend={backend} />);
-    await userEvent.click(await screen.findByText('How it works'));
+    await start([USED]);
+    await screen.findByRole('link', { name: 'Add the Shortcut' });
+    // Wait for the token list to load, so the card knows this token was used.
+    await screen.findByText(/used /);
 
     expect(await clickAndSeeIfPrevented()).toBe(false);
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -530,16 +518,14 @@ describe('ShortcutCard: the pre-flight dialog', () => {
   });
 
   it('holds the link back, to show the dialog, until a token has been used', async () => {
-    const { backend } = stub();
-    render(<ShortcutCard backend={backend} />);
+    await start();
     expect(await clickAndSeeIfPrevented()).toBe(true);
     expect(await screen.findByRole('dialog')).toBeTruthy();
   });
 
   it('still shows it for a token that exists but has never been used', async () => {
-    const { backend } = stub([OLD]); // lastUsedAt: null
-    render(<ShortcutCard backend={backend} />);
-    await userEvent.click(await screen.findByText('How it works'));
+    await start([OLD]); // lastUsedAt: null
+    await screen.findByText(/never used/);
     await userEvent.click(add());
     expect(await screen.findByRole('dialog')).toBeTruthy();
   });

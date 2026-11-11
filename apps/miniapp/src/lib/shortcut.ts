@@ -14,6 +14,9 @@
 export const SHORTCUT_FILE_PATH = '/shortcut/snapbite-log-meal.shortcut';
 export const SHORTCUT_FILE_URL = `https://snapbite.leeguanfeng.com${SHORTCUT_FILE_PATH}`;
 
+/** Where the shortcut posts the photo. Shown verbatim for the by-hand route. */
+export const SHORTCUT_LOG_URL = 'https://snapbite.leeguanfeng.com/api/shortcut/log';
+
 /**
  * Apple's own share link (https://www.icloud.com/shortcuts/...). Empty until the shortcut
  * is published to iCloud; once set the card leads with it, because that link opens a
