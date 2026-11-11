@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { Backend, MealDates, RecentMeal } from '@/lib/backend';
 import { cacheKey } from '@/lib/cache';
 import { hapticNotify } from '@/lib/telegram';
@@ -14,7 +15,7 @@ import {
   weekRange,
 } from '@/lib/weekPrefs';
 import { type DailyTargets, type MealResult, PROVIDER_PRESETS } from '@snapbite/core';
-import { Camera, Plus, RefreshCw, Sparkles, Target } from 'lucide-react';
+import { Keyboard, RefreshCw, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DateSelector } from './DateSelector.js';
 import { MacroLegend, MacroLine } from './MacroLine.js';
@@ -52,9 +53,12 @@ interface HomeScreenProps {
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /**
- * Home is a day view: pick a date at the top, see that day's targets (as
- * progress rings when a goal is set) and the meals logged that day. Each meal
- * supports swipe-to-delete and "Update with AI".
+ * Home answers one question: am I on track today?
+ *
+ * The date and the Daily/Weekly switch sit together as the header, the verdict
+ * ring carries the answer, the three macros sit under it as evidence, and the
+ * meals are the receipts. Capture lives in the app bar, not here — three
+ * separate "add a meal" controls on one screen was the old failure.
  */
 export function HomeScreen({
   backend,
@@ -115,7 +119,6 @@ export function HomeScreen({
   }, [refreshMeals, refreshDates]);
 
   // Manual pull: revalidate now (useful if a bot-logged meal hasn't shown yet).
-  // Spins briefly as feedback; the list updates in place (no skeleton).
   const manualRefresh = useCallback(() => {
     if (refreshing) return;
     setRefreshing(true);
@@ -124,8 +127,7 @@ export function HomeScreen({
     window.setTimeout(() => setRefreshing(false), 700);
   }, [refresh, refreshing]);
 
-  // App bumps refreshSignal after an edit/delete; revalidate without remounting
-  // (so the selected day/view is preserved). Skip the initial mount.
+  // App bumps refreshSignal after an edit/delete; revalidate without remounting.
   const firstSignal = useRef(refreshSignal);
   useEffect(() => {
     if (firstSignal.current === refreshSignal) return;
@@ -134,14 +136,12 @@ export function HomeScreen({
   }, [refreshSignal, refresh]);
 
   // Track which meal ids we've already shown for the CURRENT list key, so a
-  // meal that appears later (after logging) animates in — but the initial batch
-  // (and a day/view switch) does not animate everything.
+  // meal that appears later (after logging) animates in.
   const seenIds = useRef<{ key: string; ids: Set<string> }>({ key: mealsKey, ids: new Set() });
   const newIds = useMemo(() => {
     const list = mealsData ?? [];
     const store = seenIds.current;
     if (store.key !== mealsKey) {
-      // New day/view: treat everything as already-seen (no mass animation).
       store.key = mealsKey;
       store.ids = new Set(list.map((m) => m.id));
       return new Set<string>();
@@ -183,12 +183,6 @@ export function HomeScreen({
     }
   }
 
-  /**
-   * Saves the AI-revised draft straight from Home (the quick inline edit). The
-   * revised meal returned by the AI is already a complete, resolved MealResult,
-   * so we persist it directly and refresh — no detour through the edit screen.
-   * To fine-tune foods, the user can still open the meal and edit by hand.
-   */
   async function handleAiDraft(id: string, revised: MealResult) {
     try {
       await backend.update(id, revised);
@@ -211,13 +205,21 @@ export function HomeScreen({
     fatG: sum((m) => m.fatG),
   };
 
+  const kcalLeft = viewTargets ? Math.round(viewTargets.energyKcal - consumed.energyKcal) : null;
+  const kcalOver = kcalLeft != null && kcalLeft < 0;
+  const hasMeals = (meals?.length ?? 0) > 0;
+  // A verdict needs evidence: on an empty day "protein is short" is a statement
+  // about the user, not about the data.
+  const proteinShort =
+    hasMeals && viewTargets != null && consumed.proteinG < viewTargets.proteinG * 0.8 && !kcalOver;
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-5">
+      <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold">SnapBite</h1>
+          <h1 className="text-title">SnapBite</h1>
           {streak != null && (
-            <p className="text-muted-foreground text-xs">🔥 {streak}-day logging streak</p>
+            <p className="text-muted-foreground text-caption">🔥 {streak}-day streak</p>
           )}
         </div>
         <div className="flex items-center gap-1.5">
@@ -231,160 +233,145 @@ export function HomeScreen({
             <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
           </Button>
           <Button
-            variant="secondary"
-            size="sm"
-            className="gap-1.5"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Add a meal by hand"
             onClick={() => setAddOpen(true)}
           >
-            <Plus className="size-4" /> Add meal
+            <Keyboard className="size-4" aria-hidden />
           </Button>
         </div>
+      </header>
+
+      <div className="flex flex-col gap-2">
+        <DateSelector value={date} onChange={onDateChange} loggedDates={loggedDates} />
+        <ToggleGroup
+          type="single"
+          value={view}
+          onValueChange={(v) => v && onViewChange(v as 'daily' | 'weekly')}
+          block
+          aria-label="View"
+        >
+          <ToggleGroupItem value="daily">Daily</ToggleGroupItem>
+          <ToggleGroupItem value="weekly">Weekly</ToggleGroupItem>
+        </ToggleGroup>
       </div>
-
-      {/* Daily / Weekly view toggle. */}
-      <div className="bg-muted flex gap-1 rounded-md p-1">
-        {(['daily', 'weekly'] as const).map((v) => (
-          <button
-            key={v}
-            type="button"
-            onClick={() => onViewChange(v)}
-            className={cn(
-              'flex-1 rounded px-3 py-1.5 text-sm font-medium capitalize transition-colors',
-              view === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground',
-            )}
-          >
-            {v}
-          </button>
-        ))}
-      </div>
-
-      <DateSelector value={date} onChange={onDateChange} loggedDates={loggedDates} />
-
-      {weekly && (
-        <div className="-mt-1 flex flex-col items-center gap-2">
-          <p className="text-muted-foreground text-center text-xs">
-            {weeklyAverage ? 'Daily average' : 'Week total'} · {range.label}
-          </p>
-          <div className="bg-muted flex gap-1 rounded-md p-0.5 text-xs">
-            {(
-              [
-                ['total', 'Total'],
-                ['average', 'Daily avg'],
-              ] as const
-            ).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                aria-pressed={weekViewMode === mode}
-                onClick={() => setWeekMode(mode)}
-                className={cn(
-                  'rounded px-2.5 py-1 font-medium transition-colors',
-                  weekViewMode === mode
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {viewTargets ? (
-        <Card>
-          <CardContent
-            className="place-items-center gap-x-2 gap-y-4"
-            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}
-          >
-            <ProgressRing
-              consumed={consumed.energyKcal}
-              target={viewTargets.energyKcal}
-              label="kcal"
-              icon="🔥"
-              size={76}
-              colorClass="text-primary"
-            />
-            <ProgressRing
-              consumed={consumed.proteinG}
-              target={viewTargets.proteinG}
-              label="protein"
-              icon="🥩"
-              size={76}
-              colorClass="text-rose-500"
-            />
-            <ProgressRing
-              consumed={consumed.carbsG}
-              target={viewTargets.carbsG}
-              label="carbs"
-              icon="🍚"
-              size={76}
-              colorClass="text-amber-500"
-            />
-            <ProgressRing
-              consumed={consumed.fatG}
-              target={viewTargets.fatG}
-              label="fat"
-              icon="🧈"
-              size={76}
-              colorClass="text-sky-500"
-            />
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 text-center">
-            <Target className="text-primary size-8" />
-            <p className="font-medium">Optional: set a goal for daily targets</p>
-            <p className="text-muted-foreground text-sm">
-              Logging already works — your meals show below. Add your details and goal whenever you
-              want progress rings for calories, protein, carbs, and fat.
+        <section
+          aria-label="Today's progress"
+          className="flex items-center gap-4 rounded-lg border border-border bg-card p-4"
+        >
+          <ProgressRing
+            consumed={consumed.energyKcal}
+            target={viewTargets.energyKcal}
+            label={weeklyAverage ? 'kcal / day' : 'kcal'}
+            size={132}
+            hero
+            colorClass="text-primary"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-title leading-tight">
+              {!hasMeals
+                ? 'Nothing logged yet'
+                : kcalOver
+                  ? `Over by ${Math.abs(kcalLeft ?? 0)}`
+                  : proteinShort
+                    ? 'Protein is short'
+                    : 'On track'}
             </p>
-            <Button className="mt-1" onClick={onSetGoal}>
-              Set your goal
-            </Button>
-          </CardContent>
-        </Card>
+            {!hasMeals ? (
+              <p className="text-muted-foreground text-caption">Tap the camera to add one.</p>
+            ) : (
+              weekly && (
+                <p className="text-muted-foreground text-caption">
+                  {weeklyAverage ? 'Daily average' : 'Week total'} · {range.label}
+                </p>
+              )
+            )}
+
+            <dl className="mt-3 flex flex-col gap-1.5">
+              {[
+                ['Protein', consumed.proteinG, viewTargets.proteinG, 'g'],
+                ['Carbs', consumed.carbsG, viewTargets.carbsG, 'g'],
+                ['Fat', consumed.fatG, viewTargets.fatG, 'g'],
+              ].map(([label, have, target, unit]) => (
+                <div key={String(label)} className="flex items-baseline justify-between gap-2">
+                  <dt className="text-muted-foreground text-caption">{label}</dt>
+                  <dd className="tabular text-caption font-medium">
+                    {Math.round(Number(have))}
+                    <span className="text-muted-foreground">
+                      {' / '}
+                      {Math.round(Number(target))}
+                      {unit}
+                    </span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+
+            {weekly && (
+              <ToggleGroup
+                type="single"
+                value={weekViewMode}
+                onValueChange={(v) => v && setWeekMode(v as WeekViewMode)}
+                size="sm"
+                className="mt-3"
+                aria-label="Weekly total or average"
+              >
+                <ToggleGroupItem value="total">Total</ToggleGroupItem>
+                <ToggleGroupItem value="average">Daily avg</ToggleGroupItem>
+              </ToggleGroup>
+            )}
+          </div>
+        </section>
+      ) : (
+        <section className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
+          <div className="min-w-0">
+            <p className="text-body font-medium">Set a goal to see your rings</p>
+            <p className="text-muted-foreground text-caption">Meals are logged either way.</p>
+          </div>
+          <Button size="sm" onClick={onSetGoal}>
+            Set goal
+          </Button>
+        </section>
       )}
 
-      {error && <p className="text-destructive text-sm">{error}</p>}
+      {error && <p className="text-destructive text-caption">{error}</p>}
+
+      {!viewTargets && meals && meals.length === 0 && (
+        <p className="text-muted-foreground text-caption">
+          Nothing logged yet — tap the camera to add one.
+        </p>
+      )}
 
       {!meals && !error && (
         <div className="flex flex-col gap-2">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+            <Skeleton key={i} className="h-16 w-full rounded-lg" />
           ))}
         </div>
       )}
 
-      {meals && meals.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 text-center">
-            <Camera className="text-primary size-9" />
-            <p className="font-medium">{weekly ? 'No meals this week' : 'No meals this day'}</p>
-            <p className="text-muted-foreground text-sm">
-              Send a photo to the bot to log a meal automatically, or tap <strong>Add meal</strong>{' '}
-              to enter one by hand.
-            </p>
-            <Button variant="secondary" className="mt-1 gap-1.5" onClick={() => setAddOpen(true)}>
-              <Plus className="size-4" /> Add meal
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       {meals && meals.length > 0 && (
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-2">
           {meals.map((m) => (
             <SwipeableRow
               key={m.id}
               animateIn={newIds.has(m.id)}
               onDelete={() => void handleDelete(m.id)}
             >
-              <Card className="bg-background">
-                <CardContent className="flex items-center gap-3">
-                  {m.previewUrl && (
-                    <img src={m.previewUrl} alt="" className="size-12 rounded-md object-cover" />
+              <Card className="overflow-hidden">
+                <CardContent className="flex items-center gap-3 p-3">
+                  {m.previewUrl ? (
+                    <img
+                      src={m.previewUrl}
+                      alt=""
+                      className="size-16 shrink-0 rounded-md object-cover"
+                    />
+                  ) : (
+                    <div className="bg-muted size-16 shrink-0 rounded-md" aria-hidden />
                   )}
                   <button
                     type="button"
@@ -395,7 +382,7 @@ export function HomeScreen({
                     <div className="flex items-center gap-2">
                       <MacroLine energyKcal={m.energyKcal} compact />
                       {m.aiProvider && (
-                        <span className="text-muted-foreground text-[10px] uppercase tracking-wide">
+                        <span className="text-muted-foreground text-[10px] tracking-wide uppercase">
                           {PROVIDER_LABEL[m.aiProvider] ?? m.aiProvider}
                         </span>
                       )}
@@ -403,7 +390,7 @@ export function HomeScreen({
                   </button>
                   <Button
                     variant="ghost"
-                    size="icon"
+                    size="icon-sm"
                     aria-label="Update with AI"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -428,9 +415,6 @@ export function HomeScreen({
         onToast={onToast}
       />
 
-      {/* Inline "Update with AI" straight from a Home row — no detour through
-          the edit screen. The AI returns a complete revised meal, which we save
-          directly. */}
       {aiMeal && (
         <ReviseWithAiDialog
           open={aiMeal !== null}

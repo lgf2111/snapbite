@@ -14,12 +14,13 @@
     "deploy": "pnpm build:prod && node -e \"const fs=require('fs');const dir='dist/assets';const hit=fs.readdirSync(dir).some(f=>f.endsWith('.js')&&fs.readFileSync(dir+'/'+f,'utf8').includes('snapbite-worker.lgf2111.workers.dev'));if(!hit){console.error('\\nABORT: built bundle has no worker URL baked in (would deploy in mock/demo mode). Set VITE_WORKER_URL.');process.exit(1)}console.log('worker URL baked in ✓')\" && wrangler pages deploy dist --project-name=snapbite --branch=main --commit-dirty=true"
   },
   "dependencies": {
-    "@snapbite/core": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-label": "^2.1.1",
     "@radix-ui/react-popover": "^1.1.23",
     "@radix-ui/react-slot": "^1.1.1",
     "@radix-ui/react-tabs": "^1.1.2",
+    "@radix-ui/react-toggle-group": "^1.2.1",
+    "@snapbite/core": "workspace:*",
     "@telegram-apps/sdk-react": "^3.3.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

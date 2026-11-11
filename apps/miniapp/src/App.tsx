@@ -1,15 +1,15 @@
 import type { DailyTargets } from '@snapbite/core';
-import { Home, Settings as SettingsIcon } from 'lucide-react';
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { CaptureButton } from './components/CaptureButton.js';
+import { AppShell, type ShellTab } from './components/AppShell.js';
+import { CaptureSheet } from './components/CaptureSheet.js';
 import { HomeScreen } from './components/HomeScreen.js';
 import { Skeleton } from './components/ui/skeleton';
 import { Toaster } from './components/ui/sonner';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import type { SettingsView } from './lib/api.js';
 import { type Backend, type RecentMeal, createBackend } from './lib/backend.js';
 import { cacheKey, getCached, revalidate } from './lib/cache.js';
+import { keyDecision, markKeyDecision } from './lib/onboarding.js';
 import { type Route, navigate, onRouteChange, parseRoute } from './lib/router.js';
 import { todayKey } from './lib/weekPrefs.js';
 
@@ -24,24 +24,18 @@ const OnboardingScreen = lazy(() =>
   import('./components/OnboardingScreen.js').then((m) => ({ default: m.OnboardingScreen })),
 );
 
-type Tab = 'home' | 'settings';
-
 const backend: Backend = createBackend();
 
-const NAV: Array<{ id: Tab; label: string; Icon: typeof Home }> = [
-  { id: 'home', label: 'Home', Icon: Home },
-  { id: 'settings', label: 'Settings', Icon: SettingsIcon },
-];
-
-const toastFn = (kind: 'success' | 'error' | 'info', msg: string) =>
+const toastFn = (kind: 'success' | 'error' | 'info', msg: string): void => {
   toast[kind === 'error' ? 'error' : 'success'](msg);
+};
 
 function ScreenFallback() {
   return (
     <div className="flex flex-col gap-3">
       <Skeleton className="h-8 w-32 rounded-md" />
-      <Skeleton className="h-24 w-full rounded-xl" />
-      <Skeleton className="h-24 w-full rounded-xl" />
+      <Skeleton className="h-24 w-full rounded-lg" />
+      <Skeleton className="h-24 w-full rounded-lg" />
     </div>
   );
 }
@@ -49,7 +43,7 @@ function ScreenFallback() {
 export function App() {
   // Navigation is the URL (see lib/router.ts), so a reload keeps your place.
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
-  const tab: Tab = route.name === 'settings' ? 'settings' : 'home';
+  const tab: ShellTab = route.name === 'settings' ? 'settings' : 'home';
   const detailId = route.name === 'meal' ? route.id : null;
   const [detailMeal, setDetailMeal] = useState<RecentMeal | null>(null);
   // Bumped to tell Home to revalidate after a detail-screen edit/delete.
@@ -60,8 +54,7 @@ export function App() {
     route.name === 'day' ? route.date : todayKey(),
   );
   const [homeView, setHomeView] = useState<'daily' | 'weekly'>('daily');
-  // In-app capture: analysing a just-taken photo, then logging it with the image.
-  const [capturing, setCapturing] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
 
   // Profile/targets drive the Home rings + onboarding gate.
   const [targets, setTargets] = useState<DailyTargets | null>(null);
@@ -84,9 +77,10 @@ export function App() {
       .then((s) => {
         setTargets(s.targets ?? null);
         setHasProfile(Boolean(s.profile));
-        // Profile saved but no key yet: the person was mid-onboarding, so reopen
-        // straight at the key step instead of making them redo their details.
-        if (s.profile && !s.connected) {
+        // Profile saved but no key yet: reopen at the key step — unless the
+        // person already answered that question, in which case asking again on
+        // every launch is the bug this guards.
+        if (s.profile && !s.connected && keyDecision() === null) {
           setResumeKeyStep(true);
           setShowOnboarding(true);
         }
@@ -121,14 +115,17 @@ export function App() {
     navigate({ name: 'meal', id: meal.id });
   };
 
+  // Onboarding is the one screen without the bar: it is a single task, and the
+  // capture action would be a second way out of it.
   if (showOnboarding) {
     return (
-      <div className="mx-auto flex min-h-svh max-w-md flex-col p-4">
+      <div className="pt-safe mx-auto flex min-h-svh w-full max-w-md flex-col px-4 pb-6">
         <Suspense fallback={<ScreenFallback />}>
           <OnboardingScreen
             backend={backend}
             startAtKeyStep={resumeKeyStep}
             onDone={(t) => {
+              markKeyDecision('set');
               setTargets(t);
               setHasProfile(true);
               setShowOnboarding(false);
@@ -136,6 +133,7 @@ export function App() {
               setHomeVersion((v) => v + 1);
             }}
             onSkip={() => {
+              markKeyDecision('skipped');
               setOnboardingSkipped(true);
               setShowOnboarding(false);
               setResumeKeyStep(false);
@@ -148,100 +146,63 @@ export function App() {
     );
   }
 
-  if (detailId) {
-    return (
-      <div className="mx-auto flex min-h-svh max-w-md flex-col p-4">
-        <Suspense fallback={<ScreenFallback />}>
-          <MealDetailScreen
-            backend={backend}
-            mealId={detailId}
-            initialMeal={detailMeal}
-            onBack={() => {
-              setDetailMeal(null);
-              // Return to the day the meal belongs to, not always today.
-              navigate({ name: 'day', date: homeDate }, { replace: true });
-            }}
-            onChanged={() => setHomeVersion((v) => v + 1)}
-            onToast={toastFn}
-          />
-        </Suspense>
-        <Toaster />
-      </div>
-    );
-  }
-
-  /**
-   * Analyze a photo taken in the app, then log it with the image itself.
-   * One user gesture, two calls: /analyze (AI) then POST /meals with the bytes.
-   */
-  async function logFromPhoto(
-    photo: { base64: string; mimeType: string; eatenAt?: string },
-    _file: Blob,
-  ): Promise<void> {
-    setCapturing(true);
-    try {
-      const draft = await backend.analyze(photo.base64, photo.mimeType, photo.eatenAt);
-      await backend.logWithPhoto(draft, { base64: photo.base64, mimeType: photo.mimeType });
-      setHomeVersion((v) => v + 1);
-      toast.success(`Logged ${Math.round(draft.total.energyKcal)} kcal`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not log that photo');
-      throw err;
-    } finally {
-      setCapturing(false);
-    }
-  }
-
   return (
-    <div className="mx-auto flex min-h-svh max-w-md flex-col">
-      <Tabs
-        value={tab}
-        onValueChange={(v) => navigate(v === 'settings' ? { name: 'settings' } : { name: 'home' })}
-        className="flex min-h-svh flex-col gap-0"
+    <>
+      <AppShell
+        active={tab}
+        onNavigate={(next) =>
+          navigate(next === 'settings' ? { name: 'settings' } : { name: 'day', date: homeDate })
+        }
+        onCapture={() => setCaptureOpen(true)}
+        captureBusy={captureOpen}
       >
-        <div className="flex-1 overflow-y-auto p-4 pb-24">
-          <TabsContent value="home">
-            <div className="mb-3">
-              <CaptureButton busy={capturing} onAnalyze={logFromPhoto} />
-            </div>
-            <HomeScreen
+        {detailId ? (
+          <Suspense fallback={<ScreenFallback />}>
+            <MealDetailScreen
               backend={backend}
-              targets={targets}
-              date={homeDate}
-              onDateChange={(d) => {
-                setHomeDate(d);
-                navigate({ name: 'day', date: d });
+              mealId={detailId}
+              initialMeal={detailMeal}
+              onBack={() => {
+                setDetailMeal(null);
+                // Return to the day the meal belongs to, not always today.
+                navigate({ name: 'day', date: homeDate }, { replace: true });
               }}
-              view={homeView}
-              onViewChange={setHomeView}
-              refreshSignal={homeVersion}
-              onOpenMeal={openMeal}
-              onSetGoal={() => setShowOnboarding(true)}
+              onChanged={() => setHomeVersion((v) => v + 1)}
               onToast={toastFn}
             />
-          </TabsContent>
-          <TabsContent value="settings">
-            <Suspense fallback={<ScreenFallback />}>
-              <SettingsScreen backend={backend} onProfileSaved={refreshProfile} />
-            </Suspense>
-          </TabsContent>
-        </div>
+          </Suspense>
+        ) : tab === 'settings' ? (
+          <Suspense fallback={<ScreenFallback />}>
+            <SettingsScreen backend={backend} onProfileSaved={refreshProfile} />
+          </Suspense>
+        ) : (
+          <HomeScreen
+            backend={backend}
+            targets={targets}
+            date={homeDate}
+            onDateChange={(d) => {
+              setHomeDate(d);
+              navigate({ name: 'day', date: d });
+            }}
+            view={homeView}
+            onViewChange={setHomeView}
+            refreshSignal={homeVersion}
+            onOpenMeal={openMeal}
+            onSetGoal={() => setShowOnboarding(true)}
+            onToast={toastFn}
+          />
+        )}
+      </AppShell>
 
-        <TabsList className="fixed inset-x-0 bottom-0 z-40 mx-auto h-16 max-w-md rounded-none border-t bg-background p-0">
-          {NAV.map(({ id, label, Icon }) => (
-            <TabsTrigger
-              key={id}
-              value={id}
-              className="flex h-full flex-col gap-1 rounded-none data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none"
-            >
-              <Icon className="size-5" />
-              <span className="text-[10px]">{label}</span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      <CaptureSheet
+        backend={backend}
+        open={captureOpen}
+        onOpenChange={setCaptureOpen}
+        onLogged={() => setHomeVersion((v) => v + 1)}
+        onToast={toastFn}
+      />
 
       <Toaster />
-    </div>
+    </>
   );
 }
