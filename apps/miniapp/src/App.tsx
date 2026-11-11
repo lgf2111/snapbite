@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { AppShell, type ShellTab } from './components/AppShell.js';
 import { CaptureSheet } from './components/CaptureSheet.js';
 import { HomeScreen } from './components/HomeScreen.js';
+import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog';
 import { Skeleton } from './components/ui/skeleton';
 import { Toaster } from './components/ui/sonner';
 import type { SettingsView } from './lib/api.js';
@@ -113,36 +114,22 @@ export function App() {
     navigate({ name: 'meal', id: meal.id });
   };
 
-  // Onboarding is the one screen without the bar: it is a single task, and the
-  // capture action would be a second way out of it.
-  if (showOnboarding) {
-    return (
-      <div className="pt-safe mx-auto flex min-h-svh w-full max-w-md flex-col px-4 pb-6">
-        <Suspense fallback={<ScreenFallback />}>
-          <OnboardingScreen
-            backend={backend}
-            startAtKeyStep={resumeKeyStep}
-            onDone={(t) => {
-              markKeyDecision('set');
-              setTargets(t);
-              setHasProfile(true);
-              setShowOnboarding(false);
-              setResumeKeyStep(false);
-              setHomeVersion((v) => v + 1);
-            }}
-            onSkip={() => {
-              markKeyDecision('skipped');
-              setOnboardingSkipped(true);
-              setShowOnboarding(false);
-              setResumeKeyStep(false);
-            }}
-            onToast={toastFn}
-          />
-        </Suspense>
-        <Toaster />
-      </div>
-    );
-  }
+  /**
+   * Onboarding is a sheet over Home, not a screen that replaces the app: the
+   * day is visible behind it, so a first-time user can see where they are going
+   * and dismiss it, instead of being trapped on a form with no way home.
+   */
+  const finishOnboarding = (opts: { targets?: DailyTargets | null; skipped?: boolean } = {}) => {
+    markKeyDecision(opts.skipped ? 'skipped' : 'set');
+    if (opts.skipped) setOnboardingSkipped(true);
+    else {
+      if (opts.targets) setTargets(opts.targets);
+      setHasProfile(true);
+    }
+    setShowOnboarding(false);
+    setResumeKeyStep(false);
+    setHomeVersion((v) => v + 1);
+  };
 
   return (
     <>
@@ -199,6 +186,28 @@ export function App() {
         onLogged={() => setHomeVersion((v) => v + 1)}
         onToast={toastFn}
       />
+
+      {/* First run: a dismissible sheet over the real Home. Backdrop click and
+          the close control both skip, so nobody gets stuck in setup. */}
+      <Dialog
+        open={showOnboarding}
+        onOpenChange={(next) => {
+          if (!next) finishOnboarding({ skipped: true });
+        }}
+      >
+        <DialogContent className="sheet-safe bottom-0 top-auto max-h-[92svh] max-w-md translate-y-0 overflow-y-auto rounded-b-none rounded-t-xl">
+          <DialogTitle className="sr-only">Set up SnapBite</DialogTitle>
+          <Suspense fallback={<ScreenFallback />}>
+            <OnboardingScreen
+              backend={backend}
+              startAtKeyStep={resumeKeyStep}
+              onDone={(t) => finishOnboarding({ targets: t })}
+              onSkip={() => finishOnboarding({ skipped: true })}
+              onToast={toastFn}
+            />
+          </Suspense>
+        </DialogContent>
+      </Dialog>
 
       <Toaster />
     </>

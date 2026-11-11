@@ -120,7 +120,7 @@ export function CaptureSheet({ backend, open, onOpenChange, onLogged, onToast }:
           onOpenChange(next);
         }}
       >
-        <DialogContent className="bottom-0 top-auto max-w-md translate-y-0 rounded-b-none rounded-t-xl">
+        <DialogContent className="sheet-safe bottom-0 top-auto max-w-md translate-y-0 rounded-b-none rounded-t-xl">
           <DialogHeader>
             <DialogTitle className="text-title">
               {stage === 'review' || stage === 'saving' ? 'Log this meal?' : 'Add a meal photo'}
