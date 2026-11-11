@@ -8,7 +8,9 @@
 
 SnapBite is free today because every AI call is paid for by the user's own provider key. The owner wants a freemium model: free with your own key, paid without one. That premise survived review; the *justification* did not.
 
-The product is one thing: **the AI that reads a photo**. Everything else — the log, the rings, the streak, saved meals, the history — is the user's own data, and gating it would mean building a deliberately worse product to manufacture a paywall. So the paid tier sells one capability at launch, **we hold the key**, and its recurring value comes from a second axis that costs storage and a query rather than tokens: the compounding record that makes logging faster over time.
+**The intent is not revenue.** SnapBite is built to provide value, not to earn; the paid plan exists so a lazy user can skip the setup, and is priced to recover what it costs rather than to grow a business. That single constraint settles most of the argument below: if the plan is not a business, it must not shape the product. Nothing gets gated to make it attractive, and the free path is actively the recommended one.
+
+The product is one thing: **the AI that reads a photo**. Everything else — the log, the rings, the streak, saved meals, the history — is the user's own data, and gating it to sell a subscription nobody is trying to maximise would be building a worse product for no reason at all.
 
 A second correction: **free is not the cost-free tier, and premium is not the easy tier.** Free carries the hardest setup in the product (a Google Cloud project and a key), and premium's first promise is the removal of that chore. That inversion is legitimate only if it is deliberate and stated, and only if a free user can still log a first meal without a key.
 
@@ -22,13 +24,13 @@ The draft put history and "priority processing" behind the line. Both were rejec
 - **Priority processing does not exist to sell.** Analysis runs inline in the request handler (`routes/meals.ts`); there is no queue, job table or status endpoint. Promising it means a second, permanently divergent analysis path for the weakest user-visible benefit. Cut.
 - **Health-platform import cannot ship on a PWA.** HealthKit and Health Connect need native entitlements. Re-scoped to a *file* import (Apple Health export XML, Google Fit takeout) — server-side parsing, which is genuinely premium-shaped and shippable.
 
-### What premium actually is
+### What the plan actually is
 
-**Premium = a hosted credential on our side of the provider factory.** The seam already exists: one provider factory parameterised per request, one branch that fails when a user key is missing. Premium writes a key we own instead of decrypting theirs.
+**The plan is a hosted credential on our side of the provider factory, and nothing else.** The seam already exists: one provider factory parameterised per request, one branch that fails when a user key is missing. The plan writes a key we own instead of decrypting theirs.
 
-Because that is a one-time relief, not a recurring benefit, premium needs a second reason to renew, and the cheapest durable one is **the record**: permanent photo history, the 12-month view, "what changed this month", portion drift, and a one-tap **"your usual"** tile derived from the last 30 days. All computed from rows already stored, at zero AI cost.
+It is a convenience purchase, not a value ladder. There is no second reason to renew, no premium feature list, no upsell copy: a user either wants to do the ten-minute setup once or they don't. Pricing sits at cost recovery — the pinned model's per-call cost, the fair-use cap, and a small margin for growth in provider pricing — so the plan never becomes a reason to weaken the free tier.
 
-The strongest idea from the review is a **dish index**: resolve an exact or near-name match against the accumulated food table first, calling the model only on a miss. Each new user is subsidised by history instead of billed against it. Deliberately not in scope for launch — see Deferred.
+The retention mechanics the review surfaced (**"your usual"**, the 12-month record, portion drift) are therefore **free features**, not paid ones. They were the strongest ideas in the review, and under this intent they belong to everyone.
 
 ### The entitlement model the draft got wrong
 
@@ -71,17 +73,18 @@ Adopted: grace window, then a **usable floor** — manual entry, full log, date 
 
 **In scope**
 
-- Free: every current feature, unlimited, BYOK (Gemini or any supported provider), plus a no-key path to a first meal so the product is not gated behind a Cloud project.
-- Premium: hosted AI (no key), permanent photo history, the 12-month record and derived reports, the "your usual" tile, file-based health import, multi-collection saved meals.
+- Free: every feature, unlimited, BYOK (Gemini or any supported provider) — including the "your usual" tile, the 12-month record and file-based health import, because they are value, not monetisation.
+- Onboarding **leads with the key**: the setup guide is the primary path, and the plan is offered as a quiet alternative for someone who does not want to do it. The wording never scolds the free choice.
+- Plan: hosted AI only — no key, no Google Cloud project. Priced at cost recovery, offered as a convenience, never as an upgrade path with extras.
 - `billing_accounts` + cached `plan` + period/grace model; one `resolveProviderForUser`; `/api/me` publishes the plan.
-- Metering, rate limiting, model pinning, photo-size parity, retention policy, observability set.
+- Metering, rate limiting, model pinning, photo-size parity, retention policy, observability set — needed to keep the convenience plan solvent, not to police users.
 - Downgrade with a usable floor and no data loss.
 
 **Out of scope**
 
 - Payment provider choice and integration, tax, pricing currency (shape only).
 - Native mobile apps; HealthKit/Health Connect.
-- Dish index / pooled nutrition resolution (stage 2).
+- Dish index / pooled nutrition resolution (a cost idea worth doing later, for everyone).
 - Marketing copy, launch plan, tier naming.
 
 ## Alternatives we weighed
@@ -95,20 +98,22 @@ Adopted: grace window, then a **usable floor** — manual entry, full log, date 
 
 ## Decisions adopted
 
-1. Premium sells **one capability at launch**: AI without a key. Feature gating is limited to those with real marginal cost or real depth (permanent history, reports, collections, file import).
-2. **Never gate the user's own data**, the log, date navigation, export, or the streak. Streak revive stays free — charging at the moment a user feels bad converts a loyalty loop into a paywall prompt.
-3. Entitlement lives in `billing_accounts`, cached on `users.plan`, computed from time with grace.
-4. One `resolveProviderForUser`; no route file mentions a plan.
-5. Additive migration only: `plan` with `NOT NULL DEFAULT 'free'`, because two insert paths never mention it and a nullable column breaks every anonymous signup at deploy.
-6. Metering, rate limits, model pinning, photo-size parity and observability ship **with** the paid tier, not after.
-7. No priority queue, no history limits, no health-platform integration.
-8. Anonymous accounts can still log meals; upgrading requires a verified identity, and sign-in must **claim the existing anonymous account and its meals** rather than mint an empty one.
+1. **The plan sells one capability: AI without a key.** No feature gating of any kind — not history, not reports, not collections, not the streak. Under a non-revenue intent, gating anything would be deliberate product damage for no return.
+2. **BYOK is the recommended path, not the consolation prize.** Onboarding leads with the key guide, the copy names the free path first, and the plan appears as "or let SnapBite handle the AI".
+3. **Never gate the user's own data**, the log, date navigation, export, or the streak. Streak revive stays free — charging at the moment a user feels bad converts a loyalty loop into a paywall prompt.
+4. **Priced at cost recovery**: pinned model + 2027 provider pricing + fair-use cap, no margin target beyond staying solvent.
+5. Entitlement lives in `billing_accounts`, cached on `users.plan`, computed from time with grace.
+6. One `resolveProviderForUser`; no route file mentions a plan.
+7. Additive migration only: `plan` with `NOT NULL DEFAULT 'free'`, because two insert paths never mention it and a nullable column breaks every anonymous signup at deploy.
+8. Metering, rate limits, model pinning, photo-size parity and observability ship **with** the plan, not after — they are what keeps a cost-recovery price honest.
+9. No priority queue, no history limits, no health-platform integration.
+10. Anonymous accounts can still log meals; taking the plan requires a verified identity, and sign-in must **claim the existing anonymous account and its meals** rather than mint an empty one.
 
 ## Open questions for the next pass
 
-- Which no-key path gives a free user their first meal: on-device estimate, food search, or a small pooled allowance? The UX review treats this as a blocker on the free tier's credibility.
-- Launch price and the exact fair-use number, once the model is pinned and 2027 pricing is known.
-- Whether the "your usual" tile is premium-only at launch or free-with-limits, given it is the strongest retention mechanic found.
+- Which no-key path gives a free user their first meal: on-device estimate, food search, or a small pooled allowance? Still a blocker on the free tier's credibility, and now the only real product question left.
+- The fair-use number and the cost-recovery price, once the model is pinned and 2027 pricing is known.
+- How loudly to offer the plan. Under this intent the free path is recommended, so the offer has to be findable without being a nag — one line at the moment a key is missing, and never again in that session.
 
 ## Appendix: findings rejected or deferred, with reasons
 
