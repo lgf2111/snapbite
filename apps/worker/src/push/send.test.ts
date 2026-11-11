@@ -105,7 +105,11 @@ afterEach(() => vi.restoreAllMocks());
 describe('payload encryption (RFC 8291 aes128gcm)', () => {
   it('round-trips: what we encrypt, the browser decrypts', async () => {
     const browser = await browserSubscription();
-    const message = JSON.stringify({ title: 'SnapBite', body: 'Time to log lunch 🥗', url: '/' });
+    const message = JSON.stringify({
+      title: 'Lunch',
+      body: 'Log your meal while it is fresh.',
+      url: '/',
+    });
 
     const body = await encryptPayload(enc.encode(message), browser.p256dh, browser.auth);
     const out = await decrypt(body, browser);
@@ -250,7 +254,11 @@ describe('sendPush', () => {
       return new Response(null, { status: 201 });
     });
 
-    const res = await sendPush(sub, { title: 'SnapBite', body: 'Lunch', url: '/' }, env);
+    const res = await sendPush(
+      sub,
+      { title: 'Lunch', body: 'Log your meal while it is fresh.', url: '/' },
+      env,
+    );
 
     expect(res).toEqual({ ok: true, status: 201 });
     const { url, init } = seen[0] as { url: string; init: RequestInit };
@@ -262,7 +270,11 @@ describe('sendPush', () => {
     expect(headers.authorization).toContain(`k=${keys.publicKey}`);
     // The body the browser would receive decrypts to our payload.
     const out = await decrypt(init.body as Uint8Array, browser);
-    expect(JSON.parse(out.plaintext)).toEqual({ title: 'SnapBite', body: 'Lunch', url: '/' });
+    expect(JSON.parse(out.plaintext)).toEqual({
+      title: 'Lunch',
+      body: 'Log your meal while it is fresh.',
+      url: '/',
+    });
   });
 
   it('reports a dead subscription (404 / 410)', async () => {

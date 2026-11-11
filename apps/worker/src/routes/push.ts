@@ -8,6 +8,7 @@ import {
 import type { AppBindings } from '../env.js';
 import { pushToUser } from '../push/deliver.js';
 import { b64urlDecode } from '../push/send.js';
+import { TEST_PUSH } from '../reminders.js';
 
 /**
  * Hosts that run browser push services. The Worker POSTs to whatever endpoint it
@@ -111,8 +112,7 @@ export function pushRoutes() {
       db,
       userId,
       {
-        title: 'SnapBite',
-        body: 'This is a test. Reminders will look like this.',
+        ...TEST_PUSH,
         url: '/',
         tag: 'snapbite-test',
       },

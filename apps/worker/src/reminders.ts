@@ -72,10 +72,30 @@ async function markSent(
     .where(eq(settings.userId, userId));
 }
 
-/** What the notification says. Plain, and no instruction to message a bot. */
-export function pushReminderBody(label: string): string {
-  return `Time to log ${label}.`;
+const PUSH_BODIES: Record<string, string> = {
+  breakfast: 'Log your breakfast before the day gets busy.',
+  lunch: 'Log your meal while it is fresh.',
+  dinner: 'Snap your dinner and log it in a few seconds.',
+};
+
+/**
+ * What the lock screen shows. iOS already prints the app name above the title, so
+ * the title is the reminder itself and the body is the instruction. Plain, and no
+ * instruction to message a bot.
+ */
+export function pushReminder(label: string): { title: string; body: string } {
+  const name = label.trim() || 'Meal';
+  return {
+    title: name.charAt(0).toUpperCase() + name.slice(1),
+    body: PUSH_BODIES[label] ?? 'Log your meal while it is fresh.',
+  };
 }
+
+/** The Settings "send a test" notification: unmistakably a test. */
+export const TEST_PUSH = {
+  title: 'Test reminder',
+  body: 'Reminders will look like this.',
+} as const;
 
 /**
  * Cron entrypoint: finds all users whose local time hits an enabled reminder
@@ -115,8 +135,7 @@ export async function runReminders(env: Env, nowMs: number = Date.now()): Promis
             pushDb,
             u.userId,
             {
-              title: 'SnapBite',
-              body: pushReminderBody(label),
+              ...pushReminder(label),
               url: '/',
               tag: `reminder-${label}`,
             },
