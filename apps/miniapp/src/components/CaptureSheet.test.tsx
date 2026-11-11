@@ -85,9 +85,9 @@ describe('CaptureSheet (the add-a-meal flow)', () => {
     await waitFor(() => expect(backend.listFavorites).toHaveBeenCalled());
   });
 
-  it('Use saved meals opens the existing dialog, whose saved-meals list is unchanged', async () => {
+  it('Saved meals opens the existing dialog, whose saved-meals list is unchanged', async () => {
     const { backend } = setup();
-    fireEvent.click(card(/use saved meals/i));
+    fireEvent.click(card(/saved meals/i));
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Add a meal')).toBeTruthy();

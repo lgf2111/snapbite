@@ -45,7 +45,7 @@ describe('CaptureMenu', () => {
     setup();
     const names = cards().map((c) => c.textContent);
     expect(names).toEqual([
-      'Use saved mealsRe-log a favourite',
+      'Saved mealsRe-log a favourite',
       'Manually logType it in',
       'Upload imageFrom your photos',
       'Take photoUse the camera',

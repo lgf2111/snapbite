@@ -157,7 +157,7 @@ describe('hold and slide on the camera button', () => {
   });
 
   it.each([
-    [160, 0, 'Use saved meals', 'saved'],
+    [160, 0, 'Saved meals', 'saved'],
     [110, 1, 'Upload image', 'upload'],
     [70, 2, 'Manually log', 'manual'],
     [20, 3, 'Take photo', 'photo'],
