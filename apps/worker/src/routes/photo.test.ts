@@ -2,7 +2,9 @@ import { env } from 'cloudflare:test';
 import { type BotReply, signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
+import { createMealsDb, setMealPhoto } from '../db/meals.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
+import { photoKey } from '../storage/photos.js';
 
 const BOT_TOKEN = '123456:LOCAL-DEV-BOT-TOKEN';
 
@@ -120,5 +122,139 @@ describe('GET /api/meal-photo/:id', () => {
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('image/jpeg');
+  });
+});
+
+describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => {
+  const BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
+
+  async function signIn(app: ReturnType<typeof createApp>, email: string) {
+    const login = (await (
+      await app.request(
+        '/api/auth/login',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email }),
+        },
+        env,
+      )
+    ).json()) as { link: string };
+    const token = new URL(login.link).searchParams.get('token') as string;
+    const res = await app.request(`/api/auth/verify?token=${token}`, {}, env);
+    return (res.headers.get('set-cookie') ?? '').split(';')[0] as string;
+  }
+
+  /** A meal with a stored photo, owned by whoever `cookie` is. */
+  async function mealWithPhoto(app: ReturnType<typeof createApp>, cookie: string) {
+    const res = await app.request(
+      '/api/meals',
+      {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          meal: {
+            foods: [
+              {
+                food: { name: 'rice', estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
+                nutrition: { energyKcal: 100, proteinG: 1, carbsG: 1, fatG: 1, source: 'table' },
+              },
+            ],
+            total: { energyKcal: 100, proteinG: 1, carbsG: 1, fatG: 1, source: 'table' },
+            confidence: 0.9,
+            needsConfirmation: false,
+          },
+        }),
+      },
+      env,
+    );
+    const id = ((await res.json()) as { id: string }).id;
+    const key = photoKey(id);
+    await env.PHOTOS.put(key, BYTES, { httpMetadata: { contentType: 'image/jpeg' } });
+    const owner = (await (await app.request('/api/me', { headers: { cookie } }, env)).json()) as {
+      userId: string;
+    };
+    await setMealPhoto(createMealsDb(env.DB), id, owner.userId, key, 'image/jpeg');
+    return id;
+  }
+
+  it('gives the owner their bytes, not a 401', async () => {
+    const app = createApp();
+    const cookie = await signIn(app, 'photo-owner@example.com');
+    const id = await mealWithPhoto(app, cookie);
+
+    const res = await app.request(`/api/meal-photo/${id}`, { headers: { cookie } }, env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/jpeg');
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(BYTES);
+  });
+
+  it('lists a stored-photo meal as hasPhoto (no Telegram file id), and a manual one as not', async () => {
+    const app = createApp();
+    const cookie = await signIn(app, 'photo-list@example.com');
+    const withPhoto = await mealWithPhoto(app, cookie);
+    const manual = (await (
+      await app.request(
+        '/api/meals',
+        {
+          method: 'POST',
+          headers: { cookie, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            meal: {
+              foods: [
+                {
+                  food: { name: 'tea', estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
+                  nutrition: { energyKcal: 5, proteinG: 0, carbsG: 1, fatG: 0, source: 'table' },
+                },
+              ],
+              total: { energyKcal: 5, proteinG: 0, carbsG: 1, fatG: 0, source: 'table' },
+              confidence: 0.9,
+              needsConfirmation: false,
+            },
+          }),
+        },
+        env,
+      )
+    ).json()) as { id: string };
+
+    const list = (await (await app.request('/api/meals', { headers: { cookie } }, env)).json()) as {
+      meals: Array<{ id: string; hasPhoto: boolean }>;
+    };
+    const flag = (id: string) => list.meals.find((m) => m.id === id)?.hasPhoto;
+    expect(flag(withPhoto)).toBe(true);
+    expect(flag(manual.id)).toBe(false);
+  });
+
+  it('still 401s with no credentials, and 404s for someone else’s meal', async () => {
+    const app = createApp();
+    const owner = await signIn(app, 'photo-owner2@example.com');
+    const other = await signIn(app, 'photo-other@example.com');
+    const id = await mealWithPhoto(app, owner);
+
+    expect((await app.request(`/api/meal-photo/${id}`, {}, env)).status).toBe(401);
+    expect(
+      (await app.request(`/api/meal-photo/${id}`, { headers: { cookie: other } }, env)).status,
+    ).toBe(404);
+  });
+
+  it('works for an anonymous device account, and a bogus device cookie mints nothing', async () => {
+    const app = createApp();
+    const first = await app.request('/api/meals', {}, env);
+    const device = (first.headers.get('set-cookie') ?? '').split(';')[0] as string;
+    const id = await mealWithPhoto(app, device);
+    expect(
+      (await app.request(`/api/meal-photo/${id}`, { headers: { cookie: device } }, env)).status,
+    ).toBe(200);
+
+    const count = async () =>
+      (await env.DB.prepare('select count(*) n from users').first<{ n: number }>())?.n;
+    const before = await count();
+    const bogus = await app.request(
+      `/api/meal-photo/${id}`,
+      { headers: { cookie: 'sb_device=dev_nope' } },
+      env,
+    );
+    expect(bogus.status).toBe(401);
+    expect(await count()).toBe(before);
   });
 });

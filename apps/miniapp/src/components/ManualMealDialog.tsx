@@ -126,7 +126,7 @@ export function ManualMealDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => (busy ? null : onOpenChange(o))}>
-      <DialogContent>
+      <DialogContent className="sheet-safe">
         <DialogHeader>
           <DialogTitle>Add a meal</DialogTitle>
           <DialogDescription>
@@ -135,16 +135,17 @@ export function ManualMealDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-3">
           {showSaved && favorites && favorites.length > 0 && (
-            <div className="flex flex-col gap-1.5">
+            <div className="flex min-w-0 flex-col gap-1.5">
               <Label>Saved meals</Label>
               <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
                 {favorites.map((fav) => (
-                  <div key={fav.id} className="flex items-center gap-1">
+                  <div key={fav.id} className="flex min-w-0 items-center gap-1">
                     <button
                       type="button"
                       disabled={busy || loggingFavId !== null}
+                      title={fav.label}
                       onClick={() => pickFavorite(fav)}
                       className="border-input hover:bg-accent flex min-w-0 flex-1 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50"
                     >
@@ -174,7 +175,7 @@ export function ManualMealDialog({
             </div>
           )}
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <Label htmlFor="mm-name">What did you eat?</Label>
             <Input
               id="mm-name"
@@ -187,7 +188,7 @@ export function ManualMealDialog({
           </div>
           <div className="grid grid-cols-2 gap-2">
             {macroFields.map((f) => (
-              <div key={f.key} className="flex flex-col gap-1.5">
+              <div key={f.key} className="flex min-w-0 flex-col gap-1.5">
                 <Label htmlFor={`mm-${f.key}`}>
                   {f.icon} {f.label}
                 </Label>

@@ -17,7 +17,6 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
 import { cacheKey, getCached, revalidate } from '@/lib/cache';
-import { downloadViaTelegram, openExportUrl } from '@/lib/telegram';
 import { cn } from '@/lib/utils';
 import {
   type WeekMode,
@@ -40,7 +39,6 @@ import {
   Bell,
   CalendarRange,
   CheckCircle2,
-  Download,
   MessageSquare,
   Pencil,
   ShieldCheck,
@@ -50,6 +48,7 @@ import {
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AccountCard } from './AccountCard.js';
+import { ExportData } from './ExportData.js';
 import { ExternalLink } from './ExternalLink.js';
 import { InfoDisclosure } from './InfoDisclosure.js';
 import { LinkifiedHint } from './LinkifiedHint.js';
@@ -155,7 +154,6 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   });
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -346,50 +344,6 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       toast.error(e instanceof Error ? e.message : 'Could not save profile');
     } finally {
       setSavingProfile(false);
-    }
-  }
-
-  async function handleExport() {
-    const fileName = `snapbite-export-${new Date().toISOString().slice(0, 10)}.json`;
-    const url = backend.exportUrl();
-
-    // Worker mode: the export has a public, auth-carrying HTTPS URL. Blob
-    // downloads don't work inside Telegram's webview (they strand a blob: URL
-    // that Safari can't open), so hand a real URL off to the platform. Do this
-    // synchronously in the click handler so Telegram's openLink keeps its
-    // required user-gesture. The response's attachment header makes the
-    // browser save it as a file.
-    if (url) {
-      // 1) Native file download prompt (Mini Apps v8+, mainly iOS/Android).
-      if (downloadViaTelegram(url, fileName)) {
-        toast.success('Downloading export…');
-        return;
-      }
-      // 2) Open the public URL — Telegram's openLink if present, else the
-      //    webview's own window.open, both of which reach a real HTTPS URL.
-      openExportUrl(url);
-      toast.success('Opening export…');
-      return;
-    }
-
-    // Local demo (no backend): build the JSON client-side and download a blob.
-    setExporting(true);
-    try {
-      const data = await backend.exportData();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(objectUrl);
-      toast.success('Export downloaded');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not export data');
-    } finally {
-      setExporting(false);
     }
   }
 
@@ -931,15 +885,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           </ul>
 
           <div className="flex flex-col gap-2 pt-1 sm:flex-row">
-            <Button
-              variant="secondary"
-              className="gap-2"
-              disabled={exporting}
-              onClick={handleExport}
-            >
-              <Download className="size-4" />
-              {exporting ? 'Exporting…' : 'Export my data'}
-            </Button>
+            <ExportData backend={backend} />
             <Button variant="destructive" className="gap-2" onClick={() => setConfirmDelete(true)}>
               <Trash2 className="size-4" />
               Delete account

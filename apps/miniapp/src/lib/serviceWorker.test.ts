@@ -45,14 +45,31 @@ function load(
     },
     location: { origin: 'https://snapbite.leeguanfeng.com' },
   };
-  new Function('self', 'fetch', 'atob', 'URL', source)(scope, fetchMock, atob, URL);
+  // A Map-backed stand-in for the Cache API, so what the worker stores can be read back.
+  const store = new Map<string, Response>();
+  const cacheApi = {
+    open: vi.fn(async () => ({
+      put: vi.fn(async (key: string, res: Response) => {
+        store.set(key, res);
+      }),
+      match: vi.fn(async (key: string) => store.get(key)),
+      delete: vi.fn(async (key: string) => store.delete(key)),
+    })),
+  };
+  new Function('self', 'fetch', 'atob', 'URL', 'caches', source)(
+    scope,
+    fetchMock,
+    atob,
+    URL,
+    cacheApi,
+  );
 
   const fire = async (type: string, event: Record<string, unknown>) => {
     const full = { ...event, waitUntil: (p: Promise<unknown>) => waits.push(p) };
     (handlers.get(type) as Handler)(full);
     await Promise.all(waits.splice(0));
   };
-  return { scope, fire, shown, openWindow, subscribe, fetchMock, handlers };
+  return { scope, fire, shown, openWindow, subscribe, fetchMock, handlers, store, cacheApi };
 }
 
 const pushEvent = (payload: unknown) => ({
@@ -63,7 +80,14 @@ describe('public/sw.js', () => {
   it('registers every handler it needs, and takes over at once', async () => {
     const { handlers, scope, fire } = load();
     expect([...handlers.keys()].sort()).toEqual(
-      ['activate', 'install', 'notificationclick', 'push', 'pushsubscriptionchange'].sort(),
+      [
+        'activate',
+        'fetch',
+        'install',
+        'notificationclick',
+        'push',
+        'pushsubscriptionchange',
+      ].sort(),
     );
     await fire('install', {});
     expect(scope.skipWaiting).toHaveBeenCalled();
@@ -155,5 +179,70 @@ describe('public/sw.js', () => {
     });
     expect(subscribe).toHaveBeenCalledWith(expect.objectContaining({ applicationServerKey: key }));
     expect(fetchMock.mock.calls.map((c) => String(c[0]))).toEqual(['/api/push/subscribe']);
+  });
+});
+
+describe('public/sw.js: the share target', () => {
+  const origin = 'https://snapbite.leeguanfeng.com';
+
+  /** Fires a fetch event and returns what the worker answered with (or null if it let it through). */
+  async function share(
+    harness: ReturnType<typeof load>,
+    init: { method?: string; path?: string; body?: FormData },
+  ) {
+    // jsdom's FormData and Node's Request do not agree on multipart encoding, so
+    // hand the worker the same shape the browser gives it without going through
+    // Request: a POST whose formData() returns the form.
+    const request = {
+      method: init.method ?? 'POST',
+      url: `${origin}${init.path ?? '/share-target'}`,
+      formData: async () => init.body ?? new FormData(),
+    };
+    let answer: Promise<Response> | null = null;
+    (harness.handlers.get('fetch') as Handler)({
+      request,
+      respondWith: (p: Promise<Response>) => {
+        answer = p;
+      },
+    });
+    return answer ? await (answer as Promise<Response>) : null;
+  }
+
+  it('stores the shared photo and redirects to /?shared=1', async () => {
+    const harness = load();
+    const form = new FormData();
+    form.set(
+      'photo',
+      new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'lunch.jpg', { type: 'image/jpeg' }),
+    );
+    form.set('text', 'my lunch');
+
+    const res = await share(harness, { body: form });
+
+    expect(res?.status).toBe(303);
+    expect(res?.headers.get('location')).toBe(`${origin}/?shared=1`);
+    const stored = harness.store.get('/__share__/photo') as Response;
+    expect(stored.headers.get('content-type')).toBe('image/jpeg');
+    expect(stored.headers.get('x-filename')).toBe('lunch.jpg');
+    expect(Array.from(new Uint8Array(await stored.arrayBuffer()))).toEqual([
+      0xff, 0xd8, 0xff, 0xe0,
+    ]);
+  });
+
+  it('redirects a text-only share too, storing nothing, so the app can say there was no photo', async () => {
+    const harness = load();
+    const form = new FormData();
+    form.set('text', 'just a link');
+    const res = await share(harness, { body: form });
+    expect(res?.status).toBe(303);
+    expect(harness.store.size).toBe(0);
+  });
+
+  it('leaves every other request alone', async () => {
+    const harness = load();
+    expect(await share(harness, { method: 'GET', path: '/share-target' })).toBeNull();
+    expect(
+      await share(harness, { method: 'POST', path: '/api/meals', body: new FormData() }),
+    ).toBeNull();
   });
 });

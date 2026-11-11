@@ -43,3 +43,34 @@ describe('AppShell camera button', () => {
     expect(button.querySelector('span')?.className).toContain('rotate-45');
   });
 });
+
+describe('AppShell while a photo batch uploads', () => {
+  const batch = (status: string | null) =>
+    render(
+      <AppShell
+        active="home"
+        onNavigate={vi.fn()}
+        menuOpen={false}
+        onToggleMenu={vi.fn()}
+        captureRef={createRef<HTMLButtonElement>()}
+        captureStatus={status}
+      >
+        <p>content</p>
+      </AppShell>,
+    );
+
+  it('shows the progress under the button and disables it', () => {
+    batch('Uploading 2 of 4');
+    expect(screen.getByRole('status').textContent).toBe('Uploading 2 of 4');
+    const button = screen.getByRole('button', { name: /add a meal/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it('is the normal button, with no status line, when nothing is running', () => {
+    batch(null);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(
+      (screen.getByRole('button', { name: /add a meal/i }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+});

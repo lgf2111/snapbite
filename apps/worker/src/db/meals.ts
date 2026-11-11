@@ -271,7 +271,8 @@ export async function listMeals(db: MealsDb, userId: string, limit = 50): Promis
       source: nut[0]?.source ?? null,
       aiProvider: meal.aiProvider ?? null,
       foods: foods.map((f) => f.name),
-      hasPhoto: Boolean(meal.telegramFileId),
+      // R2-only photos (Shortcut / PWA uploads) have no Telegram file id: either source counts.
+      hasPhoto: Boolean(meal.photoKey || meal.telegramFileId),
     });
   }
   return summaries;

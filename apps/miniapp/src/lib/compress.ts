@@ -5,6 +5,12 @@
  * R2 should not store it: we downscale to a long edge, re-encode as JPEG and
  * step the quality down until the file fits a byte budget. Deterministic and
  * cheap — the whole thing is one canvas draw plus `toBlob`.
+ *
+ * It is also what makes an upload carry no metadata. Drawing to a canvas and
+ * exporting a fresh JPEG keeps only pixels: EXIF, GPS position, device model and
+ * timestamps do not survive it. There is deliberately NO path that skips this and
+ * passes the original file through (not for a small file, not for one that is
+ * already a JPEG), because that is exactly where the location would leak.
  */
 
 export interface CompressedPhoto {

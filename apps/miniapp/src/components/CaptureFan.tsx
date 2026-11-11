@@ -1,9 +1,47 @@
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { FAN, FAN_ACTIONS, wedgeAt, wedgeCentre, wedgePath } from '../lib/fan.js';
+import {
+  FAN,
+  FAN_ACTIONS,
+  type FanRadii,
+  fanRadii,
+  wedgeAt,
+  wedgeCentre,
+  wedgePath,
+} from '../lib/fan.js';
 import { hapticImpact } from '../lib/telegram.js';
 import { CAPTURE_ACTIONS, type CaptureAction } from './CaptureMenu.js';
 
-const SIZE = FAN.outerPx * 2;
+/** The notch / status-bar inset, which CSS knows and layout code has to ask for. */
+function safeAreaTop(): number {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px)';
+  document.body.append(probe);
+  const px = Number.parseFloat(getComputedStyle(probe).paddingTop);
+  probe.remove();
+  return Number.isFinite(px) ? px : 0;
+}
+
+/**
+ * Where the fan opens for this button, and how big it can be.
+ *
+ * The baseline is NOT the button's centre: the button overhangs the bar by 20px,
+ * so its centre is 12px below the bar's top edge and a half-ring standing on it
+ * is half under the bar. The baseline is `barGapPx` above the bar's top edge
+ * (the nav element, safe-area padding included), and the radius shrinks to what
+ * fits between there and the top of the screen, and the sides.
+ */
+function placeFan(button: HTMLElement): { cx: number; cy: number; radii: FanRadii } {
+  const r = button.getBoundingClientRect();
+  const bar = button.closest('nav')?.getBoundingClientRect();
+  // The button stands 20px (-top-5) above the bar if the bar cannot be measured.
+  const barTop = bar && bar.height > 0 ? bar.top : r.top + 20;
+  const cx = r.left + r.width / 2;
+  // One more px for half the stroke, so the lowest ink clears the gap too.
+  const cy = barTop - FAN.barGapPx - 1;
+  const roomAbove = cy - safeAreaTop() - FAN.edgePx;
+  const roomSide = Math.min(cx, window.innerWidth - cx) - FAN.edgePx;
+  return { cx, cy, radii: fanRadii(roomAbove, roomSide) };
+}
 
 /** A light tick where the platform has one (Telegram's haptics, Android's vibrate). */
 function tick(): void {
@@ -35,7 +73,7 @@ interface Props {
  * four things with labels.
  */
 export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
-  const [origin, setOrigin] = useState<{ cx: number; cy: number } | null>(null);
+  const [origin, setOrigin] = useState<{ cx: number; cy: number; radii: FanRadii } | null>(null);
   const paths = useRef<Array<SVGPathElement | null>>([]);
   const icons = useRef<Array<HTMLElement | null>>([]);
   const label = useRef<HTMLElement | null>(null);
@@ -93,12 +131,12 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       current.current = null;
       button.setPointerCapture?.(e.pointerId);
       timer = window.setTimeout(() => {
-        const r = button.getBoundingClientRect();
-        centre = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        const placed = placeFan(button);
+        centre = { x: placed.cx, y: placed.cy };
         held = true;
         swallowClick = true;
         tick();
-        setOrigin({ cx: centre.x, cy: centre.y });
+        setOrigin(placed);
       }, FAN.holdMs);
     };
 
@@ -125,10 +163,10 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       if (!start) return;
       const chosen = held ? current.current : null;
       const wasHeld = held;
-      closeFan();
-      // Released over a wedge: run it now, inside this event, so a file picker
-      // is still opened from a user gesture.
+      // Released over a wedge: run it first, inside this event and before any
+      // state changes, so a file picker is opened straight from the user gesture.
       if (wasHeld && chosen != null) pick.current(FAN_ACTIONS[chosen] as CaptureAction);
+      closeFan();
     };
 
     const onCancel = () => {
@@ -166,6 +204,8 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
   }, [enabled, triggerRef]);
 
   if (!origin) return null;
+  const { radii } = origin;
+  const size = radii.outer * 2;
 
   return (
     <>
@@ -180,17 +220,17 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
         data-testid="capture-fan"
         className="pointer-events-none fixed z-[45] origin-bottom motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-50 motion-safe:duration-150"
         style={{
-          left: origin.cx - FAN.outerPx,
-          top: origin.cy - FAN.outerPx,
-          width: SIZE,
-          height: FAN.outerPx,
+          left: origin.cx - radii.outer,
+          top: origin.cy - radii.outer,
+          width: size,
+          height: radii.outer,
         }}
       >
         <svg
           aria-hidden="true"
-          width={SIZE}
-          height={FAN.outerPx}
-          viewBox={`0 0 ${SIZE} ${FAN.outerPx}`}
+          width={size}
+          height={radii.outer}
+          viewBox={`0 0 ${size} ${radii.outer}`}
           className="overflow-visible"
         >
           {FAN_ACTIONS.map((id, i) => (
@@ -199,7 +239,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
               ref={(el) => {
                 paths.current[i] = el;
               }}
-              d={wedgePath(i)}
+              d={wedgePath(i, radii)}
               data-active="false"
               strokeWidth={1.5}
               className="fill-card stroke-border data-[active=true]:fill-primary data-[active=true]:stroke-primary"
@@ -208,7 +248,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
         </svg>
         {FAN_ACTIONS.map((id, i) => {
           const { Icon } = CAPTURE_ACTIONS[id];
-          const c = wedgeCentre(i);
+          const c = wedgeCentre(i, radii);
           return (
             <span
               key={id}
@@ -228,7 +268,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
           ref={label}
           data-active="false"
           className="text-muted-foreground data-[active=true]:text-foreground text-caption absolute w-32 text-center font-medium"
-          style={{ left: FAN.outerPx - 64, top: FAN.outerPx - 70 }}
+          style={{ left: radii.outer - 64, top: radii.outer - (radii.inner - 10) }}
         >
           Slide to choose
         </span>

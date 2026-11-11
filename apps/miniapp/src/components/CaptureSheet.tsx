@@ -1,9 +1,10 @@
 import { cn } from '@/lib/utils';
 import type { MealResult } from '@snapbite/core';
 import { Loader2 } from 'lucide-react';
-import { type RefObject, useRef, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 import type { Backend } from '../lib/backend.js';
 import { compressPhoto } from '../lib/compress.js';
+import { mealNoticeBody, notifyLogged } from '../lib/mealNotice.js';
 import { CaptureFan } from './CaptureFan.js';
 import { type CaptureAction, CaptureMenu } from './CaptureMenu.js';
 import { ManualMealDialog } from './ManualMealDialog.js';
@@ -23,7 +24,35 @@ interface Props {
   /** A meal was logged through the by-hand form (no AI result to hand back). */
   onManualLogged: () => void;
   onToast: (kind: 'success' | 'error' | 'info', msg: string) => void;
+  /**
+   * Where a multi-photo upload is up to ("Uploading 2 of 4"), or null when none is
+   * running. The shell shows it under the camera button and disables the button
+   * while it is set.
+   */
+  onBatchStatus?: (status: string | null) => void;
+  /** Something asked for from outside: a launch shortcut, or a photo shared to the app. */
+  intent?: CaptureIntent | null;
+  /** Called once the intent has been acted on, so the owner can clear it. */
+  onIntentHandled?: () => void;
 }
+
+export type CaptureIntent =
+  /** Open the menu with one card highlighted (the next tap is the shutter). */
+  | { type: 'menu'; highlight: Extract<CaptureAction, 'photo' | 'upload'> }
+  /** Open the by-hand form. */
+  | { type: 'manual' }
+  /** A photo to run through the normal analyse, confirm, save path. */
+  | { type: 'file'; file: File };
+
+/** Most photos taken from one library pick: the analyser is slow and rate-limited. */
+export const MAX_BATCH = 5;
+
+/**
+ * The pickers are always mounted and kept out of sight with `sr-only` positioning,
+ * not `display:none`: iOS has been known to refuse to open an input that is not
+ * rendered.
+ */
+const FILE_INPUT = 'sr-only';
 
 /**
  * The add-a-meal flow: the four-card menu, the hidden file inputs it drives, and
@@ -48,6 +77,9 @@ export function CaptureSheet({
   onLogged,
   onManualLogged,
   onToast,
+  onBatchStatus,
+  intent = null,
+  onIntentHandled,
 }: Props) {
   /** The by-hand dialog; it carries the saved-meals list, so both cards open it. */
   const [manualOpen, setManualOpen] = useState(false);
@@ -56,6 +88,12 @@ export function CaptureSheet({
   const [error, setError] = useState<string | null>(null);
   const photo = useRef<{ base64: string; mimeType: string } | null>(null);
   const preview = useRef<string | null>(null);
+  const [batching, setBatching] = useState(false);
+  const [highlight, setHighlight] = useState<CaptureAction | null>(null);
+  /** The intent this sheet has already acted on (StrictMode runs effects twice). */
+  const actedOn = useRef<CaptureIntent | null>(null);
+  /** Synchronous twin of `batching`: a second pick can arrive before a render. */
+  const batchRunning = useRef(false);
   const cameraInput = useRef<HTMLInputElement | null>(null);
   const libraryInput = useRef<HTMLInputElement | null>(null);
 
@@ -87,6 +125,65 @@ export function CaptureSheet({
     }
   }
 
+  /**
+   * Several photos from the library: each becomes its own meal, one at a time. The
+   * analyser is the slow, rate-limited part, so parallel uploads would only earn
+   * 429s. A failure is counted and the next photo still goes; nothing is abandoned.
+   * There is no review step per photo: the summary toast is the feedback.
+   */
+  async function runBatch(files: File[]) {
+    batchRunning.current = true;
+    setBatching(true);
+    onOpenChange(false);
+    let logged = 0;
+    let failed = 0;
+    try {
+      for (const [i, file] of files.entries()) {
+        onBatchStatus?.(`Uploading ${i + 1} of ${files.length}`);
+        try {
+          // Always re-encoded (see compressPhoto): the bytes sent carry no metadata.
+          const compressed = await compressPhoto(file);
+          const result = await backend.analyze(compressed.base64, compressed.mimeType);
+          await backend.logWithPhoto(result, {
+            base64: compressed.base64,
+            mimeType: compressed.mimeType,
+          });
+          logged += 1;
+          onLogged(result);
+        } catch {
+          failed += 1;
+        }
+      }
+    } finally {
+      batchRunning.current = false;
+      setBatching(false);
+      onBatchStatus?.(null);
+    }
+    if (logged > 0)
+      void notifyLogged('Meals logged', `${logged} logged${failed ? `, ${failed} failed` : ''}`);
+    if (failed === 0) onToast('success', `${logged} logged`);
+    else if (logged === 0) onToast('error', `${failed} failed`);
+    else onToast('info', `${logged} logged, ${failed} failed`);
+  }
+
+  /** The library pick: one photo keeps the review step, several are logged as a batch. */
+  function handleLibrary(list: FileList | null) {
+    const picked = [...(list ?? [])];
+    if (batchRunning.current || picked.length === 0) return;
+    if (picked.length === 1) {
+      void handleFile(picked[0]);
+      return;
+    }
+    const files = picked.slice(0, MAX_BATCH);
+    if (picked.length > MAX_BATCH) {
+      onToast(
+        'info',
+        `Only the first ${MAX_BATCH} of ${picked.length} photos were added. Pick the rest again afterwards.`,
+      );
+    }
+    void runBatch(files);
+  }
+
   async function save() {
     if (!draft || !photo.current) return;
     setStage('saving');
@@ -95,6 +192,8 @@ export function CaptureSheet({
       await backend.logWithPhoto(draft, photo.current);
       onLogged(draft);
       toastDone(draft);
+      // The same confirmation the iOS Shortcut ends with, where notifications are already allowed.
+      void notifyLogged('Meal logged', mealNoticeBody(draft));
       reset();
     } catch (err) {
       // Keep the draft: a retry must not re-run the AI call.
@@ -110,16 +209,54 @@ export function CaptureSheet({
   const busy = stage === 'analysing' || stage === 'saving';
 
   /**
+   * iOS opens a file picker only from inside the tap or release that asked for it.
+   * So these are plain synchronous calls: no await, no state change and no timer
+   * before `click()`, and nothing the menu's closing animation can delay.
+   */
+  function takePhoto() {
+    cameraInput.current?.click();
+  }
+  function uploadImage() {
+    if (batchRunning.current) return;
+    libraryInput.current?.click();
+  }
+
+  /**
    * A card was tapped. The menu closes at once so a file picker or a dialog is
    * not competing with an overlay; the picker's `click()` stays inside this tap,
    * which iOS requires.
    */
   function pick(action: CaptureAction) {
-    if (action === 'photo') cameraInput.current?.click();
-    else if (action === 'upload') libraryInput.current?.click();
+    if (action === 'photo') takePhoto();
+    else if (action === 'upload') uploadImage();
     else setManualOpen(true);
     onOpenChange(false);
   }
+
+  // Act on a request from outside, once. Never opens a picker or the camera: a launch is
+  // not a user gesture, and the browser would block it (see lib/launch.ts).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the intent arrives
+  useEffect(() => {
+    if (!intent || actedOn.current === intent) return;
+    actedOn.current = intent;
+    if (intent.type === 'menu') {
+      setHighlight(intent.highlight);
+      onOpenChange(true);
+    } else if (intent.type === 'manual') {
+      setManualOpen(true);
+    } else {
+      void handleFile(intent.file);
+    }
+    onIntentHandled?.();
+  }, [intent]);
+
+  // The highlight belongs to one opening of the menu: drop it when that one closes (and
+  // only then, so a menu that is about to open keeps the one it was just given).
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !open) setHighlight(null);
+    wasOpen.current = open;
+  }, [open]);
 
   return (
     <>
@@ -130,15 +267,24 @@ export function CaptureSheet({
         type="file"
         accept="image/*"
         capture="environment"
-        className="hidden"
+        className={FILE_INPUT}
+        tabIndex={-1}
+        aria-hidden
         onChange={(e) => void handleFile(e.target.files?.[0])}
       />
       <input
         ref={libraryInput}
         type="file"
         accept="image/*"
-        className="hidden"
-        onChange={(e) => void handleFile(e.target.files?.[0])}
+        multiple
+        className={FILE_INPUT}
+        tabIndex={-1}
+        aria-hidden
+        onChange={(e) => {
+          handleLibrary(e.target.files);
+          // So picking the same photos again still fires a change.
+          e.target.value = '';
+        }}
       />
 
       <CaptureMenu
@@ -146,9 +292,10 @@ export function CaptureSheet({
         onClose={() => onOpenChange(false)}
         onPick={pick}
         triggerRef={triggerRef}
+        highlight={highlight}
       />
       {/* Hold the button and slide: the same four actions, for the thumb. */}
-      <CaptureFan triggerRef={triggerRef} enabled={!open} onPick={pick} />
+      <CaptureFan triggerRef={triggerRef} enabled={!open && !batching} onPick={pick} />
 
       <Dialog
         open={stage !== 'idle'}
@@ -231,7 +378,7 @@ export function CaptureSheet({
             )}
 
             {stage === 'error' && !draft && (
-              <Button onClick={() => libraryInput.current?.click()} disabled={busy}>
+              <Button onClick={uploadImage} disabled={busy}>
                 Choose another photo
               </Button>
             )}
