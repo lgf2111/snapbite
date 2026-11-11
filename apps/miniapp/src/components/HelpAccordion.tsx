@@ -44,7 +44,7 @@ export function HelpAccordion({
                 aria-expanded={isOpen}
                 aria-controls={id}
                 onClick={() => setOpen(isOpen ? null : i)}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                className="flex min-h-11 w-full items-center justify-between gap-3 px-4 py-3 text-left transition-[background-color,transform] duration-[120ms] active:scale-[0.99] active:bg-accent/60 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <span className="flex flex-col">
                   <span className="text-sm font-medium">{item.title}</span>
@@ -54,7 +54,7 @@ export function HelpAccordion({
                 </span>
                 <span
                   aria-hidden
-                  className="text-muted-foreground shrink-0 text-xs transition-transform"
+                  className="text-muted-foreground shrink-0 text-xs transition-transform duration-200 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
                   style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}
                 >
                   ▾

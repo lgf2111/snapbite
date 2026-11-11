@@ -29,14 +29,14 @@ export function Switch({
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        'hit-slop relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50',
+        'hit-slop group relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 motion-reduce:transition-none outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50',
         checked ? 'bg-primary' : 'bg-input',
       )}
       {...aria}
     >
       <span
         className={cn(
-          'bg-background pointer-events-none block size-5 rounded-full shadow transition-transform',
+          'bg-background pointer-events-none block size-5 rounded-full shadow transition-transform duration-200 ease-[var(--ease-spring)] group-active:scale-x-110 motion-reduce:transition-none motion-reduce:group-active:scale-x-100',
           checked ? 'translate-x-[22px]' : 'translate-x-0.5',
         )}
       />

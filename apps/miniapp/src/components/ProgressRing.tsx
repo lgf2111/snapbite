@@ -82,7 +82,7 @@ export function ProgressRing({
               strokeDasharray={circumference}
               strokeDashoffset={dashOffset}
               transform={`rotate(-90 ${center} ${center})`}
-              style={{ transition: 'stroke-dashoffset 400ms ease' }}
+              style={{ transition: 'stroke-dashoffset 700ms var(--ease-out-quint)' }}
             />
           )}
           {/* Overflow: a second arc from twelve o'clock, so "over" is a shape. */}
@@ -99,6 +99,7 @@ export function ProgressRing({
               strokeDashoffset={2 * Math.PI * (radius - stroke - 3) * (1 - overflow)}
               transform={`rotate(-90 ${center} ${center})`}
               opacity={0.75}
+              style={{ transition: 'stroke-dashoffset 700ms var(--ease-out-quint)' }}
             />
           )}
         </svg>

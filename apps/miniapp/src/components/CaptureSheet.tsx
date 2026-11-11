@@ -131,7 +131,7 @@ export function CaptureSheet({
           onOpenChange(next);
         }}
       >
-        <DialogContent className="sheet-safe bottom-0 top-auto max-w-md translate-y-0 rounded-b-none rounded-t-xl">
+        <DialogContent className="sheet-safe bottom-0 top-auto max-w-md translate-y-0 rounded-b-none rounded-t-xl duration-200 data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2 data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100">
           <DialogHeader>
             <DialogTitle className="text-title">
               {stage === 'review' || stage === 'saving' ? 'Log this meal?' : 'Add a meal'}

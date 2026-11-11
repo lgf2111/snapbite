@@ -126,8 +126,12 @@ export function HomeScreen({
     setRefreshing(true);
     hapticNotify('success');
     refresh();
+    // Say it out loud: the spinner is small, and a press that produces no visible
+    // change reads as a broken button. The list updates in place, so the toast is
+    // the only confirmation that anything happened.
+    onToast?.('success', 'Refreshed');
     window.setTimeout(() => setRefreshing(false), 700);
-  }, [refresh, refreshing]);
+  }, [refresh, refreshing, onToast]);
 
   // App bumps refreshSignal after an edit/delete; revalidate without remounting.
   const firstSignal = useRef(refreshSignal);
@@ -308,8 +312,10 @@ export function HomeScreen({
                     className="bg-muted ring-border/60 col-span-2 h-[3px] overflow-hidden rounded-full ring-1"
                   >
                     <div
-                      className="bg-primary h-full rounded-full"
-                      style={{ width: `${macroPercent(Number(have), Number(target))}%` }}
+                      className="bg-primary h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
+                      style={{
+                        transform: `scaleX(${macroPercent(Number(have), Number(target)) / 100})`,
+                      }}
                     />
                   </dd>
                 </div>
@@ -378,7 +384,7 @@ export function HomeScreen({
                   )}
                   <button
                     type="button"
-                    className="min-w-0 flex-1 text-left"
+                    className="min-w-0 flex-1 rounded-md text-left transition-transform duration-[120ms] active:scale-[0.99] motion-reduce:transition-none"
                     onClick={() => onOpenMeal(m)}
                   >
                     <div className="truncate font-medium">{m.label}</div>

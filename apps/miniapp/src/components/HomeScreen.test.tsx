@@ -129,9 +129,9 @@ describe('HomeScreen', () => {
 
     await screen.findByText('Chicken rice');
     const fills = [...container.querySelectorAll('[data-slot="macro-bar"] > div')].map(
-      (el) => (el as HTMLElement).style.width,
+      (el) => (el as HTMLElement).style.transform,
     );
-    expect(fills).toEqual(['50%', '100%', '0%']);
+    expect(fills).toEqual(['scaleX(0.5)', 'scaleX(1)', 'scaleX(0)']);
   });
 
   it('shows progress rings instead of the goal prompt when targets are set', async () => {

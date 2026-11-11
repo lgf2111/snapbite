@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Backend } from '../lib/backend.js';
 import { OnboardingScreen } from './OnboardingScreen.js';
 
@@ -67,5 +68,63 @@ describe('OnboardingScreen resume', () => {
 
     await waitFor(() => expect(onSkip).toHaveBeenCalled());
     expect(localStorage.getItem('snapbite.onboarding.resume')).toBeNull();
+  });
+});
+
+describe('OnboardingScreen intro', () => {
+  const matchMedia = window.matchMedia;
+  const setReduced = (reduced: boolean) => {
+    window.matchMedia = ((q: string) => ({
+      matches: reduced && q.includes('reduce'),
+      media: q,
+      addEventListener() {},
+      removeEventListener() {},
+    })) as unknown as typeof window.matchMedia;
+  };
+
+  beforeEach(() => {
+    cleanup();
+    localStorage.clear();
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    window.matchMedia = matchMedia;
+  });
+
+  it('shows the welcome first, then lets the form in after a second', () => {
+    setReduced(false);
+    const { backend } = makeBackend();
+    render(<OnboardingScreen backend={backend} onDone={vi.fn()} onSkip={vi.fn()} />);
+
+    expect(screen.getByTestId('onboarding-intro')).toBeTruthy();
+    expect(screen.getByTestId('onboarding-form').hasAttribute('inert')).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(999);
+    });
+    expect(screen.getByTestId('onboarding-form').hasAttribute('inert')).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByTestId('onboarding-form').hasAttribute('inert')).toBe(false);
+  });
+
+  it('skips the intro and the wait under reduced motion', () => {
+    setReduced(true);
+    const { backend } = makeBackend();
+    render(<OnboardingScreen backend={backend} onDone={vi.fn()} onSkip={vi.fn()} />);
+
+    expect(screen.queryByTestId('onboarding-intro')).toBeNull();
+    expect(screen.getByTestId('onboarding-form').hasAttribute('inert')).toBe(false);
+    expect(screen.getByRole('heading', { name: /welcome to snapbite/i })).toBeTruthy();
+  });
+
+  it('does not replay the intro when resuming at the key step', () => {
+    setReduced(false);
+    const { backend } = makeBackend();
+    render(<OnboardingScreen backend={backend} startAtKeyStep onDone={vi.fn()} onSkip={vi.fn()} />);
+    expect(screen.queryByTestId('onboarding-intro')).toBeNull();
   });
 });

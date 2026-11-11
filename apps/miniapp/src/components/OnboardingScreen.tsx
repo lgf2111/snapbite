@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Backend } from '@/lib/backend';
+import { cn } from '@/lib/utils';
 import {
   type DailyTargets,
   PROVIDER_PRESETS,
@@ -41,6 +42,9 @@ interface OnboardingScreenProps {
  * device, which they typed here moments ago.
  */
 const RESUME_KEY = 'snapbite.onboarding.resume';
+
+/** How long the welcome holds before the form fades in. */
+const INTRO_MS = 1000;
 
 interface ResumeState {
   step: 'profile' | 'apikey';
@@ -82,6 +86,27 @@ export function OnboardingScreen({
   });
   const [saving, setSaving] = useState(false);
   const [savedTargets, setSavedTargets] = useState<DailyTargets | null>(null);
+
+  /**
+   * The first run opens on a welcome that fades in, then the form fades in
+   * beneath it. Reduced motion skips the intro and its wait entirely: a
+   * one-second gate before the only actionable content is a tax on people who
+   * asked for less motion. The key step (resume) never plays it either.
+   */
+  const [showIntro] = useState(
+    () =>
+      step === 'profile' &&
+      !(
+        typeof window !== 'undefined' &&
+        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+      ),
+  );
+  const [introDone, setIntroDone] = useState(!showIntro);
+  useEffect(() => {
+    if (introDone) return;
+    const timer = window.setTimeout(() => setIntroDone(true), INTRO_MS);
+    return () => window.clearTimeout(timer);
+  }, [introDone]);
 
   // API-key step state.
   const [provider, setProvider] = useState<ProviderId>(() => readResume()?.provider ?? 'gemini');
@@ -198,25 +223,59 @@ export function OnboardingScreen({
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 pb-4">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-title">Welcome to SnapBite</h1>
-        <p className="text-muted-foreground text-caption">
-          Tell us a bit about yourself to get daily calorie and macro targets. You can change these
-          any time in Settings — or skip and just start logging (targets simply won't show yet).
-        </p>
+    <div className="flex flex-1 flex-col">
+      {showIntro && (
+        // In flow, not an absolute overlay: the sheet scrolls, so an overlay sized
+        // to the whole form would centre its text somewhere below the fold. This
+        // block fills the first screen and the form sits beneath it.
+        <div
+          data-testid="onboarding-intro"
+          className="animate-in fade-in flex min-h-[70svh] flex-col items-center justify-center gap-2 text-center duration-500"
+        >
+          <h1 className="font-display text-display leading-tight">
+            Welcome
+            <br />
+            to SnapBite
+          </h1>
+          <p className="text-muted-foreground text-caption">Let&rsquo;s set up your targets.</p>
+        </div>
+      )}
+
+      <div
+        data-testid="onboarding-form"
+        // Hidden from tab order and screen readers until it fades in, so nobody
+        // fills an invisible form.
+        inert={!introDone}
+        className={cn(
+          'flex flex-col gap-4 pb-4',
+          introDone ? 'animate-in fade-in slide-in-from-bottom-2 duration-500' : 'opacity-0',
+        )}
+      >
+        <div className="flex flex-col gap-1">
+          {!showIntro && <h1 className="text-title">Welcome to SnapBite</h1>}
+          <p className="text-muted-foreground text-caption">
+            Tell us a bit about yourself to get daily calorie and macro targets. You can change
+            these any time in Settings — or skip and just start logging (targets simply won&rsquo;t
+            show yet).
+          </p>
+        </div>
+
+        <ProfileForm
+          initial={null}
+          submitLabel="Set my goal"
+          saving={saving}
+          onSubmit={saveProfile}
+        />
+
+        <Button
+          variant="ghost"
+          className="text-muted-foreground"
+          disabled={saving}
+          onClick={onSkip}
+        >
+          Skip for now — I&rsquo;ll just start logging
+        </Button>
       </div>
-
-      <ProfileForm
-        initial={null}
-        submitLabel="Set my goal"
-        saving={saving}
-        onSubmit={saveProfile}
-      />
-
-      <Button variant="ghost" className="text-muted-foreground" disabled={saving} onClick={onSkip}>
-        Skip for now — I'll just start logging
-      </Button>
     </div>
   );
 }

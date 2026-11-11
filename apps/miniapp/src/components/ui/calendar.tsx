@@ -25,10 +25,10 @@ export function Calendar({
         caption_label: 'text-sm font-medium',
         nav: 'flex items-center justify-between absolute inset-x-0 top-1 px-1',
         button_previous: cn(
-          'inline-flex size-7 items-center justify-center rounded-md opacity-70 hover:opacity-100 hover:bg-accent',
+          'inline-flex size-11 items-center justify-center rounded-md opacity-70 transition-[transform,background-color,opacity] duration-[120ms] hover:opacity-100 hover:bg-accent active:scale-90 motion-reduce:active:scale-100',
         ),
         button_next: cn(
-          'inline-flex size-7 items-center justify-center rounded-md opacity-70 hover:opacity-100 hover:bg-accent',
+          'inline-flex size-11 items-center justify-center rounded-md opacity-70 transition-[transform,background-color,opacity] duration-[120ms] hover:opacity-100 hover:bg-accent active:scale-90 motion-reduce:active:scale-100',
         ),
         month_grid: 'w-full border-collapse',
         weekdays: 'flex',
@@ -36,7 +36,7 @@ export function Calendar({
         week: 'flex w-full mt-1',
         day: 'size-9 p-0 text-center text-sm',
         day_button: cn(
-          'inline-flex size-9 items-center justify-center rounded-md font-normal hover:bg-accent hover:text-accent-foreground aria-selected:opacity-100',
+          'inline-flex size-9 items-center justify-center rounded-md font-normal transition-[transform,background-color,color] duration-[120ms] active:scale-90 motion-reduce:active:scale-100 hover:bg-accent hover:text-accent-foreground aria-selected:opacity-100',
         ),
         selected:
           '[&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:hover:bg-primary',

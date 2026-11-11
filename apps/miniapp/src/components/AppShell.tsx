@@ -53,8 +53,8 @@ export function AppShell({ active, onNavigate, onCapture, captureBusy = false, c
               disabled={captureBusy}
               aria-label="Log a meal"
               className={cn(
-                'absolute -top-5 flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl ring-4 ring-background transition-transform',
-                'active:scale-95 disabled:opacity-60',
+                'absolute -top-5 flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl ring-4 ring-background transition-[transform,box-shadow] duration-[160ms] ease-[var(--ease-spring)] hover:shadow-2xl',
+                'active:scale-90 motion-reduce:active:scale-100 disabled:opacity-60',
                 'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
               )}
             >
@@ -91,7 +91,7 @@ function NavButton({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex min-w-16 flex-col items-center justify-center gap-1 rounded-md px-3 py-2 text-caption transition-colors',
+        'flex min-w-16 flex-col items-center justify-center gap-1 rounded-md px-3 py-2 text-caption transition-[transform,color] duration-[140ms] ease-[var(--ease-out-quint)] active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100',
         'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
         active ? 'text-primary-text' : 'text-muted-foreground hover:text-foreground',
       )}

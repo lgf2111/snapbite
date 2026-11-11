@@ -90,7 +90,7 @@ export function SwipeableRow({ children, onDelete, animateIn = false }: Swipeabl
         aria-label="Delete"
         onClick={beginRemove}
         className={cn(
-          'bg-destructive text-destructive-foreground border-destructive/60 absolute inset-y-0 right-0 flex items-center justify-end rounded-xl border shadow-sm transition-opacity',
+          'bg-destructive text-destructive-foreground border-destructive/60 absolute inset-y-0 right-0 flex items-center justify-end rounded-xl border shadow-sm transition-[opacity,transform] duration-[120ms] active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100',
           open && !removing ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
         style={{ width: REVEAL + OVERLAP }}
@@ -103,7 +103,7 @@ export function SwipeableRow({ children, onDelete, animateIn = false }: Swipeabl
       </button>
       <div
         {...handlers}
-        className="bg-background relative rounded-xl transition-transform"
+        className="bg-background relative rounded-xl transition-transform duration-200 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
         style={{
           transform: `translateX(${removing ? '-110%' : open ? `-${REVEAL}px` : '0'})`,
         }}
