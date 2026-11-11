@@ -62,6 +62,14 @@ describe('MealThumb', () => {
     }
   });
 
+  it('paints the SnapBite mark inside the placeholder, not an empty grey block', () => {
+    render(<MealThumb src={null} />);
+    const mark = screen.getByTestId('meal-thumb-mark');
+    expect(mark.className).toContain('size-7');
+    expect(mark.className).toContain('bg-contain');
+    expect(mark.style.backgroundImage).toContain('/icon-192.png');
+  });
+
   it('gives a different url its own chance', () => {
     const { container, rerender } = render(<MealThumb src={URL_A} />);
     fireEvent.error(container.querySelector('img') as HTMLImageElement);
