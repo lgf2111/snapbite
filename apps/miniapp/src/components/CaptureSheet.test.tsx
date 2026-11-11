@@ -2,17 +2,33 @@ import type { Backend } from '@/lib/backend';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CaptureSheet } from './CaptureSheet.js';
+import { CaptureSheet, MAX_BATCH } from './CaptureSheet.js';
 import { Toaster } from './ui/sonner.js';
 
-function setup(open = true) {
+vi.mock('../lib/compress.js', () => ({
+  compressPhoto: vi.fn(async (file: File) => ({
+    base64: `b64:${file.name}`,
+    mimeType: 'image/jpeg',
+    bytes: 1,
+    width: 1,
+    height: 1,
+  })),
+}));
+
+function setup(open = true, over: Record<string, unknown> = {}) {
   const trigger = document.createElement('button');
   document.body.append(trigger);
   const backend = {
     mode: 'local' as const,
     listFavorites: vi.fn(async () => []),
+    analyze: vi.fn(async () => RESULT),
+    logWithPhoto: vi.fn(async () => {}),
+    ...over,
   } as unknown as Backend;
   const onOpenChange = vi.fn();
+  const onLogged = vi.fn();
+  const onToast = vi.fn();
+  const onBatchStatus = vi.fn();
   const { container } = render(
     <>
       <CaptureSheet
@@ -20,9 +36,10 @@ function setup(open = true) {
         open={open}
         onOpenChange={onOpenChange}
         triggerRef={{ current: trigger }}
-        onLogged={vi.fn()}
+        onLogged={onLogged}
         onManualLogged={vi.fn()}
-        onToast={vi.fn()}
+        onToast={onToast}
+        onBatchStatus={onBatchStatus}
       />
       <Toaster />
     </>,
@@ -30,8 +47,19 @@ function setup(open = true) {
   const inputs = [...container.querySelectorAll<HTMLInputElement>('input[type=file]')];
   const camera = inputs.find((i) => i.hasAttribute('capture')) as HTMLInputElement;
   const library = inputs.find((i) => !i.hasAttribute('capture')) as HTMLInputElement;
-  return { backend, onOpenChange, camera, library, trigger };
+  return { backend, onOpenChange, camera, library, trigger, onLogged, onToast, onBatchStatus };
 }
+
+const RESULT = {
+  foods: [],
+  total: { energyKcal: 500, proteinG: 30, carbsG: 60, fatG: 12 },
+  confidence: 0.9,
+  needsConfirmation: false,
+};
+
+const photo = (name: string) => new File([name], name, { type: 'image/jpeg' });
+const pick = (input: HTMLInputElement, ...files: File[]) =>
+  fireEvent.change(input, { target: { files } });
 
 const card = (name: RegExp) => screen.getByRole('button', { name });
 
@@ -168,5 +196,124 @@ describe('CaptureSheet (the add-a-meal flow)', () => {
     expect(menu.parentElement?.getAttribute('style')).toBe(before);
     // The toaster sits above the menu layers.
     expect(document.querySelector('[data-sonner-toaster]')).toBeTruthy();
+  });
+});
+
+describe('uploading several photos from the library', () => {
+  it('the library input takes many; the camera stays single', () => {
+    const { camera, library } = setup(false);
+    expect(library.multiple).toBe(true);
+    expect(camera.multiple).toBe(false);
+  });
+
+  it('logs each photo as its own meal, in the order picked, one at a time', async () => {
+    const calls: string[] = [];
+    let release: Array<() => void> = [];
+    const analyze = vi.fn(
+      (base64: string) =>
+        new Promise((resolve) => {
+          calls.push(`analyze ${base64}`);
+          release.push(() => resolve(RESULT));
+        }),
+    );
+    const logWithPhoto = vi.fn(async (_r: unknown, p: { base64: string }) => {
+      calls.push(`save ${p.base64}`);
+    });
+    const { library, onLogged } = setup(false, { analyze, logWithPhoto });
+
+    pick(library, photo('a.jpg'), photo('b.jpg'), photo('c.jpg'));
+    await waitFor(() => expect(analyze).toHaveBeenCalledTimes(1));
+    // Sequential: the second photo is not touched until the first is done.
+    expect(calls).toEqual(['analyze b64:a.jpg']);
+
+    for (const name of ['a.jpg', 'b.jpg', 'c.jpg']) {
+      await waitFor(() => expect(release.length).toBe(1));
+      release.shift()?.();
+      await waitFor(() => expect(calls).toContain(`save b64:${name}`));
+    }
+    await waitFor(() => expect(onLogged).toHaveBeenCalledTimes(3));
+    expect(calls).toEqual([
+      'analyze b64:a.jpg',
+      'save b64:a.jpg',
+      'analyze b64:b.jpg',
+      'save b64:b.jpg',
+      'analyze b64:c.jpg',
+      'save b64:c.jpg',
+    ]);
+    release = [];
+  });
+
+  it('a failure in the middle does not stop the rest, and the summary counts are right', async () => {
+    const analyze = vi
+      .fn()
+      .mockResolvedValueOnce(RESULT)
+      .mockRejectedValueOnce(new Error('429'))
+      .mockResolvedValueOnce(RESULT)
+      .mockResolvedValueOnce(RESULT);
+    const { library, onToast, onLogged } = setup(false, { analyze });
+
+    pick(library, photo('1.jpg'), photo('2.jpg'), photo('3.jpg'), photo('4.jpg'));
+    await waitFor(() => expect(onToast).toHaveBeenCalledTimes(1));
+
+    expect(analyze).toHaveBeenCalledTimes(4);
+    expect(onLogged).toHaveBeenCalledTimes(3);
+    expect(onToast).toHaveBeenCalledWith('info', '3 logged, 1 failed');
+  });
+
+  it('reports all-succeeded and all-failed plainly', async () => {
+    const ok = setup(false);
+    pick(ok.library, photo('a.jpg'), photo('b.jpg'));
+    await waitFor(() => expect(ok.onToast).toHaveBeenCalledWith('success', '2 logged'));
+    cleanup();
+
+    const bad = setup(false, { analyze: vi.fn().mockRejectedValue(new Error('down')) });
+    pick(bad.library, photo('a.jpg'), photo('b.jpg'));
+    await waitFor(() => expect(bad.onToast).toHaveBeenCalledWith('error', '2 failed'));
+  });
+
+  it('says "Uploading 2 of 4" while it works and clears it when done', async () => {
+    const { library, onBatchStatus, onToast, onOpenChange } = setup(false);
+    pick(library, photo('1.jpg'), photo('2.jpg'), photo('3.jpg'), photo('4.jpg'));
+    await waitFor(() => expect(onToast).toHaveBeenCalled());
+
+    expect(onBatchStatus.mock.calls.map((c) => c[0])).toEqual([
+      'Uploading 1 of 4',
+      'Uploading 2 of 4',
+      'Uploading 3 of 4',
+      'Uploading 4 of 4',
+      null,
+    ]);
+    // The menu is shut as soon as the batch starts.
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it(`caps a pick at ${MAX_BATCH} and says so, rather than dropping files quietly`, async () => {
+    const { library, backend, onToast } = setup(false);
+    pick(library, ...Array.from({ length: 8 }, (_, i) => photo(`${i}.jpg`)));
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('success', `${MAX_BATCH} logged`));
+
+    expect(backend.analyze).toHaveBeenCalledTimes(MAX_BATCH);
+    const told = onToast.mock.calls.find((c) => c[0] === 'info');
+    expect(told?.[1]).toContain(`first ${MAX_BATCH} of 8`);
+  });
+
+  it('ignores another pick while a batch is running', async () => {
+    let release: () => void = () => {};
+    const analyze = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(RESULT);
+        }),
+    );
+    const { library, backend } = setup(false, { analyze });
+    pick(library, photo('a.jpg'), photo('b.jpg'));
+    await waitFor(() => expect(analyze).toHaveBeenCalledTimes(1));
+
+    pick(library, photo('x.jpg'), photo('y.jpg'));
+    release();
+    await waitFor(() => expect(analyze).toHaveBeenCalledTimes(2));
+    release();
+    await waitFor(() => expect(backend.logWithPhoto).toHaveBeenCalledTimes(2));
+    expect(analyze).toHaveBeenCalledTimes(2);
   });
 });

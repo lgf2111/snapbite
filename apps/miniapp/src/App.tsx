@@ -56,6 +56,8 @@ export function App() {
   const [homeDate, setHomeDate] = useState(() => (route.name === 'day' ? route.date : todayKey()));
   const [homeView, setHomeView] = useState<'daily' | 'weekly'>('daily');
   const [menuOpen, setMenuOpen] = useState(false);
+  // "Uploading 2 of 4" while a multi-photo batch runs; null otherwise.
+  const [batchStatus, setBatchStatus] = useState<string | null>(null);
   const cameraRef = useRef<HTMLButtonElement>(null);
 
   // Profile/targets drive the Home rings + onboarding gate.
@@ -181,6 +183,7 @@ export function App() {
           menuOpen={menuOpen}
           onToggleMenu={() => setMenuOpen((v) => !v)}
           captureRef={cameraRef}
+          captureStatus={batchStatus}
         >
           {detailId ? (
             <Suspense fallback={<ScreenFallback />}>
@@ -230,6 +233,7 @@ export function App() {
         onLogged={() => setHomeVersion((v) => v + 1)}
         onManualLogged={() => setHomeVersion((v) => v + 1)}
         onToast={toastFn}
+        onBatchStatus={setBatchStatus}
       />
 
       {showOnboarding && (
