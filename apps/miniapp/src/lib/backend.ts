@@ -1,9 +1,14 @@
 import {
+  type AdvancedReport,
   type DailyTargets,
   type MealResult,
+  type ReportMeal,
+  type ReportRange,
   type UserProfile,
+  buildAdvancedReport,
   computeTargets,
   currentStreak,
+  reportGoal,
 } from '@snapbite/core';
 import {
   ApiClient,
@@ -79,6 +84,8 @@ export interface Backend {
   mealsInRange(startKey: string, endKey: string): Promise<RecentMeal[]>;
   /** Distinct days (YYYY-MM-DD) that have meals, plus the current streak. */
   mealDates(): Promise<MealDates>;
+  /** Advanced reports: 90-day or 12-month trends. Supporter-gated in worker mode. */
+  analytics(range: ReportRange): Promise<AdvancedReport>;
   detail(id: string): Promise<MealDetail>;
   /** Saved meals ("favorites") the user can re-log with one tap. */
   listFavorites(): Promise<Favorite[]>;
@@ -190,6 +197,9 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
       },
       mealDates() {
         return api.mealDates();
+      },
+      analytics(range) {
+        return api.analytics(range);
       },
       detail(id) {
         return api.getMeal(id);
@@ -341,6 +351,41 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
       ].sort((a, b) => (a < b ? 1 : -1));
       const streak = currentStreak(new Set(dates), todayKey());
       return { dates, streak: streak >= 2 ? streak : null };
+    },
+    async analytics(range) {
+      // Local/demo mode computes the same report from localStorage, so the
+      // Reports screen is usable in a browser without the Worker.
+      const profile = loadProfile();
+      const targets = profile ? computeTargets(profile) : null;
+      const meals: ReportMeal[] = loadMeals().map((saved) => {
+        const ms = new Date(saved.savedAt).getTime();
+        return {
+          loggedAt: ms,
+          dayKey: localDayKey(ms),
+          hour: new Date(ms).getHours(),
+          energyKcal: saved.meal.total.energyKcal,
+          proteinG: saved.meal.total.proteinG,
+          foods: saved.meal.foods.map((f) => ({
+            name: f.food.name,
+            weightG:
+              f.food.estimatedWeightG != null ? f.food.estimatedWeightG * f.food.quantity : null,
+          })),
+        };
+      });
+      return buildAdvancedReport({
+        range,
+        todayKey: todayKey(),
+        meals,
+        target:
+          profile && targets
+            ? {
+                energyKcal: targets.energyKcal,
+                proteinG: targets.proteinG,
+                weightKg: profile.weightKg,
+                goal: reportGoal(profile.goal),
+              }
+            : null,
+      });
     },
     async detail(id) {
       const saved = loadMeals().find((m) => m.id === id);

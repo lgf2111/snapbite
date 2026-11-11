@@ -15,7 +15,7 @@ import {
   weekRange,
 } from '@/lib/weekPrefs';
 import { type DailyTargets, type MealResult, PROVIDER_PRESETS } from '@snapbite/core';
-import { RefreshCw, Sparkles } from 'lucide-react';
+import { ChevronRight, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DateSelector } from './DateSelector.js';
@@ -59,6 +59,7 @@ interface HomeScreenProps {
   /** Bumped by App after an edit/delete to trigger a revalidation (no remount). */
   refreshSignal: number;
   onOpenMeal: (meal: RecentMeal) => void;
+  onOpenReports: () => void;
   onSetGoal: () => void;
   /** Setup is covering Home: the install tip must not render behind it. */
   hideInstallGuide?: boolean;
@@ -88,6 +89,7 @@ export function HomeScreen({
   onViewChange,
   refreshSignal,
   onOpenMeal,
+  onOpenReports,
   onSetGoal,
   hideInstallGuide = false,
   onToast,
@@ -457,6 +459,25 @@ export function HomeScreen({
           </Button>
         </section>
       )}
+
+      {/* One row, always visible: Reports is where the log is read across time.
+          Whether this account can open it is the Worker's call (403 → locked). */}
+      <button
+        type="button"
+        onClick={onOpenReports}
+        className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-card p-4 text-left transition-transform duration-[120ms] active:scale-[0.99] motion-reduce:transition-none"
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="bg-secondary text-primary-text flex size-9 shrink-0 items-center justify-center rounded-md">
+            <TrendingUp className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-body font-medium">Reports</p>
+            <p className="text-muted-foreground text-caption">Trend · Adherence · Report card</p>
+          </div>
+        </div>
+        <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+      </button>
 
       {error && <p className="text-destructive text-caption">{error}</p>}
 

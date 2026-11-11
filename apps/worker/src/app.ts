@@ -7,6 +7,7 @@ import { telegramAuth } from './middleware/auth.js';
 import { accountRoutes } from './routes/account.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
+import { analyticsRoutes } from './routes/analytics.js';
 import { billingRoutes, billingWebhookRoutes } from './routes/billing.js';
 import { deviceTokenRoutes } from './routes/deviceTokens.js';
 import { favoritesRoutes } from './routes/favorites.js';
@@ -95,6 +96,7 @@ export function createApp(opts: CreateAppOptions = {}) {
     });
   });
 
+  api.route('/analytics', analyticsRoutes());
   api.route('/billing', billingRoutes());
   api.route('/settings', settingsRoutes());
   api.route('/meals', mealsRoutes(opts.providerFactory, opts.botClientFactory));

@@ -8,10 +8,11 @@
  *   /                 today
  *   /day/2026-11-11   a specific day
  *   /meal/:id         one meal's detail
+ *   /reports          advanced reports
  *   /settings         settings
  *   /verify           magic-link landing (handled in main.tsx)
  *
- * Deliberately hand-rolled: the surface is five routes, and pulling in a router
+ * Deliberately hand-rolled: the surface is six routes, and pulling in a router
  * for that would be more code to keep current than the parser itself. If the
  * app grows nested screens or code-split layouts, replace this file wholesale.
  */
@@ -30,8 +31,11 @@ export interface RouteMeal {
 export interface RouteSettings {
   name: 'settings';
 }
+export interface RouteReports {
+  name: 'reports';
+}
 
-export type Route = RouteHome | RouteDay | RouteMeal | RouteSettings;
+export type Route = RouteHome | RouteDay | RouteMeal | RouteSettings | RouteReports;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -41,6 +45,7 @@ export function parseRoute(pathname: string): Route {
 
   const [head, arg] = parts;
   if (head === 'settings' && parts.length === 1) return { name: 'settings' };
+  if (head === 'reports' && parts.length === 1) return { name: 'reports' };
   if (head === 'day' && arg && DATE_RE.test(arg) && parts.length === 2) {
     return { name: 'day', date: arg };
   }
@@ -58,6 +63,8 @@ export function routeToPath(route: Route): string {
       return `/day/${route.date}`;
     case 'meal':
       return `/meal/${encodeURIComponent(route.id)}`;
+    case 'reports':
+      return '/reports';
     case 'settings':
       return '/settings';
   }
