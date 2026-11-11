@@ -157,6 +157,40 @@ Rules that follow from the arithmetic:
 
 One sentence per pack, no tiers named after metals, no "best value" badge: *100 photo analyses — $4.99*. A user should be able to work out the per-photo price in their head.
 
+## The BYOK-first cascade: their key, then their credits
+
+The owner's model, and it is the right one for this product: **the user's own key is always tried first.** Their free Gemini tier carries the ordinary load at no cost to anyone. When their key hits its rate limit or quota, SnapBite falls back to our key and spends one credit — so the user never sees a rate-limit error, which is the difference between "this app works" and "this app breaks on a busy day".
+
+Rules that keep the cascade honest, because silently spending someone's money is the failure mode that turns a convenience into a complaint:
+
+- **One line, at the moment it happens**: "Your Gemini limit was reached — used 1 credit (43 left)." Not a modal, not a countdown, not a toast that disappears before it can be read. A user who is spending money must be told every time, in the same breath.
+- **Pre-authorised, not surprised.** The setting exists up front: *"When my key hits its limit, use my credits."* On by default only if the user has credits; off is a legitimate choice and simply surfaces the limit.
+- **No credits, no silent failure either.** If the balance is zero, the app says so plainly and offers the key help, not a generic error.
+- **The fallback is one credit per analysis.** Same price as a bought credit; no surcharge for the convenience of it being automatic.
+- **Detection must be specific.** A quota hit is `429` or `403 quotaExceeded` from the provider, never a `500` or a network error — falling back on a genuine failure would spend a credit to hide a bug.
+- **A cap on overflow**, e.g. 20 credits a day, so a scripted client cannot drain a wallet in an afternoon while the user is asleep.
+- **Their key is never disabled on our side.** The app does not "use up" a free tier deliberately; it reacts to a real limit and says so.
+
+### What buying a pack unlocks, beyond credits
+
+A pack also marks the account as **supporter**, which unlocks the advanced analytics views. This is a product choice, not a cost recovery one — the analysis itself is a query — so it is written down as exactly that, and the free tier keeps the daily rings, weekly view, recap and streak so nothing is taken away to manufacture the upgrade.
+
+### Consequence for the price
+
+Overflow credits are only ever spent by **heavy users** — the ones who exhausted a free tier. That is the most expensive population to serve, and the reason the margin table above is deliberately generous: the average credit is not consumed by the average user. Revisit the pack sizes once real usage exists; do not shrink them on the assumption that overflow is rare.
+
+## Roadmap: group logging
+
+Group logging is the next product idea, and the first one that needs a different shape of data model. Sketch, not a decision:
+
+- A **group** owns a shared log: household, couple, or a team on a trip. Meals logged by any member appear in one place, attributed to the member.
+- Two distinct uses that must not be conflated: **shared meals** (one dish, several servings — split the macros across members) and **a shared day** (each member logs their own, but the group sees a combined view).
+- Targets stay **per person**; a group total is meaningless for adherence.
+- Permissions: invite by link, remove a member, leave a group. A member's photos are visible to the group only if they logged them there — personal logs must not silently become shared.
+- Credits stay per person. A group does not pool credit, or the loudest member spends everyone's.
+
+Deliberately after credits: the data model for groups is a bigger change than either the billing or the analytics work.
+
 ## Roadmap: trials and eligibility
 
 ### A trial at registration
