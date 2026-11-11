@@ -1,0 +1,3 @@
+/* Real SPA fallback must be the LAST rule; Cloudflare Pages picks the first
+   match, and a catch-all first would swallow assets, /help and /verify. */
+/*    /index.html   200
