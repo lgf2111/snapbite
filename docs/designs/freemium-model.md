@@ -150,7 +150,7 @@ Rules that follow from the arithmetic:
 
 - The convenience subscription is **replaced** by credits. There is no monthly plan, no trial-to-subscription conversion, and therefore none of the cancellation, grace-period or dunning machinery — the strongest simplification in this document.
 - Entitlement is a **balance**, not a boolean: `credit_balance` on `billing_accounts`, decremented atomically per analysis, with `ai_usage` as the ledger. A zero balance is the free floor (BYOK), never a locked app.
-- The registration trial becomes **20 free credits**, granted once per verified identity. Same anti-abuse rule: verified identity, not a device account.
+- The registration trial becomes **20 free credits plus the supporter tag for 14 days**, granted once per verified identity, so a new user sees what the app is worth before deciding anything. Same anti-abuse rule: verified identity, not a device account. At expiry the tag drops and the credits stay spendable.
 - Advanced analytics: the owner still wants them to be a paid differentiator. Under credits the honest version is that analytics are **free to read** and the *generated report* costs credits only if it calls the model — pure computed views cost us a query, so they stay free. If the owner prefers them gated, it must be stated as a product choice, not funded by credit sales.
 
 ### What the pricing page says
@@ -171,9 +171,14 @@ Rules that keep the cascade honest, because silently spending someone's money is
 - **A cap on overflow**, e.g. 20 credits a day, so a scripted client cannot drain a wallet in an afternoon while the user is asleep.
 - **Their key is never disabled on our side.** The app does not "use up" a free tier deliberately; it reacts to a real limit and says so.
 
-### What buying a pack unlocks, beyond credits
+### One purchase, one tag: what buying a pack unlocks
 
-A pack also marks the account as **supporter**, which unlocks the advanced analytics views. This is a product choice, not a cost recovery one — the analysis itself is a query — so it is written down as exactly that, and the free tier keeps the daily rings, weekly view, recap and streak so nothing is taken away to manufacture the upgrade.
+**Any pack marks the account as a supporter, permanently.** The tag is the premium switch: advanced analytics, the report card, the projection, and the derived views — all of them, from the cheapest pack upward. Packs then differ only in how many credits they carry, which is exactly how the owner wants it: most people will buy Starter to get the tag, and that is a legitimate way to support the app rather than a trick being played on them.
+
+Two consequences, stated plainly so nobody discovers them later:
+
+- **The tag does not expire and is not a subscription.** $4.99 once buys the analytics forever. That follows from a product built for value rather than revenue; charging again for the same views would be the one behaviour that contradicts the whole intent. The credits are what run out, not the tag.
+- **The analytics gate is a product choice, not a cost recovery one.** The views cost a query, not a model call. The free tier keeps the daily rings, the weekly view, the recap and the streak, so nothing is removed to manufacture the upgrade — the paid views are additional interpretation, never a locked version of what already exists.
 
 ### Consequence for the price
 
