@@ -11,6 +11,7 @@ import {
 } from '../db/deviceTokens.js';
 import { createDb, upsertUser } from '../db/users.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
+import { oneLine } from './shortcut.js';
 
 const BOT_TOKEN = '123456:LOCAL-DEV-BOT-TOKEN';
 const IMAGE_BODY = { base64: 'aGVsbG8=', mimeType: 'image/jpeg' };
@@ -68,7 +69,7 @@ describe('POST /api/shortcut/log', () => {
     const res = await app.request('/api/shortcut/log', post(token), env);
     expect(res.status).toBe(200);
     const text = await res.text();
-    expect(text).toMatch(/^Logged \d+ kcal — /);
+    expect(text).toMatch(/^\d+ kcal — /);
 
     // The meal is really persisted and visible to the normal API.
     const list = await app.request('/api/meals', { headers: await authHeaders(8201) }, env);
@@ -128,7 +129,7 @@ describe('POST /api/shortcut/log', () => {
       env,
     );
     expect(res.status).toBe(200);
-    expect(await res.text()).toMatch(/^Logged \d+ kcal — /);
+    expect(await res.text()).toMatch(/^\d+ kcal — /);
   });
 
   it('answers a connectivity ping', async () => {
@@ -185,7 +186,7 @@ describe('POST /api/shortcut/log', () => {
       },
     });
 
-    it('answers text/plain with one short readable line, never JSON', async () => {
+    it('answers text/plain with exactly two lines shaped like the confirm card, never JSON', async () => {
       const app = createApp({ providerFactory: () => new MockAIProvider() });
       const token = await tokenFor(app, 9501);
       const res = await app.request('/api/shortcut/log', post(token), env);
@@ -194,9 +195,13 @@ describe('POST /api/shortcut/log', () => {
       expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8');
       expect(res.headers.get('cache-control')).toBe('no-store');
       const text = await res.text();
-      expect(text).toMatch(/^Logged \d+ kcal — .+/);
+      expect(text).toMatch(/^\d+ kcal — .+\nP \d+ g · C \d+ g · F \d+ g$/);
       expect(text).not.toContain('{');
       expect(text.length).toBeLessThan(120);
+      expect(text.split('\n')).toHaveLength(2);
+      expect((text.split('\n')[0] as string).length).toBeLessThan(60);
+      // No emoji.
+      expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
     });
 
     it('uses the analyser label, not the whole ingredient list', async () => {
@@ -210,7 +215,7 @@ describe('POST /api/shortcut/log', () => {
       const app = createApp({ providerFactory: () => provider as never });
       const token = await tokenFor(app, 9502);
       const text = await (await app.request('/api/shortcut/log', post(token), env)).text();
-      expect(text).toMatch(/^Logged \d+ kcal — Grilled salmon, rice( \(P \d+ · C \d+ · F \d+\))?$/);
+      expect(text).toMatch(/^\d+ kcal — Grilled salmon, rice\nP \d+ g · C \d+ g · F \d+ g$/);
     });
 
     it('trims a very long label so the line stays under the length budget', async () => {
@@ -224,6 +229,35 @@ describe('POST /api/shortcut/log', () => {
       const text = await (await app.request('/api/shortcut/log', post(token), env)).text();
       expect(text.length).toBeLessThan(120);
       expect(text).toContain('…');
+      const [line1, line2] = text.split('\n') as [string, string];
+      expect(line1.length).toBeLessThan(60);
+      // The kcal is never what gets cut, and the macros line is untouched.
+      expect(line1).toMatch(/^\d+ kcal — x+…$/);
+      expect(line2).toMatch(/^P \d+ g · C \d+ g · F \d+ g$/);
+    });
+
+    it('rounds macros to whole grams and puts kcal first', () => {
+      expect(
+        oneLine({
+          kcal: 16.6,
+          label: 'Want Want milk candy',
+          macros: { proteinG: 0.4, carbsG: 2.6, fatG: 0.04 },
+        }),
+      ).toBe('17 kcal — Want Want milk candy\nP 0 g · C 3 g · F 0 g');
+    });
+
+    it('never cuts the kcal, whatever the title, and stays under 120 characters', () => {
+      for (const kcal of [7, 1234, 99999]) {
+        const out = oneLine({
+          kcal,
+          label: 'y'.repeat(300),
+          macros: { proteinG: 99999, carbsG: 99999, fatG: 99999 },
+        });
+        expect(out.startsWith(`${kcal} kcal — `)).toBe(true);
+        expect((out.split('\n')[0] as string).length).toBeLessThan(60);
+        expect(out.length).toBeLessThan(120);
+        expect(out.split('\n')).toHaveLength(2);
+      }
     });
 
     it('?format=json answers a structured body with the same message and status', async () => {
@@ -243,7 +277,7 @@ describe('POST /api/shortcut/log', () => {
         macros: { proteinG: number; carbsG: number; fatG: number };
       };
       expect(body.ok).toBe(true);
-      expect(body.message).toMatch(/^Logged \d+ kcal — /);
+      expect(body.message).toMatch(/^\d+ kcal — .+\nP \d+ g · C \d+ g · F \d+ g$/);
       expect(typeof body.mealId).toBe('string');
       expect(typeof body.label).toBe('string');
       expect(typeof body.kcal).toBe('number');
@@ -276,6 +310,30 @@ describe('POST /api/shortcut/log', () => {
         const text = await res.text();
         expect(text).toMatch(/^SnapBite: /);
         expect(text).not.toContain('{');
+      }
+    });
+
+    it('every failure is one readable line, with no second line', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const token = await tokenFor(app, 9511);
+      const cases = [
+        await app.request('/api/shortcut/log', post(null), env),
+        await app.request(
+          '/api/shortcut/log',
+          post(token, { base64: '', mimeType: 'image/jpeg' }),
+          env,
+        ),
+        await app.request(
+          '/api/shortcut/log',
+          post(token, { base64: 'aGVsbG8=', mimeType: 'image/heic' }),
+          env,
+        ),
+      ];
+      for (const res of cases) {
+        expect(res.status).toBeGreaterThanOrEqual(400);
+        const text = await res.text();
+        expect(text).toMatch(/^SnapBite: /);
+        expect(text).not.toContain('\n');
       }
     });
 

@@ -26,6 +26,7 @@ const HAND_STEPS = [
   'Add Get Contents of URL: Method POST, Request Body Form.',
   'Add field photo, type File, value Converted Image.',
   'Add header Authorization = Bearer, a space, then the token above.',
+  'Add Show Notification: Title Meal logged, Body Contents of URL, Attachment Photo.',
 ];
 
 type Confirm = { kind: 'one'; token: DeviceTokenInfo } | { kind: 'all' } | null;
@@ -185,6 +186,10 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
         <p className="text-muted-foreground text-caption">
           Your token is the text that starts with <code className="font-mono">sb_</code>. It is
           shown only once, so copy it first.
+        </p>
+        <p className="text-caption">
+          Then tap Show Notification: set Title to <strong>Meal logged</strong>, Body to Contents of
+          URL, and Attachment to Photo. That is what makes it look like the card in the app.
         </p>
 
         {fresh ? (
