@@ -75,6 +75,15 @@ treat it as sensitive, keep it off shared drives, delete the local copy when don
    `wrangler d1 execute snapbite-db --remote --file=...` only works on an empty
    database; prefer time travel for a full restore.
 
+## Re-applying migrations after a restore
+
+After any time-travel restore, re-applying migrations can delete data if a migration
+rebuilds a parent table: `DROP TABLE users` cascades to every row that references a
+user, and D1 will not let a migration turn foreign keys off (migration 0015 did exactly
+this in production). Check row counts before and after each apply
+(`select count(*) from meals`, `users`, `settings`), and never batch-apply migrations
+blindly. If a count drops, stop and restore again.
+
 ## If the backup job goes red
 
 - **"only N bytes (< 100 KB)"**: the database was empty or the export failed. Look at

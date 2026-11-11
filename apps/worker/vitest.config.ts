@@ -19,6 +19,8 @@ export default defineWorkersConfig(async () => {
           isolatedStorage: false,
           wrangler: { configPath: './wrangler.toml' },
           miniflare: {
+            // A second, empty database for tests that replay migrations from scratch.
+            d1Databases: { MIGRATION_DB: 'migration-test-db' },
             bindings: {
               TELEGRAM_BOT_TOKEN: '123456:LOCAL-DEV-BOT-TOKEN',
               // 32-byte AES key, base64, for BYOK encryption in tests.
