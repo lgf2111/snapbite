@@ -103,6 +103,7 @@ function recentToDetail(m: RecentMeal): MealDetail {
     notes: null,
     confidence: null,
     telegramFileId: m.previewUrl ? 'preview' : null,
+    hasPhoto: Boolean(m.previewUrl),
     aiProvider: m.aiProvider,
     foods: [
       {
@@ -127,6 +128,13 @@ function recentToDetail(m: RecentMeal): MealDetail {
       source: 'ai_estimate',
     },
   };
+}
+
+/** A photo exists when R2 holds it or Telegram still does; older servers only said the latter. */
+function hasPhoto(
+  detail: { hasPhoto?: boolean; telegramFileId: string | null } | null | undefined,
+) {
+  return Boolean(detail && (detail.hasPhoto ?? detail.telegramFileId));
 }
 
 export function MealDetailScreen({
@@ -329,7 +337,7 @@ export function MealDetailScreen({
       kept.map((f) => f.name),
     );
     return renderMealShareCard({
-      photoUrl: detail?.telegramFileId ? backend.photoUrl(mealId) : null,
+      photoUrl: hasPhoto(detail) ? backend.photoUrl(mealId) : null,
       title,
       calories: resolved.total.energyKcal,
       proteinG: resolved.total.proteinG,
@@ -491,7 +499,7 @@ export function MealDetailScreen({
               ? ` · analyzed by ${PROVIDER_LABEL[detail.aiProvider] ?? detail.aiProvider}`
               : ''}
           </p>
-          {detail.telegramFileId && backend.photoUrl(mealId) && (
+          {hasPhoto(detail) && backend.photoUrl(mealId) && (
             <img
               src={backend.photoUrl(mealId) as string}
               alt="Meal"

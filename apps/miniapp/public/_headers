@@ -18,3 +18,10 @@
 # running for a day. It is also what the browser byte-compares to detect updates.
 /sw.js
   Cache-Control: no-cache, must-revalidate
+
+# The shortcut file. Pages adds `X-Content-Type-Options: nosniff` to every response by
+# default; on this file it can make Safari refuse to hand it to Shortcuts, so it is
+# detached here. No Content-Disposition either: that makes iOS treat it as a download.
+/shortcut/*
+  Content-Type: application/octet-stream
+  ! X-Content-Type-Options

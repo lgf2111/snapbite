@@ -14,12 +14,40 @@ vi.mock('./lib/backend.js', async (orig) => ({
     mealsByDate: async () => [],
     mealsInRange: async () => [],
     mealDates: async () => ({ dates: [], streak: 0 }),
+    listFavorites: async () => [],
+    analyze: async () => ({
+      foods: [
+        {
+          food: { name: 'Grilled salmon', estimatedWeightG: 180, confidence: 0.9 },
+          nutrition: { energyKcal: 612, proteinG: 40, carbsG: 0, fatG: 38, source: 'ai' },
+        },
+      ],
+      total: { energyKcal: 612, proteinG: 40, carbsG: 0, fatG: 38, source: 'ai' },
+      confidence: 0.9,
+      needsConfirmation: false,
+    }),
+    logWithPhoto: async () => {},
   }),
+}));
+vi.mock('./lib/compress.js', () => ({
+  compressPhoto: vi.fn(async (file: File) => ({
+    base64: `b64:${file.name}`,
+    mimeType: 'image/jpeg',
+    bytes: 1,
+    width: 1,
+    height: 1,
+  })),
 }));
 
 import { App } from './App.js';
 import { resetAuthStatus } from './lib/account.js';
 import { clearCache } from './lib/cache.js';
+import { resetLaunchIntent } from './lib/launch.js';
+
+afterEach(() => {
+  resetLaunchIntent();
+  vi.unstubAllGlobals();
+});
 
 describe('first-run onboarding', () => {
   // Test files share one DOM (single fork): leave nothing mounted behind.
@@ -141,19 +169,38 @@ describe('first-run onboarding', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('still asks about the AI key once, and respects the answer', async () => {
-    const profile = { profile: { sex: 'female' }, targets: null, connected: false };
+  it('does not restart setup for an account that has a profile but no AI key', async () => {
+    getSettings.mockResolvedValue({ profile: { sex: 'female' }, targets: null, connected: false });
 
-    getSettings.mockResolvedValue(profile);
-    const first = render(<App />);
-    await screen.findByRole('dialog');
-    first.unmount();
-    clearCache();
+    // Nothing remembered on this device, and then a stale "skipped": same result.
+    for (const remembered of [null, 'skipped', 'set']) {
+      clearCache();
+      localStorage.clear();
+      if (remembered) localStorage.setItem('snapbite.onboarding.keyDecision', remembered);
+      const view = render(<App />);
+      expect(await screen.findByText('Set goal')).toBeTruthy();
+      expect(screen.queryByRole('dialog')).toBeNull();
+      view.unmount();
+    }
+  });
 
-    localStorage.setItem('snapbite.onboarding.keyDecision', 'skipped');
-    getSettings.mockResolvedValue(profile);
+  it('trusts the server over a cached "no profile" left by another account', async () => {
+    // The anonymous account's settings, cached before signing in as someone else.
+    localStorage.setItem(
+      'snapbite.cache.settings',
+      JSON.stringify({
+        at: Date.now(),
+        value: { profile: null, targets: null, connected: false },
+      }),
+    );
+    getSettings.mockResolvedValue({
+      profile: { sex: 'female' },
+      targets: { energyKcal: 2000, proteinG: 120, carbsG: 250, fatG: 70 },
+      connected: true,
+    });
     render(<App />);
-    expect(await screen.findByText('Set goal')).toBeTruthy();
+    await waitFor(() => expect(getSettings).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText(/kcal/)).toBeTruthy());
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
@@ -336,5 +383,63 @@ describe('boot: what ?auth= on the landing URL does', () => {
     expect(await screen.findByText(/already belongs to another account/i)).toBeTruthy();
     // Only ?auth is consumed.
     expect(window.location.search).toBe('?keep=1');
+  });
+});
+
+describe('boot: icon shortcuts and a shared photo', () => {
+  const READY = {
+    profile: { sex: 'female' },
+    targets: { energyKcal: 2000, proteinG: 120, carbsG: 250, fatG: 70 },
+    connected: true,
+  };
+
+  beforeEach(() => {
+    cleanup();
+    clearCache();
+    localStorage.clear();
+    getSettings.mockReset();
+    getSettings.mockResolvedValue(READY);
+    resetLaunchIntent();
+  });
+  afterEach(() => {
+    cleanup();
+    resetLaunchIntent();
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('?capture=camera opens the menu on the Take photo card, clears the parameter, and never clicks the picker', async () => {
+    const click = vi.spyOn(HTMLInputElement.prototype, 'click');
+    window.history.replaceState({}, '', '/?capture=camera');
+    render(<App />);
+
+    const menu = await screen.findByTestId('capture-menu');
+    const takePhoto = within(menu).getByRole('button', { name: /take photo/i });
+    await waitFor(() => expect(takePhoto).toHaveFocus());
+    expect(takePhoto).toHaveAttribute('data-highlighted', 'true');
+    // The launch opened a surface; it did not fake a file-picker click.
+    expect(click).not.toHaveBeenCalled();
+    expect(window.location.search).toBe('');
+  });
+
+  it('?shared=1 picks the photo out of the handoff and opens the review sheet with it attached', async () => {
+    const photo = new Response(new TextEncoder().encode('shared-jpeg'), {
+      headers: { 'content-type': 'image/jpeg', 'x-filename': 'lunch.jpg' },
+    });
+    vi.stubGlobal('caches', {
+      open: vi.fn(async () => ({
+        match: vi.fn(async () => photo),
+        delete: vi.fn(async () => true),
+      })),
+    });
+    window.history.replaceState({}, '', '/?shared=1');
+    render(<App />);
+
+    const sheet = await screen.findByRole('dialog');
+    expect(await within(sheet).findByText('Log this meal?')).toBeTruthy();
+    // The photo went through the normal analyse → review path, pre-attached.
+    expect(within(sheet).getByText('Grilled salmon')).toBeTruthy();
+    expect(within(sheet).getByRole('button', { name: 'Save meal' })).toBeTruthy();
+    expect(window.location.search).toBe('');
   });
 });

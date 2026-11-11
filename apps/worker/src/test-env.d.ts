@@ -14,7 +14,13 @@ declare module 'cloudflare:test' {
     FEEDBACK_THREAD_ID?: string;
     BROADCAST_THREAD_ID?: string;
     TEST_MIGRATIONS: D1Migration[];
+    MIGRATION_DB: D1Database;
   }
   export const env: ProvidedEnv;
   export function applyD1Migrations(db: D1Database, migrations: D1Migration[]): Promise<void>;
+}
+
+declare module '*.sql?raw' {
+  const sql: string;
+  export default sql;
 }

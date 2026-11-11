@@ -152,9 +152,14 @@ describe('OnboardingScreen motion', () => {
     const scroller = screen.getByTestId('onboarding-scroller');
     expect(scroller.className).toMatch(/h-\[100svh\].*snap-y|snap-y.*h-\[100svh\]/);
     expect(scroller.className).toContain('snap-mandatory');
+    // The form panel shrinks above the keyboard; the intro has no field to protect.
+    const heights: Record<string, string> = {
+      'onboarding-intro': 'h-[100svh]',
+      'onboarding-form-panel': 'h-[calc(100svh-var(--keyboard-inset,0px))]',
+    };
     for (const id of ['onboarding-intro', 'onboarding-form-panel']) {
       const panel = screen.getByTestId(id);
-      expect(panel.className).toContain('h-[100svh]');
+      expect(panel.className).toContain(heights[id] as string);
       expect(panel.className).toContain('snap-start');
       expect(panel.className).toContain('snap-always');
     }

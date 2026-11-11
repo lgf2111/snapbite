@@ -17,14 +17,27 @@ import {
 import { type DailyTargets, type MealResult, PROVIDER_PRESETS } from '@snapbite/core';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { DateSelector } from './DateSelector.js';
 import { InstallGuide } from './InstallGuide.js';
 import { MacroLegend, MacroLine } from './MacroLine.js';
+import { MealThumb } from './MealThumb.js';
 import { ProgressRing } from './ProgressRing.js';
 import { SwipeableRow } from './SwipeableRow.js';
 import { ReviseWithAiDialog } from './UpdateWithAi.js';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog.js';
 
 type ToastKind = 'success' | 'error' | 'info';
+
+/** The undo window after a swipe-delete; the removal is committed when it ends. */
+const UNDO_MS = 6000;
 
 /** Short human labels for the provider id shown on meal cards. */
 const PROVIDER_LABEL: Record<string, string> = {
@@ -82,6 +95,27 @@ export function HomeScreen({
   const [refreshing, setRefreshing] = useState(false);
   /** The meal being edited with AI inline from Home (null = dialog closed). */
   const [aiMeal, setAiMeal] = useState<RecentMeal | null>(null);
+  const [streakOpen, setStreakOpen] = useState(false);
+  /** Rows hidden immediately on swipe-delete, while their undo toast is live. */
+  const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(() => new Set());
+  /** Deletions waiting out their undo window: id → its timer and toast. */
+  const pendingDeletes = useRef(new Map<string, { timer: number; toastId: string | number }>());
+  const alive = useRef(true);
+
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      // Leaving Home commits what is still pending: an undo offer must not
+      // outlive the row it would restore.
+      for (const [id, pending] of pendingDeletes.current) {
+        window.clearTimeout(pending.timer);
+        toast.dismiss(pending.toastId);
+        void backend.remove(id).catch(() => undefined);
+      }
+      pendingDeletes.current.clear();
+    };
+  }, [backend]);
 
   // Week definition preference (rolling vs calendar Sun/Mon) from Settings.
   const weekPrefs = useMemo(() => loadWeekPrefs(), []);
@@ -109,7 +143,12 @@ export function HomeScreen({
       ? backend.mealsInRange(range.startKey, range.endKey)
       : backend.mealsByDate(date),
   );
-  const meals = mealsLoading ? null : (mealsData ?? []);
+  // Hidden rows are deleted optimistically: totals, verdict and the list all stop
+  // counting the meal during the undo window, and Undo puts it straight back.
+  const meals = useMemo(
+    () => (mealsLoading ? null : (mealsData ?? []).filter((m) => !hiddenIds.has(m.id))),
+    [mealsLoading, mealsData, hiddenIds],
+  );
 
   // Logged days for the calendar dots + the current streak (cached).
   const { data: datesData, refresh: refreshDates } = useCachedData<MealDates>(
@@ -182,15 +221,63 @@ export function HomeScreen({
     };
   }, [targets, weekly, weeklyAverage, range.days]);
 
-  async function handleDelete(id: string) {
+  /** Put a swipe-deleted row back, before its deletion has been committed. */
+  function undoDelete(id: string) {
+    const pending = pendingDeletes.current.get(id);
+    if (!pending) return;
+    pendingDeletes.current.delete(id);
+    window.clearTimeout(pending.timer);
+    toast.dismiss(pending.toastId);
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  /** Commit one pending deletion. A failure puts the row back. */
+  async function commitDelete(id: string) {
+    const pending = pendingDeletes.current.get(id);
+    if (!pending) return;
+    pendingDeletes.current.delete(id);
+    window.clearTimeout(pending.timer);
     try {
       await backend.remove(id);
+      toast.dismiss(pending.toastId);
       hapticNotify('success');
-      onToast?.('success', 'Meal deleted');
-      refresh();
+      if (alive.current) refresh();
     } catch (e) {
+      if (!alive.current) return;
+      setHiddenIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       onToast?.('error', e instanceof Error ? e.message : 'Could not delete');
     }
+  }
+
+  /**
+   * A swipe-delete is immediate on screen but not on the server: the row hides,
+   * and a single toast offers Undo for a few seconds. Dismissing the toast or
+   * letting it time out commits the deletion; Undo cancels it, so nothing was
+   * ever lost.
+   */
+  function handleDelete(meal: RecentMeal) {
+    setHiddenIds((prev) => new Set(prev).add(meal.id));
+    const toastId = toast('Meal deleted', {
+      description: 'Undo brings the row back.',
+      duration: UNDO_MS,
+      action: { label: 'Undo', onClick: () => undoDelete(meal.id) },
+      onDismiss: () => {
+        if (pendingDeletes.current.has(meal.id)) void commitDelete(meal.id);
+      },
+      onAutoClose: () => {
+        if (pendingDeletes.current.has(meal.id)) void commitDelete(meal.id);
+      },
+    });
+    const timer = window.setTimeout(() => void commitDelete(meal.id), UNDO_MS);
+    pendingDeletes.current.set(meal.id, { timer, toastId });
   }
 
   async function handleAiDraft(id: string, revised: MealResult) {
@@ -225,14 +312,22 @@ export function HomeScreen({
 
   return (
     <div className="flex flex-col gap-5">
-      <header className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-title">SnapBite</h1>
-          {streak != null && (
-            <p className="text-muted-foreground text-caption">🔥 {streak}-day streak</p>
+      <header className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <h1 className="text-title min-w-0 truncate">SnapBite</h1>
+          {streak != null && streak > 0 && (
+            <button
+              type="button"
+              aria-label={`${streak}-day logging streak`}
+              onClick={() => setStreakOpen(true)}
+              className="bg-secondary text-foreground text-caption inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full px-3 font-medium"
+            >
+              <span aria-hidden>🔥</span>
+              <span className="tabular">{streak}</span>
+            </button>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           <Button
             variant="ghost"
             size="icon"
@@ -376,22 +471,10 @@ export function HomeScreen({
       {meals && meals.length > 0 && (
         <div className="flex flex-col gap-2">
           {meals.map((m) => (
-            <SwipeableRow
-              key={m.id}
-              animateIn={newIds.has(m.id)}
-              onDelete={() => void handleDelete(m.id)}
-            >
+            <SwipeableRow key={m.id} animateIn={newIds.has(m.id)} onDelete={() => handleDelete(m)}>
               <Card className="overflow-hidden">
                 <CardContent className="flex items-center gap-3 p-3">
-                  {m.previewUrl ? (
-                    <img
-                      src={m.previewUrl}
-                      alt=""
-                      className="size-16 shrink-0 rounded-md object-cover"
-                    />
-                  ) : (
-                    <div className="bg-muted size-16 shrink-0 rounded-md" aria-hidden />
-                  )}
+                  <MealThumb src={m.previewUrl} />
                   <button
                     type="button"
                     className="min-w-0 flex-1 rounded-md text-left transition-transform duration-[120ms] active:scale-[0.99] motion-reduce:transition-none"
@@ -438,6 +521,28 @@ export function HomeScreen({
           {...(onToast ? { onToast } : {})}
         />
       )}
+
+      <Dialog open={streakOpen} onOpenChange={setStreakOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Logging streak</DialogTitle>
+            <DialogDescription>A day counts when you log at least one meal.</DialogDescription>
+          </DialogHeader>
+          <ul className="text-muted-foreground flex list-disc flex-col gap-2 pl-4 text-sm">
+            <li>
+              Today or yesterday keeps the run alive — logging in the evening never breaks it.
+            </li>
+            <li>A whole day with no meals ends the streak.</li>
+            <li>
+              Miss a day and your next log within the week can revive it, once every 30 days.
+              Revived days count toward the streak, not toward your logged days.
+            </li>
+          </ul>
+          <DialogFooter>
+            <Button onClick={() => setStreakOpen(false)}>Got it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

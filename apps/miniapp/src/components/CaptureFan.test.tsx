@@ -304,3 +304,94 @@ describe('hold and slide on the camera button', () => {
     expect(fan()).toBe(root);
   });
 });
+
+/* ------------------------------------------------------------------------ */
+/* Where the fan stands: measured from the rendered boxes, per device shape. */
+/* ------------------------------------------------------------------------ */
+
+const rectOf = (left: number, top: number, width: number, height: number) =>
+  ({
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height,
+    x: left,
+    y: top,
+    toJSON: () => ({}),
+  }) as DOMRect;
+
+describe.each([
+  { name: '430x932 (home indicator)', w: 430, h: 932, inset: 34, outer: 148 },
+  { name: '375x667 (no home indicator)', w: 375, h: 667, inset: 0, outer: 148 },
+  // So short that the full ring cannot fit above the bar: it shrinks, never overflows.
+  { name: '320x200', w: 320, h: 200, inset: 0, outer: 107 },
+])('the fan on $name', ({ w, h, inset, outer }) => {
+  const barHeight = 72 + inset;
+  const barTop = h - barHeight;
+  const cx = w / 2;
+  const realW = window.innerWidth;
+  const realH = window.innerHeight;
+
+  const open = () => {
+    Object.defineProperty(window, 'innerWidth', { value: w, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: h, configurable: true });
+    // The button overhangs the bar by 20px and is 64px across.
+    vi.spyOn(button(), 'getBoundingClientRect').mockReturnValue(
+      rectOf(cx - 32, barTop - 20, 64, 64),
+    );
+    const nav = button().closest('nav') as HTMLElement;
+    vi.spyOn(nav, 'getBoundingClientRect').mockReturnValue(rectOf(0, barTop, w, barHeight));
+    fire(button(), pointer('pointerdown', cx, barTop + 12));
+    hold();
+    const box = screen.getByTestId('capture-fan');
+    const num = (v: string) => Number.parseFloat(v);
+    return { top: num(box.style.top), left: num(box.style.left), height: num(box.style.height) };
+  };
+
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', { value: realW, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: realH, configurable: true });
+  });
+
+  it('keeps its lowest ink at least 8px above the tab bar', () => {
+    const fanBox = open();
+    const baseline = fanBox.top + fanBox.height;
+    const lowestInk = baseline + 0.75; // half the 1.5px stroke
+    expect(barTop - lowestInk).toBeGreaterThanOrEqual(8);
+  });
+
+  it('uses the full radius where it fits and a smaller one where it does not, inside the screen', () => {
+    const fanBox = open();
+    expect(fanBox.height).toBe(outer);
+    expect(fanBox.top).toBeGreaterThanOrEqual(12);
+    expect(fanBox.left).toBeGreaterThanOrEqual(0);
+    expect(fanBox.left + fanBox.height * 2).toBeLessThanOrEqual(w);
+  });
+
+  it('leaves the button fully visible, inside the hollow, and tappable', () => {
+    const fanBox = open();
+    const baseline = fanBox.top + fanBox.height;
+    const inner = Math.round((80 * fanBox.height) / 148);
+    const btn = { left: cx - 32, top: barTop - 20, right: cx + 32, bottom: barTop + 44 };
+
+    // On screen.
+    expect(btn.left).toBeGreaterThanOrEqual(0);
+    expect(btn.right).toBeLessThanOrEqual(w);
+    expect(btn.bottom).toBeLessThanOrEqual(h);
+    // No wedge touches it: every corner is under the baseline or inside the inner radius.
+    for (const [x, y] of [
+      [btn.left, btn.top],
+      [btn.right, btn.top],
+      [btn.left, btn.bottom],
+      [btn.right, btn.bottom],
+    ] as const) {
+      expect(y >= baseline || Math.hypot(x - cx, y - baseline) <= inner).toBe(true);
+    }
+    // And nothing the fan draws can take its touches.
+    expect(screen.getByTestId('capture-fan').className).toContain('pointer-events-none');
+    expect(button().closest('nav')?.className).toContain('z-40');
+    expect(screen.getByTestId('capture-fan').className).not.toContain('pointer-events-auto');
+  });
+});

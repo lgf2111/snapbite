@@ -12,6 +12,8 @@ interface Props {
   onToggleMenu: () => void;
   /** The camera button; the menu grows out of it and returns focus to it. */
   captureRef: React.Ref<HTMLButtonElement>;
+  /** A multi-photo upload is running ("Uploading 2 of 4"): shown under the button, which is disabled. */
+  captureStatus?: string | null;
   children: React.ReactNode;
 }
 
@@ -31,6 +33,7 @@ export function AppShell({
   menuOpen,
   onToggleMenu,
   captureRef,
+  captureStatus = null,
   children,
 }: Props) {
   return (
@@ -61,6 +64,7 @@ export function AppShell({
               type="button"
               ref={captureRef}
               onClick={onToggleMenu}
+              disabled={captureStatus != null}
               aria-label={
                 menuOpen
                   ? 'Close add-meal menu'
@@ -71,6 +75,7 @@ export function AppShell({
               className={cn(
                 'absolute -top-5 flex size-16 items-center justify-center rounded-full shadow-xl ring-4 ring-background transition-[transform,box-shadow,background-color,color] duration-[160ms] ease-[var(--ease-spring)] hover:shadow-2xl',
                 'active:scale-90 motion-reduce:transition-none motion-reduce:active:scale-100',
+                'disabled:pointer-events-none disabled:opacity-60',
                 // Press-and-hold-and-slide lives on this button only: no page pan, text
                 // selection or iOS callout from the long press.
                 'touch-none select-none [-webkit-touch-callout:none]',
@@ -104,6 +109,12 @@ export function AppShell({
                 />
               </span>
             </button>
+            {/* Under the button, in the bar's own space: honest about a running batch. */}
+            {captureStatus != null && (
+              <output className="text-muted-foreground text-caption absolute top-[calc(2.75rem+0.125rem)] left-1/2 -translate-x-1/2 whitespace-nowrap">
+                {captureStatus}
+              </output>
+            )}
           </div>
 
           <NavButton

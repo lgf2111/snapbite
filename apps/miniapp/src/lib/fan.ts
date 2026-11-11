@@ -23,6 +23,12 @@ export const FAN = {
   /** Half-ring radii. The inner hollow holds the label. */
   innerPx: 80,
   outerPx: 148,
+  /** Clear space between the lowest ink of the arc and the tab bar's top edge. */
+  barGapPx: 8,
+  /** Clear space between the arc and the top / sides of the screen. */
+  edgePx: 12,
+  /** Below this the wedges are too small to hit, so it overflows rather than shrinks further. */
+  minOuterPx: 96,
   /** Below the horizon, a finger within this many degrees of it still picks the nearer end wedge. */
   belowHorizonDeg: 30,
 } as const;
@@ -47,11 +53,29 @@ export function wedgeAt(dx: number, dy: number): number | null {
   return Math.min(FAN_ACTIONS.length - 1, Math.floor((180 - theta) / WEDGE_DEG));
 }
 
+/** The half-ring's radii for one opening of the fan. */
+export interface FanRadii {
+  inner: number;
+  outer: number;
+}
+
+export const FULL_RADII: FanRadii = { inner: FAN.innerPx, outer: FAN.outerPx };
+
+/**
+ * The radii that fit: the full size, or smaller when the room above the baseline
+ * or to either side is less than that. Both radii scale together so the wedges
+ * keep their proportions.
+ */
+export function fanRadii(roomAbovePx: number, roomSidePx: number): FanRadii {
+  const outer = Math.max(FAN.minOuterPx, Math.min(FAN.outerPx, roomAbovePx, roomSidePx));
+  return { outer, inner: Math.round((FAN.innerPx * outer) / FAN.outerPx) };
+}
+
 const rad = (deg: number) => (deg * Math.PI) / 180;
 
-/** SVG path of wedge `i`, in a box where the button's centre is (outerPx, outerPx). */
-export function wedgePath(i: number): string {
-  const { innerPx: r, outerPx: R } = FAN;
+/** SVG path of wedge `i`, in a box where the fan's baseline centre is (outer, outer). */
+export function wedgePath(i: number, radii: FanRadii = FULL_RADII): string {
+  const { inner: r, outer: R } = radii;
   const a0 = 180 - i * WEDGE_DEG; // left edge of the wedge
   const a1 = a0 - WEDGE_DEG; // right edge
   const at = (radius: number, deg: number) =>
@@ -60,11 +84,11 @@ export function wedgePath(i: number): string {
 }
 
 /** Where a wedge's icon sits (box coordinates), at the middle of its ring. */
-export function wedgeCentre(i: number): { x: number; y: number } {
+export function wedgeCentre(i: number, radii: FanRadii = FULL_RADII): { x: number; y: number } {
   const mid = 180 - (i + 0.5) * WEDGE_DEG;
-  const radius = (FAN.innerPx + FAN.outerPx) / 2;
+  const radius = (radii.inner + radii.outer) / 2;
   return {
-    x: FAN.outerPx + radius * Math.cos(rad(mid)),
-    y: FAN.outerPx - radius * Math.sin(rad(mid)),
+    x: radii.outer + radius * Math.cos(rad(mid)),
+    y: radii.outer - radius * Math.sin(rad(mid)),
   };
 }

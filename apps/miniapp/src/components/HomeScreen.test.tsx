@@ -1,16 +1,19 @@
 import type { Backend, RecentMeal } from '@/lib/backend';
 import { clearCache } from '@/lib/cache';
 import type { DailyTargets, MealResult } from '@snapbite/core';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HERO_BASE_REM, ringNumeralSizeRem } from '../lib/ringNumeral.js';
 import { HomeScreen } from './HomeScreen.js';
+import { Toaster } from './ui/sonner.js';
 
 afterEach(() => {
   // Test files share one process, so RTL's auto-cleanup only covers the first
   // file to import it. Unmount explicitly.
   cleanup();
+  toast.dismiss();
   clearCache();
   localStorage.clear();
   vi.restoreAllMocks();
@@ -86,13 +89,73 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(screen.getByText('Nothing logged yet')).toBeInTheDocument());
   });
 
-  it('shows the current logging streak when the backend reports one', async () => {
+  it('shows the current logging streak in the header', async () => {
     const backend = stubBackend({
       mealDates: vi.fn(async () => ({ dates: ['2026-09-15'], streak: 5 })),
     });
     render(<HomeScreen {...props(backend)} />);
 
-    await waitFor(() => expect(screen.getByText('🔥 5-day streak')).toBeInTheDocument());
+    const badge = await screen.findByRole('button', { name: '5-day logging streak' });
+    expect(within(badge).getByText('🔥')).toBeInTheDocument();
+    expect(within(badge).getByText('5')).toBeInTheDocument();
+    // The old prose caption is gone: the badge is the only streak surface.
+    expect(screen.queryByText(/🔥 5-day streak/)).not.toBeInTheDocument();
+  });
+
+  it.each([0, null])('hides the streak badge when the streak is %s', async (value) => {
+    const backend = stubBackend({
+      mealDates: vi.fn(async () => ({ dates: [], streak: value })),
+    });
+    render(<HomeScreen {...props(backend)} />);
+
+    await waitFor(() => expect(backend.mealDates).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /logging streak/i })).not.toBeInTheDocument();
+  });
+
+  it('explains what counts as a day and how a revive works', async () => {
+    const backend = stubBackend({
+      mealDates: vi.fn(async () => ({ dates: ['2026-09-15'], streak: 5 })),
+    });
+    render(<HomeScreen {...props(backend)} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: '5-day logging streak' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Logging streak')).toBeInTheDocument();
+    expect(within(dialog).getByText(/at least one meal/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/today or yesterday/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/whole day with no meals/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/revive it, once every 30 days/i)).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Got it' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('gives the badge a 44px quiet pill and leaves the truncation to the wordmark', async () => {
+    const backend = stubBackend({
+      mealDates: vi.fn(async () => ({ dates: ['2026-09-15'], streak: 5 })),
+    });
+    render(<HomeScreen {...props(backend)} />);
+
+    const badge = await screen.findByRole('button', { name: '5-day logging streak' });
+    for (const cls of [
+      'min-h-11',
+      'rounded-full',
+      'bg-secondary',
+      'text-foreground',
+      'px-3',
+      'shrink-0',
+    ]) {
+      expect(badge.className).toContain(cls);
+    }
+
+    const header = badge.closest('header') as HTMLElement;
+    const wordmark = within(header).getByRole('heading', { level: 1 });
+    // At 375pt the wordmark is the only thing allowed to truncate.
+    expect(wordmark.className).toContain('truncate');
+    expect(wordmark.className).toContain('min-w-0');
+    expect(screen.getByRole('button', { name: 'Refresh' }).parentElement?.className).toContain(
+      'shrink-0',
+    );
   });
 
   it('prompts to set a goal when no targets are configured', async () => {
@@ -307,6 +370,31 @@ describe('HomeScreen', () => {
     expect(screen.getByText(/daily average/i)).toBeInTheDocument();
     // Radix marks the active toggle item with data-state, not aria-pressed.
     expect(avg.closest('[data-state]')).toHaveAttribute('data-state', 'on');
+  });
+
+  it('a swipe-delete offers Undo, and Undo restores the row without deleting it', async () => {
+    const backend = stubBackend({
+      mealsByDate: vi.fn(async () => [meal({ id: 'milk', label: 'Milk candy' })]),
+    });
+    render(
+      <>
+        <HomeScreen {...props(backend)} />
+        <Toaster />
+      </>,
+    );
+    await screen.findByText('Milk candy');
+
+    const card = screen.getByTestId('swipe-card');
+    fireEvent.mouseDown(card, { clientX: 400, clientY: 300 });
+    fireEvent.mouseMove(document, { clientX: 300, clientY: 300 });
+    fireEvent.mouseUp(document, { clientX: 300, clientY: 300 });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.queryByText('Milk candy')).not.toBeInTheDocument());
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+    expect(await screen.findByText('Milk candy')).toBeInTheDocument();
+    expect(backend.remove).not.toHaveBeenCalled();
   });
 
   it('edits a meal with AI inline from Home (no navigation)', async () => {

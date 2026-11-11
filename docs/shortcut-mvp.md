@@ -8,7 +8,8 @@ no Telegram.
 * `POST /api/shortcut/log` — bearer device token instead of `initData`. Accepts
   either `multipart/form-data` with a `photo` file, or JSON
   `{ base64, mimeType, hint? }`. Analyses with the user's BYOK key, saves the meal
-  and answers in plain text (`Logged 612 kcal — salmon, rice`).
+  and answers in plain text, two lines (`17 kcal — Want Want milk candy` then
+  `P 0 g · C 3 g · F 0 g`).
 * `/token` in the bot — mints a device token (private chat only) and `/token revoke`
   kills every token on the account. Tokens are stored as SHA-256 hashes; the raw
   value is shown once.
