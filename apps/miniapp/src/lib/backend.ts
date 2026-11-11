@@ -7,7 +7,9 @@ import {
 } from '@snapbite/core';
 import {
   ApiClient,
+  type CreatedDeviceToken,
   type CustomProviderInput,
+  type DeviceTokenInfo,
   type Favorite,
   type MealDetail,
   type MealSummary,
@@ -118,6 +120,13 @@ export interface Backend {
   exportUrl(): string | null;
   /** Permanently deletes the user and all their data. */
   deleteAccount(): Promise<void>;
+  /** Active iOS Shortcut device tokens (worker mode; empty locally). */
+  listDeviceTokens(): Promise<DeviceTokenInfo[]>;
+  /** Mints a device token; the raw value is only ever returned here. */
+  createDeviceToken(label?: string): Promise<CreatedDeviceToken>;
+  revokeDeviceToken(id: string): Promise<void>;
+  /** Revokes every token; resolves to how many were live. */
+  revokeAllDeviceTokens(): Promise<number>;
   /** Photo URL for a meal (worker mode with a telegram file); null otherwise. */
   photoUrl(id: string): string | null;
   /**
@@ -242,6 +251,18 @@ export function createBackend(): Backend {
       async deleteAccount() {
         await api.deleteAccount();
         clearCache();
+      },
+      async listDeviceTokens() {
+        return (await api.listDeviceTokens()).tokens;
+      },
+      createDeviceToken(label) {
+        return api.createDeviceToken(label);
+      },
+      async revokeDeviceToken(id) {
+        await api.revokeDeviceToken(id);
+      },
+      async revokeAllDeviceTokens() {
+        return (await api.revokeAllDeviceTokens()).revoked;
       },
       photoUrl(id) {
         return api.photoUrl(id);
@@ -390,6 +411,19 @@ export function createBackend(): Backend {
     async deleteAccount() {
       clearMeals();
       clearProfile();
+    },
+    // Device tokens authenticate against the Worker; there is none in local mode.
+    async listDeviceTokens() {
+      return [];
+    },
+    async createDeviceToken() {
+      throw new Error('One-tap logging needs the SnapBite server.');
+    },
+    async revokeDeviceToken() {
+      /* nothing to revoke */
+    },
+    async revokeAllDeviceTokens() {
+      return 0;
     },
     photoUrl(id) {
       // Local mode stores a data-URL preview on the saved meal, if any.

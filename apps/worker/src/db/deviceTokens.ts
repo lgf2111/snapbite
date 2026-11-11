@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { deviceTokens, users } from './schema.js';
 
@@ -93,4 +93,60 @@ export async function revokeAllDeviceTokens(db: DeviceTokensDb, userId: string):
     .set({ revokedAt: Date.now() })
     .where(and(eq(deviceTokens.userId, userId), isNull(deviceTokens.revokedAt)));
   return live.length;
+}
+
+export interface DeviceTokenSummary {
+  id: string;
+  label: string | null;
+  createdAt: number;
+  lastUsedAt: number | null;
+  revokedAt: number | null;
+}
+
+/** A user's tokens, newest first. Never selects the hash. */
+export async function listDeviceTokens(
+  db: DeviceTokensDb,
+  userId: string,
+  opts: { includeRevoked?: boolean } = {},
+): Promise<DeviceTokenSummary[]> {
+  return db
+    .select({
+      id: deviceTokens.id,
+      label: deviceTokens.label,
+      createdAt: deviceTokens.createdAt,
+      lastUsedAt: deviceTokens.lastUsedAt,
+      revokedAt: deviceTokens.revokedAt,
+    })
+    .from(deviceTokens)
+    .where(
+      opts.includeRevoked
+        ? eq(deviceTokens.userId, userId)
+        : and(eq(deviceTokens.userId, userId), isNull(deviceTokens.revokedAt)),
+    )
+    .orderBy(desc(deviceTokens.createdAt));
+}
+
+/**
+ * Revokes one token, only if it belongs to `userId`. Returns false when there
+ * is no such row for that user (so the route answers 404 either way and never
+ * reveals that another account owns the id). Revoking twice is a no-op.
+ */
+export async function revokeDeviceToken(
+  db: DeviceTokensDb,
+  userId: string,
+  id: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: deviceTokens.id })
+    .from(deviceTokens)
+    .where(and(eq(deviceTokens.id, id), eq(deviceTokens.userId, userId)))
+    .limit(1);
+  if (rows.length === 0) return false;
+  await db
+    .update(deviceTokens)
+    .set({ revokedAt: Date.now() })
+    .where(
+      and(eq(deviceTokens.id, id), eq(deviceTokens.userId, userId), isNull(deviceTokens.revokedAt)),
+    );
+  return true;
 }
