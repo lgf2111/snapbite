@@ -40,7 +40,7 @@ export function Calendar({
         ),
         selected:
           '[&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:hover:bg-primary',
-        today: '[&>button]:font-semibold [&>button]:text-primary',
+        today: '[&>button]:font-semibold [&>button]:text-primary-text',
         outside: 'text-muted-foreground/50',
         disabled: 'text-muted-foreground opacity-40',
         hidden: 'invisible',

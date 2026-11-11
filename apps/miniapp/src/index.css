@@ -5,7 +5,8 @@
  * SnapBite design tokens.
  *
  * Two materials, one system:
- *   - Warm paper surfaces carry appetite (background, card, muted).
+ *   - Warm paper surfaces carry appetite (background, card, muted), warmed by
+ *     the saffron accent rather than by the neutrals themselves.
  *   - A calibrated instrument layer carries measurement (foreground, border,
  *     the status tokens), so a verdict never relies on hue alone.
  *
@@ -18,71 +19,77 @@
 :root {
   color-scheme: light;
 
-  --background: #fffcf7;
-  --foreground: #1f1a16;
+  --background: #fdfaf3;
+  --foreground: #232019;
 
-  --card: #f6efe6;
-  --card-foreground: #1f1a16;
-  --popover: #fffcf7;
-  --popover-foreground: #1f1a16;
+  --card: #f3ede1;
+  --card-foreground: #232019;
+  --popover: #fdfaf3;
+  --popover-foreground: #232019;
 
-  /* Paprika — the only brand colour, never used to mean "bad". */
-  --primary: #b8371a;
-  --primary-foreground: #ffffff;
+  /* Saffron — the only brand colour, never used to mean "bad". */
+  --primary: #e8a317;
+  --primary-foreground: #241a02;
 
-  --secondary: #efe4d6;
-  --secondary-foreground: #1f1a16;
+  --secondary: #efe6d5;
+  --secondary-foreground: #232019;
 
   /* `muted` is a surface; `muted-foreground` is text — shadcn's contract. */
-  --muted: #f1e8dc;
-  --muted-foreground: #6b5f53;
+  --muted: #f1eadb;
+  --muted-foreground: #6a6152;
 
   /* `accent` stays shadcn's hover/selected surface, not the brand colour. */
-  --accent: #efe4d6;
-  --accent-foreground: #1f1a16;
+  --accent: #efe6d5;
+  --accent-foreground: #232019;
 
-  --destructive: #a3231b;
+  --destructive: #a53b1f;
   --destructive-foreground: #ffffff;
-  --success: #2a6b4f;
-  --warning: #8a5200;
+  --success: #2c6b3f;
+  --warning: #855300;
 
-  --border: #d8c6b0;
-  --input: #d8c6b0;
-  --ring: #b8371a;
+  /* Text links cannot use the bright saffron (4.63:1 is fine, but on the card
+     surface it drops), so links take a deeper key of the same hue. */
+  --primary-text: #945600;
+
+  --border: #d2c3a4;
+  --input: #d6c9ae;
+  --ring: #a56200;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
 
-    --background: #14100d;
-    --foreground: #f4ede3;
+    --background: #131210;
+    --foreground: #f2ede2;
 
-    --card: #1e1814;
-    --card-foreground: #f4ede3;
-    --popover: #1e1814;
-    --popover-foreground: #f4ede3;
+    --card: #1d1b17;
+    --card-foreground: #f2ede2;
+    --popover: #1d1b17;
+    --popover-foreground: #f2ede2;
 
-    --primary: #ff7a52;
-    --primary-foreground: #2a0e05;
+    --primary: #f0b33c;
+    --primary-foreground: #1f1503;
 
-    --secondary: #2a221c;
-    --secondary-foreground: #f4ede3;
+    --secondary: #2c2620;
+    --secondary-foreground: #f2ede2;
 
-    --muted: #241d18;
-    --muted-foreground: #a99a8b;
+    --muted: #231f1a;
+    --muted-foreground: #a9a08e;
 
-    --accent: #2a221c;
-    --accent-foreground: #f4ede3;
+    --accent: #2c2620;
+    --accent-foreground: #f2ede2;
 
-    --destructive: #ff8a7a;
+    --destructive: #ff9070;
     --destructive-foreground: #2a0e05;
-    --success: #6fc49b;
-    --warning: #e0a83c;
+    --success: #86c98f;
+    --warning: #f0b33c;
 
-    --border: #4b3d33;
-    --input: #4b3d33;
-    --ring: #ff7a52;
+    --primary-text: #f0b33c;
+
+    --border: #453f34;
+    --input: #453f34;
+    --ring: #f0b33c;
   }
 }
 
@@ -94,7 +101,9 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  /* Bright saffron is a fill; text/state uses the deeper key. */
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);

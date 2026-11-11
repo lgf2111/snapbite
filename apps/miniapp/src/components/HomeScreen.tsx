@@ -397,7 +397,7 @@ export function HomeScreen({
                       setAiMeal(m);
                     }}
                   >
-                    <Sparkles className="text-primary size-4" />
+                    <Sparkles className="text-primary-text size-4" />
                   </Button>
                 </CardContent>
               </Card>

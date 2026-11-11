@@ -29,7 +29,7 @@ export function LinkifiedHint({ text, className }: { text: string; className?: s
           <ExternalLink
             key={`${part.value}-${i}`}
             href={part.value.startsWith('http') ? part.value : `https://${part.value}`}
-            className="text-primary underline underline-offset-2"
+            className="text-primary-text underline underline-offset-2"
           >
             {part.value}
           </ExternalLink>

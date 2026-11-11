@@ -508,7 +508,7 @@ export function MealDetailScreen({
               aria-pressed={savedFavId !== null}
               onClick={onToggleFavorite}
             >
-              <Star className={cn('size-4', savedFavId !== null && 'fill-current text-primary')} />
+              <Star className={cn('size-4', savedFavId !== null && 'fill-current text-primary-text')} />
               {savedFavId !== null ? 'Saved' : 'Save meal'}
             </Button>
             <Button
@@ -614,7 +614,7 @@ export function MealDetailScreen({
           </Card>
 
           <Button variant="secondary" className="gap-2" onClick={() => setAiOpen(true)}>
-            <Sparkles className="text-primary size-4" /> Update with AI
+            <Sparkles className="text-primary-text size-4" /> Update with AI
           </Button>
 
           <ReviseWithAiDialog

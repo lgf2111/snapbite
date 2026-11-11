@@ -139,7 +139,7 @@ function KeyGuide({ provider }: { provider: ProviderId }) {
         href={guide.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-primary underline"
+        className="text-primary-text underline"
       >
         Open {new URL(guide.url).host} ↗
       </a>
@@ -548,7 +548,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       <Card>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <Target className="text-primary size-5" />
+            <Target className="text-primary-text size-5" />
             <span className="font-medium">Your goal &amp; targets</span>
           </div>
 
@@ -586,7 +586,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       <Card>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <Bell className="text-primary size-5" />
+            <Bell className="text-primary-text size-5" />
             <span className="font-medium">Meal reminders</span>
           </div>
           <p className="text-muted-foreground text-caption">
@@ -639,7 +639,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Target className="text-primary size-5" />
+              <Target className="text-primary-text size-5" />
               <span className="font-medium">Adaptive targets</span>
             </div>
             <Switch
@@ -685,7 +685,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       <Card>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <CalendarRange className="text-primary size-5" />
+            <CalendarRange className="text-primary-text size-5" />
             <span className="font-medium">Weekly view</span>
           </div>
           <p className="text-muted-foreground text-xs">
@@ -759,7 +759,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             <CardContent className="flex items-center justify-between">
               <span className="font-medium">Status</span>
               {settings?.connected ? (
-                <span className="text-primary flex items-center gap-1 text-sm">
+                <span className="text-primary-text flex items-center gap-1 text-sm">
                   <CheckCircle2 className="size-4" />
                   {providerLabel(settings.aiProvider)}
                   {settings.keyLast4 ? ` · …${settings.keyLast4}` : ''}
@@ -907,7 +907,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       <Card>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="text-primary size-5" />
+            <ShieldCheck className="text-primary-text size-5" />
             <span className="font-medium">Privacy &amp; your data</span>
           </div>
           <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
@@ -941,7 +941,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       <Card>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <MessageSquare className="text-primary size-5" />
+            <MessageSquare className="text-primary-text size-5" />
             <span className="font-medium">Feedback &amp; support</span>
           </div>
           <p className="text-muted-foreground text-sm">

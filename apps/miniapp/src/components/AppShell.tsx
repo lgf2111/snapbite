@@ -93,7 +93,7 @@ function NavButton({
       className={cn(
         'flex min-w-16 flex-col items-center justify-center gap-1 rounded-md px-3 py-2 text-caption transition-colors',
         'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
-        active ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+        active ? 'text-primary-text' : 'text-muted-foreground hover:text-foreground',
       )}
     >
       {icon}
