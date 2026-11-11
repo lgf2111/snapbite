@@ -141,19 +141,38 @@ describe('first-run onboarding', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('still asks about the AI key once, and respects the answer', async () => {
-    const profile = { profile: { sex: 'female' }, targets: null, connected: false };
+  it('does not restart setup for an account that has a profile but no AI key', async () => {
+    getSettings.mockResolvedValue({ profile: { sex: 'female' }, targets: null, connected: false });
 
-    getSettings.mockResolvedValue(profile);
-    const first = render(<App />);
-    await screen.findByRole('dialog');
-    first.unmount();
-    clearCache();
+    // Nothing remembered on this device, and then a stale "skipped": same result.
+    for (const remembered of [null, 'skipped', 'set']) {
+      clearCache();
+      localStorage.clear();
+      if (remembered) localStorage.setItem('snapbite.onboarding.keyDecision', remembered);
+      const view = render(<App />);
+      expect(await screen.findByText('Set goal')).toBeTruthy();
+      expect(screen.queryByRole('dialog')).toBeNull();
+      view.unmount();
+    }
+  });
 
-    localStorage.setItem('snapbite.onboarding.keyDecision', 'skipped');
-    getSettings.mockResolvedValue(profile);
+  it('trusts the server over a cached "no profile" left by another account', async () => {
+    // The anonymous account's settings, cached before signing in as someone else.
+    localStorage.setItem(
+      'snapbite.cache.settings',
+      JSON.stringify({
+        at: Date.now(),
+        value: { profile: null, targets: null, connected: false },
+      }),
+    );
+    getSettings.mockResolvedValue({
+      profile: { sex: 'female' },
+      targets: { energyKcal: 2000, proteinG: 120, carbsG: 250, fatG: 70 },
+      connected: true,
+    });
     render(<App />);
-    expect(await screen.findByText('Set goal')).toBeTruthy();
+    await waitFor(() => expect(getSettings).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText(/kcal/)).toBeTruthy());
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

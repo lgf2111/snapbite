@@ -26,6 +26,7 @@ import {
   issueLoginToken,
   looksLikeEmail,
   normalizeEmail,
+  orphanTelegramAccounts,
 } from '../db/auth.js';
 import type { AppBindings } from '../env.js';
 
@@ -159,11 +160,29 @@ export function authRoutes() {
     if (!userId) {
       let deviceRaw = jar[cookies.device] ?? '';
       if (!deviceRaw) deviceRaw = mintDeviceToken();
-      const { user } = await findOrCreateDeviceUser(authDb, await deviceLookupHash(deviceRaw));
+      const { user, created } = await findOrCreateDeviceUser(
+        authDb,
+        await deviceLookupHash(deviceRaw),
+      );
       if (!user) return c.redirect(`${appOrigin}/?auth=error`, 302);
       const attached = await attachEmailToUser(authDb, user.id, email);
       if (!attached.ok) return c.redirect(`${appOrigin}/?auth=conflict`, 302);
       userId = user.id;
+
+      // A brand-new account while Telegram accounts sit with meals and no email:
+      // one of them may be this person's real account, orphaned by a restore. We
+      // cannot tell which (nothing links them) and refusing every new sign-up
+      // for that would be worse, so say so where an operator will see it.
+      if (created) {
+        const orphans = await orphanTelegramAccounts(c.env.DB);
+        if (orphans.length > 0) {
+          console.warn(
+            `[auth] new Google account ${user.id} (${email}) while ${orphans.length} Telegram account(s) have meals and no email; merge with scripts/merge-users.sql if one is theirs:`,
+            JSON.stringify(orphans),
+          );
+          c.header('x-snapbite-orphan-candidates', String(orphans.length));
+        }
+      }
     }
 
     const sessionRaw = await createSession(authDb, userId, 'google');

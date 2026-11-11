@@ -265,3 +265,29 @@ export async function mealsNeedingPhotoBackfill(
     .all<PhotoBackfillRow>();
   return rows.results ?? [];
 }
+
+/**
+ * Telegram accounts that have meals but no email. After a restore that predates a
+ * `/linkemail`, the person's real account looks exactly like this, while their
+ * Google sign-in creates a second, empty one. Nothing ties the two together, so
+ * this can only list candidates for an operator to merge (see
+ * `scripts/merge-users.sql`); it never decides.
+ */
+export async function orphanTelegramAccounts(
+  d1: D1Database,
+  limit = 10,
+): Promise<Array<{ userId: string; telegramUserId: number; meals: number }>> {
+  const { results } = await d1
+    .prepare(
+      `select u.id as userId, u.telegram_user_id as telegramUserId,
+              (select count(*) from meals m where m.user_id = u.id) as meals
+         from users u
+        where u.telegram_user_id is not null and u.email is null
+          and exists (select 1 from meals m where m.user_id = u.id)
+        order by meals desc
+        limit ?`,
+    )
+    .bind(limit)
+    .all<{ userId: string; telegramUserId: number; meals: number }>();
+  return results;
+}

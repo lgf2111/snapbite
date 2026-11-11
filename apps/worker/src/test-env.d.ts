@@ -19,3 +19,8 @@ declare module 'cloudflare:test' {
   export const env: ProvidedEnv;
   export function applyD1Migrations(db: D1Database, migrations: D1Migration[]): Promise<void>;
 }
+
+declare module '*.sql?raw' {
+  const sql: string;
+  export default sql;
+}

@@ -67,7 +67,13 @@ function serialise(name: string, value: string, opts: CookieOptions, maxAge?: nu
   ];
   if (opts.httpOnly) bits.push('HttpOnly');
   if (opts.secure) bits.push('Secure');
-  if (maxAge !== undefined) bits.push(`Max-Age=${maxAge}`);
+  if (maxAge !== undefined) {
+    bits.push(`Max-Age=${maxAge}`);
+    // Max-Age alone is session-scoped on some webviews, which then drop the
+    // cookie when the app is swiped away. Expires is honoured everywhere, and
+    // where Max-Age is honoured too it wins, so sending both costs nothing.
+    bits.push(`Expires=${new Date(maxAge > 0 ? Date.now() + maxAge * 1000 : 0).toUTCString()}`);
+  }
   return bits.join('; ');
 }
 

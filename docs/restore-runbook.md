@@ -84,6 +84,17 @@ this in production). Check row counts before and after each apply
 (`select count(*) from meals`, `users`, `settings`), and never batch-apply migrations
 blindly. If a count drops, stop and restore again.
 
+## Merging two accounts (a person ended up with two)
+
+A restore that predates someone's `/linkemail` leaves their Telegram account without
+an email, so their next Google sign-in creates a second, empty account while the
+meals sit under the first. The sign-in logs a warning (`[auth] new Google account …`)
+and answers with an `x-snapbite-orphan-candidates` header when that might have happened;
+it cannot tell whose account is whose, so a person decides. To merge, take a Time Travel
+bookmark, check both rows, then run `apps/worker/scripts/merge-users.sql` with the two
+ids you supply: `FROM` is the account to retire (the one with the meals), `INTO` is the
+one to keep (the one they sign in to). The script's header has the exact commands.
+
 ## If the backup job goes red
 
 - **"only N bytes (< 100 KB)"**: the database was empty or the export failed. Look at
