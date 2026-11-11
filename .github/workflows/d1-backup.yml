@@ -1,0 +1,85 @@
+name: D1 backup
+
+# A nightly SQL export of the production database, kept as a build artifact for 90
+# days. It sits behind Cloudflare's 30-day time travel: time travel is the fast
+# restore, this is what you have when you need something older, or a copy outside
+# Cloudflare. See docs/restore-runbook.md.
+
+on:
+  schedule:
+    - cron: '0 18 * * *' # 18:00 UTC = 02:00 SGT
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d1-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install wrangler
+        run: npm i -g wrangler
+
+      - name: Export the database
+        # From apps/worker: wrangler resolves `snapbite-db` through that
+        # directory's wrangler.toml.
+        working-directory: apps/worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          day=$(date -u +%F)
+          file="backup-$day.sql"
+          wrangler d1 export snapbite-db --remote --output "$GITHUB_WORKSPACE/$file"
+          echo "BACKUP_FILE=$file" >> "$GITHUB_ENV"
+          echo "BACKUP_DAY=$day" >> "$GITHUB_ENV"
+
+      - name: Refuse a blank backup
+        # An empty database exports to a few KB. A green run that saved nothing is
+        # worse than a red one, so anything under 100 KB fails the job.
+        shell: bash
+        run: |
+          set -euo pipefail
+          bytes=$(stat -c%s "$BACKUP_FILE")
+          echo "$BACKUP_FILE is $bytes bytes"
+          if [ "$bytes" -lt 102400 ]; then
+            echo "::error::$BACKUP_FILE is only $bytes bytes (< 100 KB). The database looks empty or the export failed."
+            exit 1
+          fi
+
+      - name: Row counts for the summary
+        working-directory: apps/worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## D1 backup $(date -u +%F)"
+            echo
+            echo "File: \`$BACKUP_FILE\` ($(stat -c%s "$GITHUB_WORKSPACE/$BACKUP_FILE") bytes)"
+            echo
+            echo '```'
+            wrangler d1 execute snapbite-db --remote --command "select count(*) n from meals"
+            wrangler d1 execute snapbite-db --remote --command "select (select count(*) from users) users, (select count(*) from settings) settings"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the export
+        uses: actions/upload-artifact@v4
+        with:
+          name: d1-backup-${{ env.BACKUP_DAY }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 90
+          if-no-files-found: error
