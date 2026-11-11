@@ -79,8 +79,12 @@ treat it as sensitive, keep it off shared drives, delete the local copy when don
 
 - **"only N bytes (< 100 KB)"**: the database was empty or the export failed. Look at
   the export step's log, and treat it as an incident until you have checked the data.
-- **Auth errors**: the repository secrets `CLOUDFLARE_API_TOKEN` and
-  `CLOUDFLARE_ACCOUNT_ID` must be set, and the token needs D1 edit rights (export
-  works through the D1 API).
+- **"D1 backup is missing repository secrets"**: the first step failed on purpose.
+  Create a token with D1 edit rights at https://dash.cloudflare.com/profile/api-tokens
+  and run `gh secret set CLOUDFLARE_API_TOKEN` and `gh secret set CLOUDFLARE_ACCOUNT_ID`
+  (`gh secret list` shows what is set). Editing the workflow file also triggers a run
+  of it, so this is how a fix to the workflow proves itself.
+- **Other auth errors**: both secrets are set but wrong, or the token lacks D1 edit
+  rights (export works through the D1 API).
 - GitHub pauses scheduled workflows after 60 days with no repository activity. If
   the nightly runs stop appearing, re-enable the workflow in the Actions tab.
