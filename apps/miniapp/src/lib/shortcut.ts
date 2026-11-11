@@ -10,8 +10,9 @@
  * was tried and rejected on iOS 26 ("The shortcut URL provided was invalid"), so do not
  * bring it back. Opening the file shows a preview with "Open in Shortcuts".
  */
-export const SHORTCUT_FILE_URL =
-  'https://snapbite.leeguanfeng.com/shortcut/snapbite-log-meal.shortcut';
+/** Same-origin path of the file: what the pre-flight dialog's Continue navigates to. */
+export const SHORTCUT_FILE_PATH = '/shortcut/snapbite-log-meal.shortcut';
+export const SHORTCUT_FILE_URL = `https://snapbite.leeguanfeng.com${SHORTCUT_FILE_PATH}`;
 
 /**
  * Apple's own share link (https://www.icloud.com/shortcuts/...). Empty until the shortcut
