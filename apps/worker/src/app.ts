@@ -4,6 +4,7 @@ import type { AppBindings } from './env.js';
 import { accountAuth } from './middleware/account.js';
 import { telegramAuth } from './middleware/auth.js';
 import { accountRoutes } from './routes/account.js';
+import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { deviceTokenRoutes } from './routes/deviceTokens.js';
 import { favoritesRoutes } from './routes/favorites.js';
@@ -47,6 +48,12 @@ export function createApp(opts: CreateAppOptions = {}) {
       ...(opts.botClientFactory ? { botClientFactory: opts.botClientFactory } : {}),
       ...(opts.providerFactory ? { providerFactory: opts.providerFactory } : {}),
     }),
+  );
+
+  // Operator tools (one-shot broadcast) — guarded by x-admin-token, not an account.
+  app.route(
+    '/api/admin',
+    adminRoutes(opts.botClientFactory ? { botClientFactory: opts.botClientFactory } : {}),
   );
 
   // Photo proxy — verifies initData via query param (an <img> can't send headers).

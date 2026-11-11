@@ -22,6 +22,11 @@ export interface Env {
    */
   ADMIN_TELEGRAM_ID?: string;
   /**
+   * Shared secret for the operator endpoint (`POST /api/admin/broadcast`), sent as
+   * `x-admin-token`. Unset => the endpoint answers 503 and does nothing.
+   */
+  ADMIN_TOKEN?: string;
+  /**
    * Optional admin GROUP chat id (a negative supergroup id, e.g. -1003990101342).
    * When set, admin alerts (errors/feedback/broadcast) post into this group's
    * Topics instead of DMing `ADMIN_TELEGRAM_ID`. Group-only when configured.
