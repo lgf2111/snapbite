@@ -16,14 +16,15 @@ without any of them.
 - **Status:** not available in this workspace. Stage 2 shipped and tested with a
   mock provider factory.
 
-## 2. Stripe secrets (Stage 3)
+## 2. Stripe secrets
 
 - **What:** `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`.
 - **Why:** `POST /api/billing/checkout` creates a Checkout Session; the webhook
   verifies Stripe's signature before granting credits. Without the secret key
-  checkout answers **503** with a clear message; without the webhook secret the
-  endpoint still records events but cannot verify signatures, so it must not be
-  treated as production-ready.
+  checkout answers **503** with a clear message.
+- **Security rule:** without `STRIPE_WEBHOOK_SECRET` the webhook still records
+  every event idempotently, but it **never applies one**. An unverified webhook
+  could otherwise be forged to mint credits. Provision both secrets together.
 - **Provision:**
   - `pnpm wrangler secret put STRIPE_SECRET_KEY`
   - `pnpm wrangler secret put STRIPE_WEBHOOK_SECRET`
@@ -31,11 +32,11 @@ without any of them.
   `https://<worker-origin>/api/billing/webhook` for
   `checkout.session.completed`, then copy its signing secret into
   `STRIPE_WEBHOOK_SECRET`.
-- **Prices:** pack amounts live in a server-side constant (Starter 100 / $4.99,
-  Regular 300 / $11.99, Bulk 1000 / $34.99). No Stripe Price IDs are needed;
-  Checkout uses inline `price_data`.
-- **Status:** not available in this workspace. Stage 3 ships with the env gate
-  and a tested 503 path.
+- **Prices:** pack amounts live in a server-side constant
+  (`src/billing/packs.ts`: Starter 100 / $4.99, Regular 300 / $11.99, Bulk 1000 /
+  $34.99). No Stripe Price IDs are needed; Checkout uses inline `price_data`.
+- **Status:** not available in this workspace. Stage 3 ships with the env gate,
+  a tested 503 path, a signed-webhook test and an unsigned-record test.
 
 ## 3. Migration application
 
@@ -50,7 +51,19 @@ without any of them.
 ## 4. Admin topup token (`ADMIN_TOKEN`)
 
 - **What:** already an existing worker secret (used by `/api/admin/broadcast`).
-- **Why:** Stage 3's `POST /api/admin/topup` uses the same token to test credits
-  end-to-end without Stripe.
+- **Why:** Stage 3's `POST /api/admin/topup` uses the same `x-admin-token` to
+  test credits and support a user without Stripe.
 - **Status:** no action unless it was never provisioned; the route answers 503
   when unset.
+
+## 5. Known gap: 24-month credit expiry
+
+- **What:** the product rule says unused credits expire after 24 months, but the
+  schema stores one balance and no per-credit grant date. Nothing expires today;
+  balances simply keep working.
+- **Why it is not implemented:** expiring a single balance would wrongly delete
+  newer credits when a user tops up. It needs credit lots (or FIFO consumption
+  against grant timestamps) and a migration, which is a product decision rather
+  than a missing secret.
+- **Options:** leave credits non-expiring (user-friendly, simpler), or add a
+  `credit_lots` table and spend oldest-first with an expiry sweep.

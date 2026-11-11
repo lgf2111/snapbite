@@ -1,11 +1,13 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { createEntitlementMemo, getEntitlement } from './billing/accounts.js';
 import type { AppBindings } from './env.js';
 import { accountAuth } from './middleware/account.js';
 import { telegramAuth } from './middleware/auth.js';
 import { accountRoutes } from './routes/account.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
+import { billingRoutes, billingWebhookRoutes } from './routes/billing.js';
 import { deviceTokenRoutes } from './routes/deviceTokens.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { feedbackRoutes } from './routes/feedback.js';
@@ -56,6 +58,11 @@ export function createApp(opts: CreateAppOptions = {}) {
     adminRoutes(opts.botClientFactory ? { botClientFactory: opts.botClientFactory } : {}),
   );
 
+  // Stripe webhook — no SnapBite account; mounted before accountAuth so Stripe's
+  // calls cannot create anonymous users. The authenticated billing routes live
+  // under `/api/billing` inside the guarded app below.
+  app.route('/api/billing', billingWebhookRoutes());
+
   // Photo proxy — verifies initData via query param (an <img> can't send headers).
   app.route('/api/meal-photo', mealPhotoRoutes(opts.botClientFactory));
 
@@ -73,8 +80,9 @@ export function createApp(opts: CreateAppOptions = {}) {
   const api = new Hono<AppBindings>();
   api.use('*', accountAuth());
 
-  api.get('/me', (c) => {
+  api.get('/me', async (c) => {
     const tgUser = c.get('telegramUser');
+    const entitlement = await getEntitlement(c.env.DB, c.get('userId'), createEntitlementMemo());
     return c.json({
       userId: c.get('userId'),
       telegramUserId: tgUser?.id ?? null,
@@ -82,9 +90,12 @@ export function createApp(opts: CreateAppOptions = {}) {
       username: tgUser?.username ?? null,
       // True when this browser is authenticated by a session cookie.
       signedIn: c.req.header('cookie')?.includes('sb_session=') ?? false,
+      supporter: entitlement.supporter,
+      credits: entitlement.credits,
     });
   });
 
+  api.route('/billing', billingRoutes());
   api.route('/settings', settingsRoutes());
   api.route('/meals', mealsRoutes(opts.providerFactory, opts.botClientFactory));
   api.route('/favorites', favoritesRoutes());

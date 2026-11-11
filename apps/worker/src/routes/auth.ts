@@ -13,6 +13,7 @@ import {
   publicOrigin,
   redirectUriFor,
 } from '../auth/social.js';
+import { grantTrial } from '../billing/accounts.js';
 import {
   type AuthDb,
   attachEmailToUser,
@@ -33,6 +34,18 @@ import type { AppBindings } from '../env.js';
 /** A magic link is useless without somewhere to send it. */
 function canSendEmail(env: AppBindings['Bindings']): boolean {
   return Boolean(env.RESEND_API_KEY && env.EMAIL_FROM && env.APP_ORIGIN);
+}
+
+/**
+ * Grants the one-time registration trial to a verified email. Best-effort on
+ * purpose: a billing-table problem must never block a valid sign-in.
+ */
+async function grantSignInTrial(db: D1Database, email: string): Promise<void> {
+  try {
+    await grantTrial(db, email);
+  } catch (err) {
+    console.warn('[auth] trial grant failed', err);
+  }
 }
 
 /**
@@ -185,6 +198,9 @@ export function authRoutes() {
       }
     }
 
+    // Verified identity: grant the once-per-email trial before the session.
+    await grantSignInTrial(c.env.DB, email);
+
     const sessionRaw = await createSession(authDb, userId, 'google');
     const opts = cookieOptionsFor(c);
     c.header(
@@ -281,6 +297,9 @@ export function authRoutes() {
       if (!attached.ok) return c.redirect(`${appOrigin}/?auth=conflict`, 302);
       userId = user.id;
     }
+
+    // Verified identity: grant the once-per-email trial before the session.
+    await grantSignInTrial(c.env.DB, email);
 
     const sessionRaw = await createSession(db(c), userId, 'email');
     const opts = cookieOptionsFor(c);

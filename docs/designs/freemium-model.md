@@ -205,7 +205,7 @@ Every account that verifies an identity gets **14 days of the plan, no card**: h
 Constraints that decide whether this is a gift or a hole:
 
 - **Trials attach to a verified identity, not to a device.** Anonymous device accounts are free to create by clearing site data, so a trial on one is farmable without limit. Verify email or Google first, then grant.
-- **Two ceilings, whichever comes first**: 14 days *and* 100 hosted analyses. A time-only trial is cheap to run for a heavy user and expensive for us; a count-only trial never expires for someone who logs twice a week.
+- **Two ceilings, whichever comes first**: 14 days *and* 20 credits. A time-only trial is cheap to run for a heavy user and expensive for us; a count-only trial never expires for someone who logs twice a week.
 - **One trial per identity.** Key it on the verified email in `billing_accounts`, and keep a `trial_granted_at` marker so a deleted-and-recreated account cannot claim a second. Deleting an account must not erase the marker.
 - **The trial's AI spend is metered like a paid user's** (`ai_usage`), so the cost of the programme is a query, not a surprise on an invoice.
 - **No card, no auto-charge.** Taking a card for a free trial is the single most disliked pattern in consumer software, and this product is not trying to maximise conversion.

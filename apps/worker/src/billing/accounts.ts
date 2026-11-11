@@ -71,6 +71,19 @@ export async function getAccount(db: D1Database, email: string): Promise<Billing
   return row ? toAccount(row) : null;
 }
 
+/**
+ * The verified email that owns billing for a user, or null for an anonymous or
+ * unverified account. Paid features require this to be non-null.
+ */
+export async function getVerifiedEmail(db: D1Database, userId: string): Promise<string | null> {
+  const row = await db
+    .prepare('SELECT email FROM users WHERE id = ? AND email_verified_at IS NOT NULL')
+    .bind(userId)
+    .first<{ email: string | null }>();
+  const email = row?.email?.trim().toLowerCase();
+  return email || null;
+}
+
 /** Creates the account row if needed. Never changes an existing balance. */
 export async function ensureAccount(db: D1Database, email: string): Promise<BillingAccount> {
   const normalized = email.trim().toLowerCase();
@@ -163,7 +176,8 @@ export async function getEntitlement(
               CASE WHEN s.api_key_ciphertext IS NOT NULL AND s.api_key_iv IS NOT NULL
                    THEN 1 ELSE 0 END AS has_key
          FROM users u
-         LEFT JOIN billing_accounts b ON b.email = u.email
+         LEFT JOIN billing_accounts b
+                ON b.email = u.email AND u.email_verified_at IS NOT NULL
          LEFT JOIN settings s ON s.user_id = u.id
         WHERE u.id = ?`,
     )
