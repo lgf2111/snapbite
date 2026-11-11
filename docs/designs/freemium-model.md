@@ -121,6 +121,37 @@ Adopted: grace window, then a **usable floor** — manual entry, full log, date 
 9. No priority queue, no history limits, no health-platform integration.
 10. Anonymous accounts can still log meals; taking the plan requires a verified identity, and sign-in must **claim the existing anonymous account and its meals** rather than mint an empty one.
 
+## Roadmap: trials and eligibility
+
+### A trial at registration
+
+Every account that verifies an identity gets **14 days of the plan, no card**: hosted AI and the analytics views. After it lapses the account drops to the free floor — log, rings, export and streak intact — with one offer to set up their own key.
+
+Constraints that decide whether this is a gift or a hole:
+
+- **Trials attach to a verified identity, not to a device.** Anonymous device accounts are free to create by clearing site data, so a trial on one is farmable without limit. Verify email or Google first, then grant.
+- **Two ceilings, whichever comes first**: 14 days *and* 100 hosted analyses. A time-only trial is cheap to run for a heavy user and expensive for us; a count-only trial never expires for someone who logs twice a week.
+- **One trial per identity.** Key it on the verified email in `billing_accounts`, and keep a `trial_granted_at` marker so a deleted-and-recreated account cannot claim a second. Deleting an account must not erase the marker.
+- **The trial's AI spend is metered like a paid user's** (`ai_usage`), so the cost of the programme is a query, not a surprise on an invoice.
+- **No card, no auto-charge.** Taking a card for a free trial is the single most disliked pattern in consumer software, and this product is not trying to maximise conversion.
+
+### Eligibility beyond the default
+
+The roadmap item is a scoring step that decides who gets a trial when the default grant is not universal — for example a second trial after a lapse, or a longer trial for users who look likely to keep logging.
+
+Signals worth using, all already in the database: whether a profile exists, meals logged in the first week, active days in the last 14, whether the user logs through the Shortcut as well as the app, whether they have ever set a key, and whether they have hit a provider quota (the strongest signal — they were blocked by exactly the thing the plan removes).
+
+Rules the algorithm must follow, because a trial programme that ignores them becomes a manipulative one:
+
+- **Never target someone who is already paying**, and never grant a second trial to the same identity.
+- **Never reduce what a free user had.** A trial is additive; it cannot be the removal of a feature that was free last week.
+- **Deterministic and explainable**: a function of stored facts, not a model, with the reason recorded (`trial_reason`) so support can answer "why did I get this" in one query.
+- **No dark patterns**: no countdown on the home screen, no trial that silently converts, no analytics that vanish mid-week. Expiry is shown once, at expiry.
+
+### Not now
+
+The eligibility algorithm is deliberately **out of scope for the first release**: ship the fixed 14-day grant, measure how many trials end with the user setting their own key, and only add scoring once there is data to score on. A scoring rule invented before any trial has run is a guess with a schema.
+
 ## Open questions for the next pass
 
 - Which no-key path gives a free user their first meal: on-device estimate, food search, or a small pooled allowance? Still a blocker on the free tier's credibility, and now the only real product question left.
