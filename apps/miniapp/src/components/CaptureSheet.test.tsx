@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CaptureSheet } from './CaptureSheet.js';
 import { Toaster } from './ui/sonner.js';
 
-function setup() {
+function setup(open = true) {
   const trigger = document.createElement('button');
   document.body.append(trigger);
   const backend = {
@@ -17,7 +17,7 @@ function setup() {
     <>
       <CaptureSheet
         backend={backend}
-        open
+        open={open}
         onOpenChange={onOpenChange}
         triggerRef={{ current: trigger }}
         onLogged={vi.fn()}
@@ -30,7 +30,7 @@ function setup() {
   const inputs = [...container.querySelectorAll<HTMLInputElement>('input[type=file]')];
   const camera = inputs.find((i) => i.hasAttribute('capture')) as HTMLInputElement;
   const library = inputs.find((i) => !i.hasAttribute('capture')) as HTMLInputElement;
-  return { backend, onOpenChange, camera, library };
+  return { backend, onOpenChange, camera, library, trigger };
 }
 
 const card = (name: RegExp) => screen.getByRole('button', { name });
@@ -47,6 +47,62 @@ afterEach(() => {
   cleanup();
   toast.dismiss();
   for (const el of document.querySelectorAll('body > button')) el.remove();
+});
+
+describe('the file pickers', () => {
+  it('are in the DOM while the menu is closed, and hidden by position, not display:none', () => {
+    const { camera, library } = setup(false);
+    expect(screen.queryByTestId('capture-menu')).toBeNull();
+    for (const input of [camera, library]) {
+      expect(input.isConnected).toBe(true);
+      expect(input.className).toContain('sr-only');
+      expect(input.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    }
+    expect(camera.getAttribute('capture')).toBe('environment');
+    expect(camera.accept).toBe('image/*');
+    expect(library.hasAttribute('capture')).toBe(false);
+    expect(library.accept).toBe('image/*');
+  });
+
+  it('release over the Take photo wedge opens the camera inside the same event', () => {
+    vi.useFakeTimers();
+    try {
+      const { camera, library, trigger } = setup(false);
+      const cameraClick = vi.spyOn(camera, 'click');
+      const libraryClick = vi.spyOn(library, 'click');
+      vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(
+        DOMRect.fromRect({ x: 183, y: 600, width: 64, height: 64 }),
+      );
+      const ptr = (type: string, x: number, y: number) =>
+        new PointerEvent(type, {
+          bubbles: true,
+          pointerId: 1,
+          isPrimary: true,
+          clientX: x,
+          clientY: y,
+        });
+
+      act(() => {
+        trigger.dispatchEvent(ptr('pointerdown', 215, 632));
+        vi.advanceTimersByTime(200);
+      });
+      // Right-hand wedge (Take photo), well above the baseline.
+      act(() => {
+        trigger.dispatchEvent(
+          ptr('pointermove', 215 + 100 * Math.cos(0.35), 590 - 100 * Math.sin(0.35)),
+        );
+      });
+      // No act(), no timers: whatever the release triggers must happen before it returns.
+      trigger.dispatchEvent(
+        ptr('pointerup', 215 + 100 * Math.cos(0.35), 590 - 100 * Math.sin(0.35)),
+      );
+
+      expect(cameraClick).toHaveBeenCalledTimes(1);
+      expect(libraryClick).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('CaptureSheet (the add-a-meal flow)', () => {

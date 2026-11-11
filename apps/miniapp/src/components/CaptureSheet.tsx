@@ -26,6 +26,13 @@ interface Props {
 }
 
 /**
+ * The pickers are always mounted and kept out of sight with `sr-only` positioning,
+ * not `display:none`: iOS has been known to refuse to open an input that is not
+ * rendered.
+ */
+const FILE_INPUT = 'sr-only';
+
+/**
  * The add-a-meal flow: the four-card menu, the hidden file inputs it drives, and
  * the sheet that shows a photo being read and then reviewed.
  *
@@ -110,13 +117,25 @@ export function CaptureSheet({
   const busy = stage === 'analysing' || stage === 'saving';
 
   /**
+   * iOS opens a file picker only from inside the tap or release that asked for it.
+   * So these are plain synchronous calls: no await, no state change and no timer
+   * before `click()`, and nothing the menu's closing animation can delay.
+   */
+  function takePhoto() {
+    cameraInput.current?.click();
+  }
+  function uploadImage() {
+    libraryInput.current?.click();
+  }
+
+  /**
    * A card was tapped. The menu closes at once so a file picker or a dialog is
    * not competing with an overlay; the picker's `click()` stays inside this tap,
    * which iOS requires.
    */
   function pick(action: CaptureAction) {
-    if (action === 'photo') cameraInput.current?.click();
-    else if (action === 'upload') libraryInput.current?.click();
+    if (action === 'photo') takePhoto();
+    else if (action === 'upload') uploadImage();
     else setManualOpen(true);
     onOpenChange(false);
   }
@@ -130,14 +149,18 @@ export function CaptureSheet({
         type="file"
         accept="image/*"
         capture="environment"
-        className="hidden"
+        className={FILE_INPUT}
+        tabIndex={-1}
+        aria-hidden
         onChange={(e) => void handleFile(e.target.files?.[0])}
       />
       <input
         ref={libraryInput}
         type="file"
         accept="image/*"
-        className="hidden"
+        className={FILE_INPUT}
+        tabIndex={-1}
+        aria-hidden
         onChange={(e) => void handleFile(e.target.files?.[0])}
       />
 
@@ -231,7 +254,7 @@ export function CaptureSheet({
             )}
 
             {stage === 'error' && !draft && (
-              <Button onClick={() => libraryInput.current?.click()} disabled={busy}>
+              <Button onClick={uploadImage} disabled={busy}>
                 Choose another photo
               </Button>
             )}
