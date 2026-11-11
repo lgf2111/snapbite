@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { formatRingNumeral, ringNumeralSizeRem } from '../lib/ringNumeral.js';
 
 interface ProgressRingProps {
   /** Amount consumed so far. */
@@ -47,6 +48,9 @@ export function ProgressRing({
   const dashOffset = circumference * (1 - filled);
 
   const center = size / 2;
+  const value = over ? Math.abs(remaining) : Math.max(0, remaining);
+  // Grouped from five digits ("12,810") on the hero ring, whose size then steps down to fit.
+  const shown = hero ? formatRingNumeral(value) : String(value);
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -109,13 +113,16 @@ export function ProgressRing({
         >
           {icon && <span className="text-sm">{icon}</span>}
           <span
+            data-slot="ring-numeral"
             className={cn(
-              'tabular',
+              'tabular whitespace-nowrap',
               hero ? 'font-display text-display' : 'font-semibold',
               !hero && (size >= 96 ? 'text-lg' : 'text-sm'),
             )}
+            // Hero only: a long weekly total steps down instead of spilling over the ring.
+            style={hero ? { fontSize: `${ringNumeralSizeRem(shown)}rem` } : undefined}
           >
-            {over ? Math.abs(remaining) : Math.max(0, remaining)}
+            {shown}
           </span>
           <span className={cn('text-muted-foreground', hero ? 'text-caption' : 'text-[10px]')}>
             {hero ? `${label} ${over ? 'over' : 'left'}` : over ? 'over' : 'left'}
