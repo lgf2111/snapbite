@@ -61,7 +61,7 @@ makes the notification look like the confirm card in the app:
 
 - **Title** → `Meal logged`
 - **Body** → the **Contents of URL** variable from Action 3
-- **Attachment** → the **Photo** variable from Action 1 (the **Take Photo** result)
+- **Attachment** → the **Converted Image** variable from Action 2
 
 The body is exactly the server's reply, two plain lines, so there is nothing to parse
 or format. A successful one reads:

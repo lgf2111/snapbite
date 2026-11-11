@@ -1,14 +1,14 @@
-import { Check, Copy, KeyRound } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Check, ChevronDown, Copy, KeyRound } from 'lucide-react';
+import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { CreatedDeviceToken, DeviceTokenInfo } from '../lib/api.js';
 import type { Backend } from '../lib/backend.js';
-import { readConfig } from '../lib/config.js';
-import { isStandalone } from '../lib/install.js';
+import { installPlatform, isStandalone } from '../lib/install.js';
 import { navigateTo } from '../lib/navigate.js';
 import {
   SHORTCUT_FILE_PATH,
   SHORTCUT_FILE_URL,
   SHORTCUT_ICLOUD_URL,
+  SHORTCUT_LOG_URL,
   SHORTCUT_TOKEN_FIELD,
   SHORTCUT_TOKEN_PLACEHOLDER,
 } from '../lib/shortcut.js';
@@ -23,18 +23,51 @@ import {
   DialogTitle,
 } from './ui/dialog.js';
 
-/** The by-hand route, for a phone where adding the file does not work. */
-const HAND_STEPS = [
-  'Shortcuts → new shortcut → Take Photo → Convert Image (JPEG).',
-  'Add Get Contents of URL: Method POST, Request Body Form.',
-  'Add field photo, type File, value Converted Image.',
-  'Add header Authorization = Bearer, a space, then the token above.',
-  'Add Show Notification: Title Meal logged, Body Contents of URL, Attachment Photo.',
-];
-
 type Confirm = { kind: 'one'; token: DeviceTokenInfo } | { kind: 'all' } | null;
 
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString();
+
+type Panel = 'easy' | 'hand';
+
+/**
+ * One row of the two-row accordion: the help panel's pattern (a native
+ * `<button aria-expanded>`, a chevron that turns, content that stays mounted but
+ * hidden). Which row is open is the card's call, so only one can be.
+ */
+function AccordionRow({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="rounded-lg border border-border">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={onToggle}
+        className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left font-medium transition-[background-color,transform] duration-[120ms] active:scale-[0.99] active:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none motion-reduce:transition-none motion-reduce:active:scale-100"
+      >
+        <span className="min-w-0">{title}</span>
+        <ChevronDown
+          aria-hidden
+          className="text-muted-foreground size-4 shrink-0 transition-transform duration-200 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
+          style={{ transform: open ? 'rotate(180deg)' : 'none' }}
+        />
+      </button>
+      <div id={id} hidden={!open} className="flex min-w-0 flex-col gap-3 px-3 pb-3">
+        {children}
+      </div>
+    </div>
+  );
+}
 
 /** `iPhone Shortcut · a3f9`: the device, and a short suffix to tell two tokens apart. */
 export function newTokenLabel(): string {
@@ -129,8 +162,6 @@ function CopyButton({
  * is dropped on "Done" or when it is revoked; the server keeps only a hash.
  */
 export function ShortcutCard({ backend }: { backend: Backend }) {
-  // Same origin as the app: the Shortcut posts through the same proxy.
-  const endpoint = `${readConfig().apiBase || window.location.origin}/api/shortcut/log`;
   const [tokens, setTokens] = useState<DeviceTokenInfo[] | null>(null);
   const [fresh, setFresh] = useState<CreatedDeviceToken | null>(null);
   const [busy, setBusy] = useState(false);
@@ -138,6 +169,10 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
   const [confirm, setConfirm] = useState<Confirm>(null);
   const tokenRef = useRef<HTMLElement | null>(null);
   const urlRef = useRef<HTMLElement | null>(null);
+  // Both closed, except that the easy path opens itself on a phone that reports iOS.
+  const [panel, setPanel] = useState<Panel | null>(() =>
+    installPlatform() === 'ios' ? 'easy' : null,
+  );
   const fileRef = useRef<HTMLElement | null>(null);
   const cancelRef = useRef<HTMLButtonElement | null>(null);
   const preflightCancelRef = useRef<HTMLButtonElement | null>(null);
@@ -201,75 +236,44 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
   const hasUsedToken = tokens?.some((t) => t.lastUsedAt != null) ?? false;
   // Where Continue goes: Apple's import page when we have one, else the file itself.
   const target = icloud || SHORTCUT_FILE_PATH;
-  // Three steps, visible. Once there is a token the person has been through them, so
-  // they fold into one line (and only then).
-  const collapse = hasToken && !fresh;
+  const Add = (
+    <Button asChild>
+      {/* A plain https link: no fetch, no blob, no download attribute, and not the
+          shortcuts:// scheme, which iOS 26 rejects for a file URL. Until a token has been
+          used it first explains the hand-off (the page it lands on looks like nothing);
+          after that the link just works. */}
+      <a
+        href={addHref}
+        onClick={(e) => {
+          if (hasUsedToken) return;
+          e.preventDefault();
+          setPreflight(true);
+        }}
+      >
+        Add the Shortcut
+      </a>
+    </Button>
+  );
 
-  const steps = (
-    <ol className="flex flex-col gap-4">
-      <li className="flex flex-col gap-1.5">
-        <p className="font-medium">1. Get the shortcut</p>
-        <Button asChild>
-          {/* A plain https link: no fetch, no blob, no download attribute, and not the
-              shortcuts:// scheme, which iOS 26 rejects for a file URL. Until a token has
-              been used it first explains the hand-off (the page it lands on looks like
-              nothing); after that the link just works. */}
-          <a
-            href={addHref}
-            onClick={(e) => {
-              if (hasUsedToken) return;
-              e.preventDefault();
-              setPreflight(true);
-            }}
-          >
-            Add the Shortcut
-          </a>
-        </Button>
-        <p className="text-muted-foreground text-caption">
-          {icloud
-            ? 'It opens the Shortcuts import screen — tap Get Shortcut, then Add Shortcut.'
-            : 'It opens a file preview — tap Open in Shortcuts, then Add Shortcut.'}
-        </p>
-        <div className="flex flex-col gap-1">
-          <code
-            ref={fileRef}
-            data-testid="shortcut-file-url"
-            className="text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
-          >
-            {addHref}
-          </code>
-          {/* For anyone whose preview gets stuck: paste it into Safari by hand. */}
-          <CopyButton text={addHref} target={fileRef} label="Copy link" />
-          {icloud && (
-            <a
-              href={SHORTCUT_FILE_URL}
-              className="text-primary-text text-caption underline-offset-4 hover:underline"
-            >
-              Use the file link instead
-            </a>
-          )}
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <KeyRound className="text-primary-text size-5" aria-hidden />
+          <span className="font-medium">One-tap photo logging</span>
         </div>
-      </li>
-
-      <li className="flex flex-col gap-1.5">
-        <p className="font-medium">2. Put your token in it</p>
         <p className="text-muted-foreground text-caption">
-          You do this after the shortcut is added, inside the Shortcuts app — not in SnapBite.
-        </p>
-        <p className="text-caption">
-          Open the shortcut → tap the {SHORTCUT_TOKEN_FIELD} field → replace{' '}
-          <code className="font-mono">{SHORTCUT_TOKEN_PLACEHOLDER}</code> with your token (keep the
-          word Bearer and the space after it) → tap Done.
-        </p>
-        <p className="text-muted-foreground text-caption">
-          Your token is the text that starts with <code className="font-mono">sb_</code>. It is
-          shown only once, so copy it first.
-        </p>
-        <p className="text-caption">
-          Then tap Show Notification: set Title to <strong>Meal logged</strong>, Body to Contents of
-          URL, and Attachment to Photo. That is what makes it look like the card in the app.
+          Log a meal from the Action Button or Lock Screen — no app to open.
         </p>
 
+        {!standalone && (
+          <p className="text-muted-foreground text-caption">
+            Add SnapBite to your Home Screen first — the shortcut works without it, but the
+            notification is easier to reach.
+          </p>
+        )}
+
+        {/* The token comes first: both ways below end by pasting it. */}
         {fresh ? (
           <div className="flex flex-col gap-2 rounded-md border border-border p-3">
             <code
@@ -299,63 +303,92 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
             Create Shortcut token
           </Button>
         )}
-      </li>
 
-      <li className="flex flex-col gap-1.5">
-        <p className="font-medium">3. Point the Action Button at it</p>
-        <p className="text-caption">
-          Open Settings → Action Button → Shortcut → SnapBite Log Meal.
-        </p>
-      </li>
-    </ol>
-  );
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <KeyRound className="text-primary-text size-5" aria-hidden />
-          <span className="font-medium">One-tap photo logging</span>
-        </div>
-        <p className="text-muted-foreground text-caption">
-          Hold the Action Button, take a photo, and the notification says what was logged.
-        </p>
-
-        {!standalone && (
-          <p className="text-muted-foreground text-caption">
-            Add SnapBite to your Home Screen first — the shortcut works without it, but the
-            notification is easier to reach.
+        <AccordionRow
+          title="Install with the Shortcuts app"
+          open={panel === 'easy'}
+          onToggle={() => setPanel(panel === 'easy' ? null : 'easy')}
+        >
+          <p className="text-caption">
+            SnapBite gives you a ready-made shortcut. You only add your token.
           </p>
-        )}
-
-        {collapse ? (
-          <details className="group rounded-md border border-border p-3">
-            <summary className="cursor-pointer text-caption font-medium">How it works</summary>
-            <div className="pt-3">{steps}</div>
-          </details>
-        ) : (
-          steps
-        )}
-
-        <details className="text-caption">
-          <summary className="text-muted-foreground cursor-pointer">
-            Can't add it? Set it up by hand
-          </summary>
-          <div className="flex flex-col gap-2 pt-2">
-            <ol className="flex list-decimal flex-col gap-1 pl-5">
-              {HAND_STEPS.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
+          {Add}
+          <div className="flex flex-col gap-1">
             <code
-              ref={urlRef}
-              className="font-mono select-all break-words [overflow-wrap:anywhere]"
+              ref={fileRef}
+              data-testid="shortcut-file-url"
+              className="text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
             >
-              {endpoint}
+              {addHref}
             </code>
-            <CopyButton text={endpoint} target={urlRef} label="Copy URL" />
+            {/* For anyone whose preview gets stuck: paste it into Safari by hand. */}
+            <CopyButton text={addHref} target={fileRef} label="Copy link" />
+            {icloud && (
+              <a
+                href={SHORTCUT_FILE_URL}
+                className="text-primary-text text-caption underline-offset-4 hover:underline"
+              >
+                Use the file link instead
+              </a>
+            )}
           </div>
-        </details>
+          <ol className="text-caption flex list-decimal flex-col gap-1.5 pl-5">
+            <li>Add the Shortcut.</li>
+            <li>
+              {icloud
+                ? 'Tap Get Shortcut, then Add Shortcut.'
+                : 'Tap Open in Shortcuts, then Add Shortcut.'}
+            </li>
+            <li>
+              Open the shortcut, tap {SHORTCUT_TOKEN_FIELD}, replace{' '}
+              <code className="font-mono">{SHORTCUT_TOKEN_PLACEHOLDER}</code> with your token from
+              above, keeping the word Bearer and one space.
+            </li>
+            <li>Settings → Action Button → Shortcut → SnapBite Log Meal.</li>
+          </ol>
+          <p className="text-muted-foreground text-caption">
+            Hold the Action Button, take a photo, the notification tells you what was logged.
+          </p>
+        </AccordionRow>
+
+        <AccordionRow
+          title="Set it up by hand"
+          open={panel === 'hand'}
+          onToggle={() => setPanel(panel === 'hand' ? null : 'hand')}
+        >
+          <ol className="text-caption flex list-decimal flex-col gap-2 pl-5">
+            <li>Take Photo — turn on Show Camera Preview.</li>
+            <li>Convert Image → JPEG, quality 0.6.</li>
+            <li>
+              Get Contents of URL:
+              <ul className="mt-1 flex list-disc flex-col gap-0.5 pl-4">
+                <li className="break-words [overflow-wrap:anywhere]">
+                  URL{' '}
+                  <code ref={urlRef} className="font-mono">
+                    {SHORTCUT_LOG_URL}
+                  </code>
+                </li>
+                <li>Method POST, Request Body Form.</li>
+                <li>
+                  New field <code className="font-mono">photo</code>, type File, value Converted
+                  Image.
+                </li>
+                <li>
+                  Header <code className="font-mono">{SHORTCUT_TOKEN_FIELD}</code> = Bearer, a
+                  space, then your token.
+                </li>
+              </ul>
+              <CopyButton text={SHORTCUT_LOG_URL} target={urlRef} label="Copy URL" />
+            </li>
+            <li>
+              Show Notification → Title Meal logged, Body Contents of URL, Attachment Converted
+              Image.
+            </li>
+          </ol>
+          <p className="text-muted-foreground text-caption">
+            Convert Image is not optional: iPhones shoot HEIC and the server only accepts JPEG.
+          </p>
+        </AccordionRow>
 
         {error && (
           <p className="text-destructive text-caption" role="alert">
