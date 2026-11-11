@@ -12,9 +12,9 @@ import {
 } from '@snapbite/core';
 import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { Me } from '../lib/account.js';
 import { readConfig } from '../lib/config.js';
 import { markKeyDecision } from '../lib/onboarding.js';
-import type { Me } from './AccountCard.js';
 import { KeyHelp } from './KeyHelp.js';
 import { LinkifiedHint } from './LinkifiedHint.js';
 import { ProfileForm } from './ProfileForm.js';
@@ -29,6 +29,13 @@ interface OnboardingScreenProps {
   onDone: (targets: DailyTargets) => void;
   onSkip: () => void;
   onToast?: (kind: ToastKind, message: string) => void;
+  /**
+   * The browser is already signed in (decided by App before this mounts). Setup
+   * then opens on the form alone: no welcome, no intro, no scroll hint, no
+   * animation into place. Someone who identified themselves is not asked to
+   * start over.
+   */
+  account?: { email: string | null } | null;
 }
 
 /**
@@ -86,6 +93,7 @@ export function OnboardingScreen({
   onSkip,
   onToast,
   startAtKeyStep,
+  account: signedInAccount = null,
 }: OnboardingScreenProps) {
   const [step, setStep] = useState<'profile' | 'apikey'>(() => {
     const resume = readResume();
@@ -107,31 +115,22 @@ export function OnboardingScreen({
       typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true,
   );
+  // Signed in already: only the form (never during the key step, which is its own page).
+  const signedInStart = signedInAccount !== null && step === 'profile';
   const [cueShown, setCueShown] = useState(reduced);
   useEffect(() => {
-    if (cueShown) return;
+    if (cueShown || signedInStart) return;
     const timer = window.setTimeout(() => setCueShown(true), CUE_MS);
     return () => window.clearTimeout(timer);
-  }, [cueShown]);
+  }, [cueShown, signedInStart]);
 
   // The form mounts the first time its panel is reached and then stays mounted
   // (off-screen, not destroyed) so scrolling back keeps what was typed.
-  //
-  // Someone arriving from Google/email sign-in has already seen the welcome and
-  // is signed in: they land on the form, with no skeleton and no scrolling.
-  // `?auth=ok` is the hint that survives the redirect's page reload; /me
-  // (below) is what confirms it.
-  const [arrivedFromSignIn] = useState(
-    () =>
-      typeof window !== 'undefined' &&
-      new URLSearchParams(window.location.search).get('auth') === 'ok' &&
-      step === 'profile',
-  );
-  const [reached, setReached] = useState(arrivedFromSignIn);
-  const [skeletonDone, setSkeletonDone] = useState(reduced || arrivedFromSignIn);
-  // Position the form instantly and put the cursor in it (once it exists).
-  const [arrival, setArrival] = useState(arrivedFromSignIn);
-  const [account, setAccount] = useState<{ email: string | null } | null>(null);
+  const [reached, setReached] = useState(signedInStart);
+  const [skeletonDone, setSkeletonDone] = useState(reduced || signedInStart);
+  // Position the form and put the cursor in it (once it exists).
+  const [arrival, setArrival] = useState(signedInStart);
+  const [account, setAccount] = useState<{ email: string | null } | null>(signedInAccount);
   useEffect(() => {
     if (!reached || skeletonDone) return;
     const timer = window.setTimeout(() => setSkeletonDone(true), SKELETON_MS);
@@ -147,7 +146,7 @@ export function OnboardingScreen({
   // Sign-in is a second full-screen layer over the panels, which stay mounted
   // (inert) so Back finds the welcome and the typed form untouched. It owns one
   // history entry, so the phone's Back closes it instead of leaving setup.
-  const canSignIn = backend.mode === 'worker' && readConfig().workerUrl !== '';
+  const canSignIn = backend.mode === 'worker' && readConfig().hasBackend;
   const [signInOpen, setSignInOpen] = useState(false);
   const signInTrigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -193,10 +192,11 @@ export function OnboardingScreen({
 
   // Landing straight on the form panel, no animation (not a gesture of the user).
   useLayoutEffect(() => {
-    if (arrival && formReady) {
+    // With no welcome above it there is nothing to scroll past.
+    if (arrival && formReady && !signedInStart) {
       formPanel.current?.scrollIntoView?.({ behavior: 'instant', block: 'start' });
     }
-  }, [arrival, formReady]);
+  }, [arrival, formReady, signedInStart]);
   // After the sign-in layer has given focus back (its cleanup runs first), move
   // focus to the first empty field. No keyboard opens without a tap on iOS.
   useEffect(() => {
@@ -215,33 +215,6 @@ export function OnboardingScreen({
     setSkeletonDone(true);
     setArrival(true);
   }, []);
-
-  // Already signed in (this is a cold start after the OAuth redirect, or a
-  // signed-in person with no goal yet): the welcome is not for them.
-  useEffect(() => {
-    if (!canSignIn || step !== 'profile') return;
-    let live = true;
-    fetch(`${readConfig().workerUrl}/api/auth/me`, { credentials: 'include' })
-      .then((r) => (r.ok ? (r.json() as Promise<Me>) : null))
-      .then((me) => {
-        if (!live) return;
-        if (arrivedFromSignIn) {
-          window.history.replaceState(window.history.state, '', window.location.pathname);
-        }
-        if (me?.signedIn) {
-          setAccount({ email: me.email });
-          showForm();
-        } else if (arrivedFromSignIn) {
-          // The hint was wrong (e.g. the session was not kept): back to the welcome.
-          setArrival(false);
-          formPanel.current?.parentElement?.scrollTo?.({ top: 0 });
-        }
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [canSignIn, step, arrivedFromSignIn, showForm]);
 
   function onScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
@@ -394,63 +367,65 @@ export function OnboardingScreen({
           typing ? 'snap-none' : 'snap-mandatory',
         )}
       >
-        <section
-          data-testid="onboarding-intro"
-          className="relative flex h-[100svh] snap-start snap-always flex-col items-center justify-center gap-2 px-4 pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))] text-center"
-        >
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground absolute top-[calc(0.5rem+env(safe-area-inset-top))] right-3"
-            disabled={saving}
-            onClick={onSkip}
+        {!signedInStart && (
+          <section
+            data-testid="onboarding-intro"
+            className="relative flex h-[100svh] snap-start snap-always flex-col items-center justify-center gap-2 px-4 pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))] text-center"
           >
-            Skip for now
-          </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground absolute top-[calc(0.5rem+env(safe-area-inset-top))] right-3"
+              disabled={saving}
+              onClick={onSkip}
+            >
+              Skip for now
+            </Button>
 
-          <h1 className="motion-safe:animate-in motion-safe:fade-in font-display text-display leading-tight duration-500">
-            Welcome
-            <br />
-            to SnapBite
-          </h1>
-          <p className="text-muted-foreground text-caption">Let&rsquo;s set up your targets.</p>
+            <h1 className="motion-safe:animate-in motion-safe:fade-in font-display text-display leading-tight duration-500">
+              Welcome
+              <br />
+              to SnapBite
+            </h1>
+            <p className="text-muted-foreground text-caption">Let&rsquo;s set up your targets.</p>
 
-          <div className="absolute inset-x-0 bottom-[calc(0.5rem+env(safe-area-inset-bottom))] flex flex-col items-center">
-            {cueShown && (
-              // A button, not decoration: it is the keyboard and switch path to the
-              // form. The arrow is hidden from assistive tech; the words carry it.
-              <button
-                type="button"
-                data-testid="scroll-cue"
-                onClick={scrollToForm}
-                className="motion-safe:animate-in motion-safe:fade-in text-muted-foreground text-caption flex w-fit flex-col items-center gap-1 rounded-md px-3 py-2 duration-500 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-              >
-                <span>Scroll down to set your goal</span>
-                <ArrowDown
-                  className="text-primary-text motion-safe:animate-drift size-5"
-                  aria-hidden
-                />
-              </button>
-            )}
+            <div className="absolute inset-x-0 bottom-[calc(0.5rem+env(safe-area-inset-bottom))] flex flex-col items-center">
+              {cueShown && (
+                // A button, not decoration: it is the keyboard and switch path to the
+                // form. The arrow is hidden from assistive tech; the words carry it.
+                <button
+                  type="button"
+                  data-testid="scroll-cue"
+                  onClick={scrollToForm}
+                  className="motion-safe:animate-in motion-safe:fade-in text-muted-foreground text-caption flex w-fit flex-col items-center gap-1 rounded-md px-3 py-2 duration-500 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  <span>Scroll down to set your goal</span>
+                  <ArrowDown
+                    className="text-primary-text motion-safe:animate-drift size-5"
+                    aria-hidden
+                  />
+                </button>
+              )}
 
-            {canSignIn && !account && (
-              // Quiet on purpose: text, not a filled button, under the scroll cue.
-              // The whole row is the target (44px+), so the lead-in is tappable too.
-              <button
-                type="button"
-                ref={signInTrigger}
-                data-testid="signin-link"
-                onClick={() => setSignInOpen(true)}
-                className="text-muted-foreground text-caption flex min-h-11 items-center gap-1 rounded-md px-4 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-              >
-                Already have an account?
-                <span className="text-primary-text font-medium underline underline-offset-4">
-                  Sign in
-                </span>
-              </button>
-            )}
-          </div>
-        </section>
+              {canSignIn && !account && (
+                // Quiet on purpose: text, not a filled button, under the scroll cue.
+                // The whole row is the target (44px+), so the lead-in is tappable too.
+                <button
+                  type="button"
+                  ref={signInTrigger}
+                  data-testid="signin-link"
+                  onClick={() => setSignInOpen(true)}
+                  className="text-muted-foreground text-caption flex min-h-11 items-center gap-1 rounded-md px-4 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  Already have an account?
+                  <span className="text-primary-text font-medium underline underline-offset-4">
+                    Sign in
+                  </span>
+                </button>
+              )}
+            </div>
+          </section>
+        )}
 
         <section
           ref={formPanel}

@@ -87,7 +87,7 @@ Secrets are never committed. Local files are gitignored.
 
 - **Root `.env`** — `DEEPSEEK_API_KEY` (or other provider key) for CLI/real tests.
 - **`apps/worker/.dev.vars`** — local Worker secrets: `TELEGRAM_BOT_TOKEN`, `ENCRYPTION_KEY` (base64 of 32 bytes), `MINI_APP_URL`, `TELEGRAM_WEBHOOK_SECRET`, and `ADMIN_TELEGRAM_ID` (your numeric Telegram id; gates admin bot commands + error/feedback alerts — optional, storage works without it).
-- **`apps/miniapp` build** — `VITE_WORKER_URL` points the app at the deployed Worker (empty = mock mode).
+- **`apps/miniapp` build** — a production build (`build:prod`) calls `/api` on its own origin, where `functions/api/[[path]].ts` proxies to the Worker; do **not** set `VITE_WORKER_URL` for it. `VITE_WORKER_URL` is for `dev` and `build:local` (point localhost at a Worker); empty in dev = mock mode.
 
 Production secrets are set with `wrangler secret put` and are not stored in the repo.
 
@@ -105,7 +105,8 @@ wrangler d1 migrations apply snapbite-db --remote
 pnpm --filter @snapbite/worker exec wrangler deploy
 
 # Mini App (Pages)
-VITE_WORKER_URL=https://<worker-url> pnpm --filter @snapbite/miniapp build
+pnpm --filter @snapbite/miniapp run build:prod   # same-origin API; no VITE_WORKER_URL
+pnpm --filter @snapbite/miniapp run check:bundle # aborts if a workers.dev address got compiled in
 pnpm --filter @snapbite/miniapp exec wrangler pages deploy dist --project-name=snapbite
 # `apps/miniapp/functions/api/[[path]].ts` is a Pages Function that proxies /api/* to the Worker
 # (same-origin API, first-party session cookie). `wrangler pages deploy` finds `functions/` in the

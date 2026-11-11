@@ -10,8 +10,10 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run",
-    "build:prod": "VITE_WORKER_URL=https://snapbite-worker.lgf2111.workers.dev pnpm build",
-    "deploy": "pnpm build:prod && node -e \"const fs=require('fs');const dir='dist/assets';const hit=fs.readdirSync(dir).some(f=>f.endsWith('.js')&&fs.readFileSync(dir+'/'+f,'utf8').includes('snapbite-worker.lgf2111.workers.dev'));if(!hit){console.error('\\nABORT: built bundle has no worker URL baked in (would deploy in mock/demo mode). Set VITE_WORKER_URL.');process.exit(1)}console.log('worker URL baked in ✓')\" && wrangler pages deploy dist --project-name=snapbite --branch=main --commit-dirty=true"
+    "build:prod": "VITE_WORKER_URL= pnpm build",
+    "deploy": "pnpm build:prod && pnpm check:bundle && wrangler pages deploy dist --project-name=snapbite --branch=main --commit-dirty=true",
+    "build:local": "node -e \"if(!process.env.VITE_WORKER_URL){console.error('Set VITE_WORKER_URL (e.g. http://localhost:8787, or a deployed Worker) for a local build.');process.exit(1)}\" && pnpm build",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.4",

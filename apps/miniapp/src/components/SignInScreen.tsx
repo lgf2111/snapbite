@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { AccountCard, type Me } from './AccountCard.js';
+import type { Me } from '../lib/account.js';
+import { AccountCard } from './AccountCard.js';
 import { Button } from './ui/button.js';
 
 interface Props {
