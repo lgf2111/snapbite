@@ -9,7 +9,7 @@ export const CAPTURE_ACTIONS: Record<
   CaptureAction,
   { title: string; hint: string; Icon: LucideIcon }
 > = {
-  saved: { title: 'Use saved meals', hint: 'Re-log a favourite', Icon: Star },
+  saved: { title: 'Saved meals', hint: 'Re-log a favourite', Icon: Star },
   manual: { title: 'Manually log', hint: 'Type it in', Icon: Keyboard },
   upload: { title: 'Upload image', hint: 'From your photos', Icon: ImageIcon },
   photo: { title: 'Take photo', hint: 'Use the camera', Icon: Camera },
