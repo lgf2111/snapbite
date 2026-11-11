@@ -38,9 +38,14 @@ export function Calendar({
         day_button: cn(
           'inline-flex size-9 items-center justify-center rounded-md font-normal transition-[transform,background-color,color] duration-[120ms] active:scale-90 motion-reduce:active:scale-100 hover:bg-accent hover:text-accent-foreground aria-selected:opacity-100',
         ),
+        // The selected day is the one filled pill, and owns its text colour. Today
+        // is marked with an inset ring and weight only: it sets no text colour, so
+        // the day that is both (usually) cannot end up with primary text on a
+        // primary fill, which two competing `text-*` utilities did.
         selected:
-          '[&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:hover:bg-primary',
-        today: '[&>button]:font-semibold [&>button]:text-primary-text',
+          '[&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:hover:bg-primary [&>button]:hover:text-primary-foreground',
+        today:
+          '[&>button]:font-semibold [&>button]:ring-1 [&>button]:ring-inset [&>button]:ring-primary-text',
         outside: 'text-muted-foreground/50',
         disabled: 'text-muted-foreground opacity-40',
         hidden: 'invisible',
