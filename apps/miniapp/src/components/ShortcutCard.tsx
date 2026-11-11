@@ -266,6 +266,13 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
           Log a meal from the Action Button or Lock Screen — no app to open.
         </p>
 
+        {installPlatform() === 'android' && (
+          <p className="text-caption">
+            On Android there is no Action Button. Long-press the SnapBite icon and pick Take a
+            photo, or share a photo to SnapBite from your gallery.
+          </p>
+        )}
+
         {!standalone && (
           <p className="text-muted-foreground text-caption">
             Add SnapBite to your Home Screen first — the shortcut works without it, but the

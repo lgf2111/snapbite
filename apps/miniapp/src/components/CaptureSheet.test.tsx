@@ -1,4 +1,5 @@
 import type { Backend } from '@/lib/backend';
+import { notifyLogged } from '@/lib/mealNotice';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,7 +16,12 @@ vi.mock('../lib/compress.js', () => ({
   })),
 }));
 
-function setup(open = true, over: Record<string, unknown> = {}) {
+vi.mock('../lib/mealNotice.js', async (orig) => ({
+  ...(await orig<typeof import('../lib/mealNotice.js')>()),
+  notifyLogged: vi.fn(async () => true),
+}));
+
+function setup(open = true, over: Record<string, unknown> = {}, props = {}) {
   const trigger = document.createElement('button');
   document.body.append(trigger);
   const backend = {
@@ -29,6 +35,7 @@ function setup(open = true, over: Record<string, unknown> = {}) {
   const onLogged = vi.fn();
   const onToast = vi.fn();
   const onBatchStatus = vi.fn();
+  const onIntentHandled = vi.fn();
   const { container } = render(
     <>
       <CaptureSheet
@@ -40,6 +47,8 @@ function setup(open = true, over: Record<string, unknown> = {}) {
         onManualLogged={vi.fn()}
         onToast={onToast}
         onBatchStatus={onBatchStatus}
+        onIntentHandled={onIntentHandled}
+        {...props}
       />
       <Toaster />
     </>,
@@ -47,7 +56,17 @@ function setup(open = true, over: Record<string, unknown> = {}) {
   const inputs = [...container.querySelectorAll<HTMLInputElement>('input[type=file]')];
   const camera = inputs.find((i) => i.hasAttribute('capture')) as HTMLInputElement;
   const library = inputs.find((i) => !i.hasAttribute('capture')) as HTMLInputElement;
-  return { backend, onOpenChange, camera, library, trigger, onLogged, onToast, onBatchStatus };
+  return {
+    backend,
+    onOpenChange,
+    camera,
+    library,
+    trigger,
+    onLogged,
+    onToast,
+    onBatchStatus,
+    onIntentHandled,
+  };
 }
 
 const RESULT = {
@@ -74,6 +93,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   toast.dismiss();
+  vi.mocked(notifyLogged).mockClear();
   for (const el of document.querySelectorAll('body > button')) el.remove();
 });
 
@@ -315,5 +335,59 @@ describe('uploading several photos from the library', () => {
     release();
     await waitFor(() => expect(backend.logWithPhoto).toHaveBeenCalledTimes(2));
     expect(analyze).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('launch intents and the after-save notification', () => {
+  it('a camera shortcut opens the menu with Take photo highlighted, not the camera', async () => {
+    const { onOpenChange, onIntentHandled, camera } = setup(
+      true,
+      {},
+      {
+        intent: { type: 'menu', highlight: 'photo' },
+      },
+    );
+    const click = vi.spyOn(camera, 'click');
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(true));
+    expect(screen.getByRole('button', { name: /take photo/i })).toHaveAttribute(
+      'data-highlighted',
+      'true',
+    );
+    expect(click).not.toHaveBeenCalled();
+    expect(onIntentHandled).toHaveBeenCalledTimes(1);
+  });
+
+  it('a photo shared to SnapBite goes straight into review with the photo attached', async () => {
+    const { backend, onIntentHandled } = setup(
+      false,
+      {},
+      {
+        intent: { type: 'file', file: photo('shared.jpg') },
+      },
+    );
+
+    await waitFor(() =>
+      expect(backend.analyze).toHaveBeenCalledWith('b64:shared.jpg', 'image/jpeg'),
+    );
+    expect(await screen.findByText('Log this meal?')).toBeTruthy();
+    // The same preview the upload path draws.
+    expect(document.querySelector('img')?.getAttribute('src')).toMatch(/^blob:/);
+    expect(onIntentHandled).toHaveBeenCalledTimes(1);
+  });
+
+  it('posts the local notification only after a capture has been saved', async () => {
+    const { library, backend } = setup(false);
+    expect(notifyLogged).not.toHaveBeenCalled();
+
+    pick(library, photo('lunch.jpg'));
+    await screen.findByText('Log this meal?');
+    expect(notifyLogged).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save meal' }));
+    await waitFor(() => expect(backend.logWithPhoto).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(notifyLogged).toHaveBeenCalledWith('Meal logged', '500 kcal — Meal'),
+    );
   });
 });

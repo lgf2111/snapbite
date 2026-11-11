@@ -51,6 +51,11 @@ interface Props {
   onPick: (action: CaptureAction) => void;
   /** The camera button: the origin the cards grow from, and where focus returns. */
   triggerRef: RefObject<HTMLElement | null>;
+  /**
+   * A card to draw attention to and focus on open (a launch from the icon's
+   * "Take a photo" shortcut): the next tap on it is the shutter.
+   */
+  highlight?: CaptureAction | null;
 }
 
 /**
@@ -62,7 +67,7 @@ interface Props {
  * backwards before unmounting. Under reduced motion there is no travel, stagger
  * or fade: it simply appears and disappears.
  */
-export function CaptureMenu({ open, onClose, onPick, triggerRef }: Props) {
+export function CaptureMenu({ open, onClose, onPick, triggerRef, highlight = null }: Props) {
   const [present, setPresent] = useState(open);
   const [shown, setShown] = useState(false);
   const [origins, setOrigins] = useState<Array<{ x: number; y: number }>>([]);
@@ -128,10 +133,12 @@ export function CaptureMenu({ open, onClose, onPick, triggerRef }: Props) {
     );
   }, [present, triggerRef]);
 
-  // Focus into the first card on open.
+  // Focus into the first card on open, or the highlighted one.
   useEffect(() => {
-    if (open && present) cards.current[0]?.focus({ preventScroll: true });
-  }, [open, present]);
+    if (!open || !present) return;
+    const at = highlight ? CARDS.findIndex((c) => c.id === highlight) : 0;
+    cards.current[Math.max(0, at)]?.focus({ preventScroll: true });
+  }, [open, present, highlight]);
 
   // Back closes the menu instead of leaving the page.
   useEffect(() => {
@@ -236,7 +243,8 @@ export function CaptureMenu({ open, onClose, onPick, triggerRef }: Props) {
                     picked.current = true;
                     onPick(id);
                   }}
-                  className="flex min-h-24 w-full flex-col items-start gap-2 rounded-lg border border-border bg-card p-4 text-left text-card-foreground shadow-lg focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                  data-highlighted={highlight === id ? 'true' : undefined}
+                  className="flex min-h-24 w-full flex-col items-start gap-2 rounded-lg border border-border bg-card p-4 text-left text-card-foreground shadow-lg focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none data-[highlighted=true]:border-primary data-[highlighted=true]:ring-2 data-[highlighted=true]:ring-primary"
                   style={{
                     pointerEvents: shown ? 'auto' : 'none',
                     opacity: shown ? 1 : 0,

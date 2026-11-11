@@ -1,10 +1,13 @@
 /*
- * SnapBite service worker: web push, nothing else.
+ * SnapBite service worker: web push, local notifications, and the Android share
+ * target.
  *
  * Hand-written and served from the site root on purpose: no bundler plugin, no
- * Workbox. It does not cache anything and does not intercept fetches; the app
- * works exactly as it did without it. It exists so the browser has somewhere to
- * deliver a push (iOS 16.4+ does so only for an installed Home Screen app).
+ * Workbox. It does not cache the app and intercepts exactly one request: the POST
+ * the Android share sheet makes to /share-target (see the fetch handler below). The
+ * app works exactly as it did without it otherwise. It exists so the browser has
+ * somewhere to deliver a push (iOS 16.4+ does so only for an installed Home Screen
+ * app), and somewhere to receive a shared photo.
  */
 
 self.addEventListener('install', () => {
@@ -82,6 +85,54 @@ self.addEventListener('pushsubscriptionchange', (event) => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(subscription.toJSON()),
       });
+    })(),
+  );
+});
+
+/*
+ * Share target. Sharing a photo to SnapBite from Android's share sheet makes the
+ * browser POST multipart/form-data to /share-target (see manifest.webmanifest). A
+ * page cannot receive a POST, so this worker does: it parks the photo in the Cache
+ * API under a fixed key and answers with a redirect to /?shared=1, where the app
+ * picks it up (src/lib/shareTarget.ts) and runs it through the normal capture flow.
+ * Keep the cache name and keys in step with that file.
+ */
+const SHARE_CACHE = 'snapbite-share';
+const SHARE_PHOTO_KEY = '/__share__/photo';
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.method !== 'POST') return;
+  if (new URL(request.url).pathname !== '/share-target') return;
+
+  event.respondWith(
+    (async () => {
+      try {
+        const form = await request.formData();
+        const photo = form.get('photo');
+        // A share can be text only (a link, a caption): then there is nothing to log,
+        // and the app says so.
+        if (photo && typeof photo !== 'string') {
+          const cache = await caches.open(SHARE_CACHE);
+          // Read the bytes explicitly: a Response built from a File is fine in a
+          // browser, but this keeps the body plain and byte-exact everywhere.
+          await cache.put(
+            SHARE_PHOTO_KEY,
+            new Response(await photo.arrayBuffer(), {
+              headers: {
+                'content-type': photo.type || 'image/jpeg',
+                // A filename can be any Unicode: header values cannot. Encode it (see
+                // shareTarget.ts for the matching decode).
+                'x-filename': encodeURIComponent(photo.name || 'shared.jpg'),
+              },
+            }),
+          );
+        }
+      } catch {
+        // Fall through to the redirect: the app reports an empty share.
+      }
+      // 303: the browser follows a POST with a GET, so the app loads normally.
+      return Response.redirect(new URL('/?shared=1', self.location.origin).href, 303);
     })(),
   );
 });
