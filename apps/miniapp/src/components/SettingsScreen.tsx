@@ -50,6 +50,7 @@ import {
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AccountCard } from './AccountCard.js';
+import { ExternalLink } from './ExternalLink.js';
 import { InfoDisclosure } from './InfoDisclosure.js';
 import { LinkifiedHint } from './LinkifiedHint.js';
 import { MacroLine } from './MacroLine.js';
@@ -136,14 +137,9 @@ function KeyGuide({ provider }: { provider: ProviderId }) {
           <li key={s}>{s}</li>
         ))}
       </ol>
-      <a
-        href={guide.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-primary-text underline"
-      >
+      <ExternalLink href={guide.url} className="text-primary-text underline">
         Open {new URL(guide.url).host} ↗
-      </a>
+      </ExternalLink>
     </InfoDisclosure>
   );
 }
