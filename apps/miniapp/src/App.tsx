@@ -85,10 +85,9 @@ export function App() {
         }
       })
       .catch(() => {
-        if (!cached) {
-          setTargets(null);
-          setHasProfile(false);
-        }
+        // Could not reach the server: we do not know whether this account has a
+        // profile, so do not guess "no" and greet a returning user with the
+        // welcome. Home's "Set goal" card is the way in until we can tell.
       });
   };
 
@@ -104,14 +103,16 @@ export function App() {
     [],
   );
 
-  // First-run onboarding (skippable): open on the first load with no profile.
-  // Dismissing records a decision, so later launches land on Home with the
-  // "Set goal" card instead of re-opening the sheet every time.
+  // Welcome: shown on every launch where the account has nothing at all (no
+  // profile and no targets). The account decides, not a flag in localStorage.
+  // `onboardingSkipped` is in-memory on purpose: Skip hides setup for this
+  // session, and the next launch shows the welcome again. A profile without
+  // targets lands on Home with the "Set goal" card instead.
   useEffect(() => {
-    if (hasProfile === false && !onboardingSkipped && keyDecision() === null) {
+    if (hasProfile === false && targets === null && !onboardingSkipped) {
       setShowOnboarding(true);
     }
-  }, [hasProfile, onboardingSkipped]);
+  }, [hasProfile, targets, onboardingSkipped]);
 
   const openMeal = (meal: RecentMeal) => {
     setDetailMeal(meal);
@@ -124,9 +125,11 @@ export function App() {
    * (Skip, Escape, Back) is a skip, so nobody is trapped in setup.
    */
   const finishOnboarding = (opts: { targets?: DailyTargets | null; skipped?: boolean } = {}) => {
-    markKeyDecision(opts.skipped ? 'skipped' : 'set');
+    // Skipping persists nothing: the key step records its own decision, and a
+    // skipped welcome must come back next launch.
     if (opts.skipped) setOnboardingSkipped(true);
     else {
+      markKeyDecision('set');
       if (opts.targets) setTargets(opts.targets);
       setHasProfile(true);
     }

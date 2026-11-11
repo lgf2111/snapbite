@@ -62,7 +62,9 @@ function readResume(): ResumeState | null {
     const raw = localStorage.getItem(RESUME_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as ResumeState;
-    return parsed.step === 'apikey' || parsed.step === 'profile' ? parsed : null;
+    // Only the key step is a place someone genuinely left. Older builds wrote
+    // `profile` on mount for people who never got past the welcome.
+    return parsed.step === 'apikey' ? parsed : null;
   } catch {
     return null;
   }
@@ -160,6 +162,7 @@ export function OnboardingScreen({
           return;
         }
         setSignInOpen(false);
+        writeResume({ step: 'apikey', provider });
         setStep('apikey');
         return;
       }
@@ -185,11 +188,13 @@ export function OnboardingScreen({
   const [provider, setProvider] = useState<ProviderId>(() => readResume()?.provider ?? 'gemini');
   const [apiKey, setApiKey] = useState('');
 
-  // Remember only *where* the user got to (step + provider). The key itself is
-  // never written to disk — it is a live credential, and the form is one paste.
-  useEffect(() => {
-    writeResume({ step, provider });
-  }, [step, provider]);
+  // Remember only *where* the user got to (step + provider), and only once they
+  // have advanced: writing on mount recorded a half-finished step for people who
+  // never left the welcome. The key itself is never written to disk.
+  function chooseProvider(next: ProviderId) {
+    setProvider(next);
+    writeResume({ step: 'apikey', provider: next });
+  }
 
   async function saveProfile(profile: UserProfile) {
     setSaving(true);
@@ -203,6 +208,7 @@ export function OnboardingScreen({
         onDone(targets);
       } else {
         setSaving(false);
+        writeResume({ step: 'apikey', provider });
         setStep('apikey');
       }
     } catch (e) {
@@ -250,7 +256,7 @@ export function OnboardingScreen({
               id="onb-provider"
               className="border-input text-body h-9 rounded-md border bg-transparent px-3"
               value={provider}
-              onChange={(e) => setProvider(e.target.value as ProviderId)}
+              onChange={(e) => chooseProvider(e.target.value as ProviderId)}
             >
               {Object.values(PROVIDER_PRESETS).map((p) => (
                 <option key={p.id} value={p.id}>

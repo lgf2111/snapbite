@@ -1,6 +1,10 @@
 /**
  * Whether the optional AI-key step has been dealt with on this device.
  *
+ * This is about the KEY step only. It must never decide whether the welcome
+ * shows: that is the account's own state (no profile and no targets), so a
+ * skipped welcome comes back on the next launch.
+ *
  * The onboarding gate reopens whenever a profile exists but no key is connected,
  * which is right after a reload mid-setup — and wrong the moment someone chooses
  * "track meals manually", because that choice then never sticks and the key step
