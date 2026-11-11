@@ -78,7 +78,7 @@ export function Step({
 }) {
   return (
     <li className="flex gap-3">
-      <span className="bg-primary/15 text-primary mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
+      <span className="bg-primary/15 text-primary-text mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
         {n}
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-2">

@@ -291,7 +291,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="goal">Goal</Label>
-          <span className="text-primary text-sm font-medium">{GOAL_LABELS[goal]}</span>
+          <span className="text-primary-text text-sm font-medium">{GOAL_LABELS[goal]}</span>
         </div>
         <input
           id="goal"
@@ -398,7 +398,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
           href="https://pubmed.ncbi.nlm.nih.gov/2305711/"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary underline"
+          className="text-primary-text underline"
         >
           Source: Mifflin–St Jeor (1990)
         </a>

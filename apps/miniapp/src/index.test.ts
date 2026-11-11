@@ -53,7 +53,9 @@ const TEXT_PAIRS: Array<[string, string, number]> = [
   ['muted-foreground', 'background', 4.5],
   ['foreground', 'card', 4.5],
   ['muted-foreground', 'card', 4.5],
-  ['primary', 'background', 4.5],
+
+  ['primary-text', 'background', 4.5],
+  ['primary-text', 'card', 4.5],
   ['primary-foreground', 'primary', 4.5],
   ['destructive', 'background', 4.5],
   ['success', 'background', 4.5],
@@ -72,6 +74,7 @@ describe.each(['light', 'dark'] as const)('%s palette', (mode) => {
       'popover',
       'primary',
       'primary-foreground',
+      'primary-text',
       'secondary',
       'muted',
       'muted-foreground',
@@ -87,6 +90,14 @@ describe.each(['light', 'dark'] as const)('%s palette', (mode) => {
     ]) {
       expect(vars[name], `${mode}: --${name}`).toMatch(/^#[0-9a-f]{6}$/);
     }
+  });
+
+  it('keeps primary readable as a filled surface, not as text', () => {
+    // A bright accent cannot also be 4.5:1 on a light page; that is why text
+    // links use --primary-text. What primary must do is separate from the
+    // surface it sits on, which is a 2:1 large-shape requirement here.
+    const ratio = contrast(vars.primary as string, vars.background as string);
+    expect(Number(ratio.toFixed(2))).toBeGreaterThanOrEqual(2);
   });
 
   it.each(TEXT_PAIRS)('%s on %s meets %.1f:1', (fg, bg, min) => {

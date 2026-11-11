@@ -148,7 +148,7 @@ export function ManualMealDialog({
                       onClick={() => pickFavorite(fav)}
                       className="border-input hover:bg-accent flex min-w-0 flex-1 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50"
                     >
-                      <Star className="text-primary size-4 shrink-0 fill-current" />
+                      <Star className="text-primary-text size-4 shrink-0 fill-current" />
                       <span className="min-w-0 flex-1 truncate">{fav.label}</span>
                       {fav.energyKcal != null && (
                         <span className="text-muted-foreground shrink-0 text-xs">

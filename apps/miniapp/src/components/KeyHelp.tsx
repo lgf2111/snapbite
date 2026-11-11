@@ -222,7 +222,7 @@ export function KeyHelp() {
                 <Step n={2} title="Open Google AI Studio">
                   <ExternalLink
                     href="https://aistudio.google.com/apikey"
-                    className="text-primary text-xs break-all underline underline-offset-2"
+                    className="text-primary-text text-xs break-all underline underline-offset-2"
                   >
                     aistudio.google.com/apikey
                   </ExternalLink>
@@ -328,13 +328,13 @@ export function KeyHelp() {
               </p>
               <ol className="flex flex-col gap-2 text-xs">
                 <li className="flex gap-2">
-                  <span className="text-primary">1.</span>
+                  <span className="text-primary-text">1.</span>
                   <span>
                     Press <strong className="text-foreground">Create API key</strong>.
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="text-primary">2.</span>
+                  <span className="text-primary-text">2.</span>
                   <span>
                     In the project dropdown choose{' '}
                     <strong className="text-foreground">+ Create project</strong> (it is the
@@ -342,7 +342,7 @@ export function KeyHelp() {
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="text-primary">3.</span>
+                  <span className="text-primary-text">3.</span>
                   <span>
                     Type a name — <code className="font-mono">SnapBite</code> works — and press{' '}
                     <strong className="text-foreground">Create project</strong>. Wait for “New
@@ -350,7 +350,7 @@ export function KeyHelp() {
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="text-primary">4.</span>
+                  <span className="text-primary-text">4.</span>
                   <span>Press Create key. Your key now belongs to that project.</span>
                 </li>
               </ol>
@@ -363,7 +363,7 @@ export function KeyHelp() {
                 Prefer the Cloud console instead?{' '}
                 <ExternalLink
                   href="https://console.cloud.google.com/projectcreate"
-                  className="text-primary underline underline-offset-2"
+                  className="text-primary-text underline underline-offset-2"
                 >
                   console.cloud.google.com/projectcreate
                 </ExternalLink>{' '}
@@ -388,12 +388,12 @@ export function KeyHelp() {
                 <p className="text-foreground text-xs font-medium">Delete a key</p>
                 <ol className="flex flex-col gap-2 text-xs">
                   <li className="flex gap-2">
-                    <span className="text-primary">1.</span>
+                    <span className="text-primary-text">1.</span>
                     <span>
                       Open{' '}
                       <ExternalLink
                         href="https://aistudio.google.com/apikey"
-                        className="text-primary underline underline-offset-2"
+                        className="text-primary-text underline underline-offset-2"
                       >
                         aistudio.google.com/apikey
                       </ExternalLink>{' '}
@@ -401,14 +401,14 @@ export function KeyHelp() {
                     </span>
                   </li>
                   <li className="flex gap-2">
-                    <span className="text-primary">2.</span>
+                    <span className="text-primary-text">2.</span>
                     <span>
                       Tap the <strong className="text-foreground">⋮</strong> (three dots) at the
                       right of the key's row.
                     </span>
                   </li>
                   <li className="flex gap-2">
-                    <span className="text-primary">3.</span>
+                    <span className="text-primary-text">3.</span>
                     <span>
                       Choose <strong className="text-foreground">Delete key</strong>, then{' '}
                       <strong className="text-foreground">Delete</strong> on the warning.
@@ -438,15 +438,15 @@ export function KeyHelp() {
                 <p className="text-foreground text-xs font-medium">Replace it</p>
                 <ol className="flex flex-col gap-2 text-xs">
                   <li className="flex gap-2">
-                    <span className="text-primary">1.</span>
+                    <span className="text-primary-text">1.</span>
                     <span>Make a new key first — press Create API key, exactly as in the steps above.</span>
                   </li>
                   <li className="flex gap-2">
-                    <span className="text-primary">2.</span>
+                    <span className="text-primary-text">2.</span>
                     <span>Copy it, then paste it into SnapBite → Settings → AI key and save.</span>
                   </li>
                   <li className="flex gap-2">
-                    <span className="text-primary">3.</span>
+                    <span className="text-primary-text">3.</span>
                     <span>Only after SnapBite works with the new key, delete the old one.</span>
                   </li>
                 </ol>
