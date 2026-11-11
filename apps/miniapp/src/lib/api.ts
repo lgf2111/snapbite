@@ -72,6 +72,8 @@ export interface MealDetail {
   notes: string | null;
   confidence: number | null;
   telegramFileId: string | null;
+  /** True when a photo can be rendered (stored in R2 or still on Telegram). */
+  hasPhoto?: boolean;
   aiProvider: string | null;
   foods: Array<{
     id: string;

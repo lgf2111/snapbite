@@ -384,11 +384,7 @@ export function HomeScreen({
             >
               <Card className="overflow-hidden">
                 <CardContent className="flex items-center gap-3 p-3">
-                  {m.previewUrl ? (
-                    <MealThumb src={m.previewUrl} />
-                  ) : (
-                    <div className="bg-muted size-16 shrink-0 rounded-md" aria-hidden />
-                  )}
+                  <MealThumb src={m.previewUrl} />
                   <button
                     type="button"
                     className="min-w-0 flex-1 rounded-md text-left transition-transform duration-[120ms] active:scale-[0.99] motion-reduce:transition-none"
