@@ -55,6 +55,7 @@ import { LinkifiedHint } from './LinkifiedHint.js';
 import { MacroLine } from './MacroLine.js';
 import { ProfileForm } from './ProfileForm.js';
 import { type ProviderConfig, ProviderPicker } from './ProviderPicker.js';
+import { ShortcutCard } from './ShortcutCard.js';
 
 interface SettingsScreenProps {
   backend: Backend;
@@ -895,6 +896,16 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               </Collapsible>
             </CardContent>
           </Card>
+        </>
+      )}
+
+      {!isLocal && (
+        <>
+          <h2 className="text-caption text-muted-foreground mt-2 font-medium uppercase tracking-wide">
+            One-tap logging
+          </h2>
+
+          <ShortcutCard backend={backend} />
         </>
       )}
 

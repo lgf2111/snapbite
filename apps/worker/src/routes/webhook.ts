@@ -726,7 +726,7 @@ async function handleTokenCommand(
     label: 'iOS Shortcut',
   });
   await bot.sendMessage(parsed.chatId, {
-    text: `Device token (shown once, copy the whole line):\n${token}\n\nPaste it into the SnapBite Shortcut as:\nAuthorization: Bearer <token>\n\n/token revoke kills every token on this account.`,
+    text: `Device token (shown once, copy the whole line):\n${token}\n\nPaste it into the SnapBite Shortcut as:\nAuthorization: Bearer <token>\n\nYou can also create and revoke tokens in the app (Settings → One-tap logging). This bot command is for people who have not installed the app.\n\n/token revoke kills every token on this account.`,
   });
 }
 

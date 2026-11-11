@@ -48,6 +48,22 @@ export interface Favorite {
   meal: MealResult;
 }
 
+export interface DeviceTokenInfo {
+  id: string;
+  label: string | null;
+  createdAt: number;
+  lastUsedAt: number | null;
+  revokedAt: number | null;
+}
+
+export interface CreatedDeviceToken {
+  id: string;
+  /** The raw `sb_…` secret. Shown once; the server keeps only its hash. */
+  token: string;
+  label: string;
+  createdAt: number;
+}
+
 export interface MealDetail {
   id: string;
   loggedAt: number;
@@ -440,6 +456,27 @@ export class ApiClient {
   /** Permanently deletes the user and all their data. */
   deleteAccount(): Promise<{ ok: boolean }> {
     return this.#request<{ ok: boolean }>('/api/account', { method: 'DELETE' });
+  }
+
+  /** Active device tokens (iOS Shortcut). Never includes the raw value. */
+  listDeviceTokens(): Promise<{ tokens: DeviceTokenInfo[] }> {
+    return this.#request('/api/tokens');
+  }
+
+  /** Mints a device token. The raw `token` is returned exactly once. */
+  createDeviceToken(label?: string): Promise<CreatedDeviceToken> {
+    return this.#request('/api/tokens', {
+      method: 'POST',
+      body: JSON.stringify(label ? { label } : {}),
+    });
+  }
+
+  revokeDeviceToken(id: string): Promise<{ ok: boolean }> {
+    return this.#request(`/api/tokens/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  revokeAllDeviceTokens(): Promise<{ revoked: number }> {
+    return this.#request('/api/tokens', { method: 'DELETE' });
   }
 
   /** Sends user feedback to the maintainer (stored + DM'd). */

@@ -26,6 +26,17 @@ export function accountAuth(): MiddlewareHandler<AppBindings> {
     const rawToken = (bearer || queryToken).replace(/\s+/g, '');
 
     // 2. Handheld bearer token.
+    //
+    // Two hashes exist on purpose and must not be unified:
+    //   - `deviceLookupHash` (this path) salts with "device:" and resolves a
+    //     cookie-backed device credential.
+    //   - `hashDeviceToken` (the Shortcut path) is the plain SHA-256 stored for
+    //     `sb_…` tokens.
+    // Because they differ, an iOS Shortcut token can log meals through
+    // /api/shortcut and nothing else: it cannot read the account, mint another
+    // token, or revoke anything. Verified against production: an sb_ token gets
+    // 401 on /api/me and 401 from POST /api/tokens. If someone ever makes these
+    // two agree, /api/* becomes reachable with a token that sits in a Shortcut.
     if (rawToken) {
       const resolved = await resolveDeviceToken(
         createAuthDb(c.env.DB) as never,

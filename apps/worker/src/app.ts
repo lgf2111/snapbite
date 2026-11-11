@@ -5,6 +5,7 @@ import { accountAuth } from './middleware/account.js';
 import { telegramAuth } from './middleware/auth.js';
 import { accountRoutes } from './routes/account.js';
 import { authRoutes } from './routes/auth.js';
+import { deviceTokenRoutes } from './routes/deviceTokens.js';
 import { favoritesRoutes } from './routes/favorites.js';
 import { feedbackRoutes } from './routes/feedback.js';
 import { type ProviderFactory, mealPhotoRoutes, mealsRoutes } from './routes/meals.js';
@@ -80,6 +81,7 @@ export function createApp(opts: CreateAppOptions = {}) {
   api.route('/meals', mealsRoutes(opts.providerFactory, opts.botClientFactory));
   api.route('/favorites', favoritesRoutes());
   api.route('/account', accountRoutes());
+  api.route('/tokens', deviceTokenRoutes());
   api.route('/feedback', feedbackRoutes(opts.botClientFactory));
 
   app.route('/api', api);

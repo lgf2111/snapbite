@@ -8,20 +8,19 @@ You build this on the phone once. It takes about five minutes.
 
 ## Step 0 — get your token (2 minutes, one time)
 
-1. Open **@SnapBiteAI_bot** in Telegram and send:
-
-   ```
-   /token
-   ```
-
-2. The bot replies with a line starting `sb_…`. Copy it. It is shown once.
+1. Open the SnapBite app → **Settings** → **One-tap logging**.
+2. Tap **Create Shortcut token**.
+3. Tap **Copy** and keep the `sb_…` value on your clipboard. It is shown once.
 
    That token is a password to your meal log: anything holding it can add meals
-   to your account. Do not paste it into a group chat, and if it leaks send
-   `/token revoke` (kills every token) and make a new one.
+   to your account. Do not paste it into a group chat. If it leaks, tap
+   **Revoke** next to it (or **Revoke all**) in the same card and make a new one.
 
-If `/token` replies that the command is private, open the bot's **private chat**
-first — it refuses to mint tokens in a group.
+The app card also shows the URL you need in Step 2, with its own copy button.
+
+**If you have not installed the app:** open **@SnapBiteAI_bot** in Telegram, in a
+private chat, and send `/token`. The bot replies with a line starting `sb_…`;
+`/token revoke` kills every token. The bot refuses to mint tokens in a group.
 
 ## Step 1 — create the Shortcut
 
