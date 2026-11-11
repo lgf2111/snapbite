@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { addCredits } from '../billing/accounts.js';
+import { looksLikeEmail, normalizeEmail } from '../db/auth.js';
 import { createDb, listBroadcastTargets } from '../db/users.js';
 import type { AppBindings } from '../env.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
@@ -99,6 +101,39 @@ export function adminRoutes(opts: { botClientFactory?: BotClientFactory; delayMs
       }
     }
     return c.json({ sent, failed, skipped });
+  });
+
+  // POST /api/admin/topup — { email, credits } -> { ok, email, credits }
+  // A deliberate operator tool for testing and support, guarded by the same
+  // x-admin-token as broadcast. It grants credits but never the supporter tag:
+  // the tag is bought with a pack, not handed out by support.
+  app.post('/topup', async (c) => {
+    const expected = c.env.ADMIN_TOKEN?.trim();
+    if (!expected) {
+      return c.json({ error: 'Not configured', detail: 'ADMIN_TOKEN is not set' }, 503);
+    }
+    if (!(await safeEqual(c.req.header('x-admin-token') ?? '', expected))) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const body = (await c.req.json().catch(() => null)) as {
+      email?: unknown;
+      credits?: unknown;
+    } | null;
+    const email = typeof body?.email === 'string' ? normalizeEmail(body.email) : '';
+    if (!looksLikeEmail(email)) {
+      return c.json({ error: 'Bad request', detail: 'A valid email is required' }, 400);
+    }
+    const credits = typeof body?.credits === 'number' ? body.credits : Number.NaN;
+    if (!Number.isInteger(credits) || credits < 1 || credits > 100_000) {
+      return c.json(
+        { error: 'Bad request', detail: 'credits must be an integer from 1 to 100000' },
+        400,
+      );
+    }
+
+    const balance = await addCredits(c.env.DB, email, credits, 'topup');
+    return c.json({ ok: true, email, credits: balance });
   });
 
   return app;

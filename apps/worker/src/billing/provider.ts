@@ -12,7 +12,13 @@ import {
 } from '@snapbite/core';
 import type { SettingsRow } from '../db/schema.js';
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
-import { InsufficientCredits, addCredits, getAccount, overflowSpentToday } from './accounts.js';
+import {
+  InsufficientCredits,
+  addCredits,
+  getAccount,
+  getVerifiedEmail,
+  overflowSpentToday,
+} from './accounts.js';
 
 /**
  * The single place that answers who pays for an AI call.
@@ -205,16 +211,6 @@ function choiceFromSettings(row: SettingsRow, apiKey: string): ProviderChoice {
   return choice;
 }
 
-/** The verified email that owns billing, or null for an anonymous account. */
-async function billingEmail(db: D1Database, userId: string): Promise<string | null> {
-  const row = await db
-    .prepare('SELECT email FROM users WHERE id = ? AND email_verified_at IS NOT NULL')
-    .bind(userId)
-    .first<{ email: string | null }>();
-  const email = row?.email?.trim().toLowerCase();
-  return email || null;
-}
-
 export async function resolveProviderForUser(
   db: D1Database,
   env: ProviderRuntime,
@@ -225,7 +221,7 @@ export async function resolveProviderForUser(
   const now = opts.now ?? Date.now;
 
   const row = await getSettings(createSettingsDb(db), userId);
-  const email = await billingEmail(db, userId);
+  const email = await getVerifiedEmail(db, userId);
   const account = email ? await getAccount(db, email) : null;
   const hostedKey = env.GEMINI_API_KEY?.trim() || null;
 

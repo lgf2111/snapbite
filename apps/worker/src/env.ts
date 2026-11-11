@@ -16,6 +16,16 @@ export interface Env {
    * to a typed refusal instead of a broken call.
    */
   GEMINI_API_KEY?: string;
+  /**
+   * Stripe secret key for Checkout. Unset => buying credits answers 503 with a
+   * readable message; nothing else in the app depends on it.
+   */
+  STRIPE_SECRET_KEY?: string;
+  /**
+   * Stripe webhook signing secret (`whsec_…`). Unset => events are recorded but
+   * never applied, because an unverified webhook could be forged.
+   */
+  STRIPE_WEBHOOK_SECRET?: string;
   /** HTTPS URL of the deployed Mini App, for the web_app launch button. */
   MINI_APP_URL?: string;
   /** Shared secret Telegram echoes in X-Telegram-Bot-Api-Secret-Token on webhooks. */
