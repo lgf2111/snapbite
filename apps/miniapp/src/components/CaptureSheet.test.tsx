@@ -1,7 +1,7 @@
 import type { Backend } from '@/lib/backend';
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CaptureSheet } from './CaptureSheet.js';
 
 function setup() {
@@ -22,6 +22,8 @@ function setup() {
   );
   return { backend, onOpenChange };
 }
+
+afterEach(cleanup);
 
 describe('CaptureSheet', () => {
   it('offers photo, library and by-hand entry', () => {
