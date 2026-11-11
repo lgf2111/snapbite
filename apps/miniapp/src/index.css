@@ -5,8 +5,10 @@
  * SnapBite design tokens.
  *
  * Two materials, one system:
- *   - Warm paper surfaces carry appetite (background, card, muted), warmed by
- *     the saffron accent rather than by the neutrals themselves.
+ *   - The palette is keyed to the logo: icon.png is a deep blue (#024CC5) on
+ *     white, so the accent is that exact blue and the neutrals carry a cool
+ *     cast rather than a warm one. A food app does not have to be warm; it has
+ *     to look like itself.
  *   - A calibrated instrument layer carries measurement (foreground, border,
  *     the status tokens), so a verdict never relies on hue alone.
  *
@@ -19,77 +21,77 @@
 :root {
   color-scheme: light;
 
-  --background: #fdfaf3;
-  --foreground: #232019;
+  --background: #f8fafe;
+  --foreground: #0f172a;
 
-  --card: #f3ede1;
-  --card-foreground: #232019;
-  --popover: #fdfaf3;
-  --popover-foreground: #232019;
+  --card: #edf2fb;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
 
-  /* Saffron — the only brand colour, never used to mean "bad". */
-  --primary: #e8a317;
-  --primary-foreground: #241a02;
+  /* The logo blue — the only brand colour, never used to mean "bad". */
+  --primary: #024cc5;
+  --primary-foreground: #ffffff;
 
-  --secondary: #efe6d5;
-  --secondary-foreground: #232019;
+  --secondary: #e3eaf7;
+  --secondary-foreground: #0f172a;
 
   /* `muted` is a surface; `muted-foreground` is text — shadcn's contract. */
-  --muted: #f1eadb;
-  --muted-foreground: #6a6152;
+  --muted: #eaf0fa;
+  --muted-foreground: #5a6780;
 
   /* `accent` stays shadcn's hover/selected surface, not the brand colour. */
-  --accent: #efe6d5;
-  --accent-foreground: #232019;
+  --accent: #e3eaf7;
+  --accent-foreground: #0f172a;
 
-  --destructive: #a53b1f;
+  --destructive: #b3261e;
   --destructive-foreground: #ffffff;
-  --success: #2c6b3f;
-  --warning: #855300;
+  --success: #1b7a4b;
+  --warning: #8a5300;
 
   /* Text links cannot use the bright saffron (4.63:1 is fine, but on the card
      surface it drops), so links take a deeper key of the same hue. */
-  --primary-text: #945600;
+  --primary-text: #024cc5;
 
-  --border: #d2c3a4;
-  --input: #d6c9ae;
-  --ring: #a56200;
+  --border: #b6c7e3;
+  --input: #b6c7e3;
+  --ring: #024cc5;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
 
-    --background: #131210;
-    --foreground: #f2ede2;
+    --background: #080d16;
+    --foreground: #e9effa;
 
-    --card: #1d1b17;
-    --card-foreground: #f2ede2;
-    --popover: #1d1b17;
-    --popover-foreground: #f2ede2;
+    --card: #111a28;
+    --card-foreground: #e9effa;
+    --popover: #111a28;
+    --popover-foreground: #e9effa;
 
-    --primary: #f0b33c;
-    --primary-foreground: #1f1503;
+    --primary: #7fa9ff;
+    --primary-foreground: #06122a;
 
-    --secondary: #2c2620;
-    --secondary-foreground: #f2ede2;
+    --secondary: #182233;
+    --secondary-foreground: #e9effa;
 
-    --muted: #231f1a;
-    --muted-foreground: #a9a08e;
+    --muted: #141d2b;
+    --muted-foreground: #9aa8c0;
 
-    --accent: #2c2620;
-    --accent-foreground: #f2ede2;
+    --accent: #182233;
+    --accent-foreground: #e9effa;
 
-    --destructive: #ff9070;
+    --destructive: #ff8a7a;
     --destructive-foreground: #2a0e05;
-    --success: #86c98f;
-    --warning: #f0b33c;
+    --success: #6fc49b;
+    --warning: #e0a83c;
 
-    --primary-text: #f0b33c;
+    --primary-text: #7fa9ff;
 
-    --border: #453f34;
-    --input: #453f34;
-    --ring: #f0b33c;
+    --border: #2c3b55;
+    --input: #2c3b55;
+    --ring: #7fa9ff;
   }
 }
 
