@@ -77,7 +77,7 @@ describe('the manual-log dialog cannot be wider than the screen', () => {
   it('scrolls inside the viewport and keeps its bottom padding, for the keyboard', async () => {
     await renderDialog();
     const dialog = document.querySelector('[data-slot=dialog-content]') as HTMLElement;
-    expect(dialog.className).toContain('max-h-[calc(100dvh-2rem)]');
+    expect(dialog.className).toContain('max-h-[calc(100svh-var(--keyboard-inset,0px)-2rem)]');
     expect(dialog.className).toContain('overflow-y-auto');
     // Bottom padding = 1.25rem + the home-indicator inset (see index.css).
     expect(dialog.className).toContain('sheet-safe');

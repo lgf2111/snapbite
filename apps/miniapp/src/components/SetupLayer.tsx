@@ -1,3 +1,4 @@
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { type ReactNode, useEffect, useRef } from 'react';
 
 const FOCUSABLE = 'a[href],button,input,select,textarea,summary,[tabindex]:not([tabindex="-1"])';
@@ -35,6 +36,8 @@ interface Props {
  *  - the page behind cannot scroll.
  */
 export function SetupLayer({ onDismiss, children }: Props) {
+  // The setup form has text fields; its panels size themselves from the inset.
+  useKeyboardInset();
   const ref = useRef<HTMLDivElement>(null);
   const dismiss = useRef(onDismiss);
   dismiss.current = onDismiss;
