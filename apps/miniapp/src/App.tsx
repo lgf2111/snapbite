@@ -62,6 +62,8 @@ export function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   // "Uploading 2 of 4" while a multi-photo batch runs; null otherwise.
   const [batchStatus, setBatchStatus] = useState<string | null>(null);
+  // One line on Home after a BYOK quota overflow spent a credit.
+  const [creditNotice, setCreditNotice] = useState<string | null>(null);
   // A request from outside the app (an icon shortcut, a shared photo): see lib/launch.ts.
   const [captureIntent, setCaptureIntent] = useState<CaptureIntent | null>(null);
   const cameraRef = useRef<HTMLButtonElement>(null);
@@ -253,6 +255,8 @@ export function App() {
               onSetGoal={() => setShowOnboarding(true)}
               hideInstallGuide={showOnboarding}
               onToast={toastFn}
+              creditNotice={creditNotice}
+              onCreditNotice={setCreditNotice}
             />
           )}
         </AppShell>
@@ -269,6 +273,7 @@ export function App() {
         onBatchStatus={setBatchStatus}
         intent={captureIntent}
         onIntentHandled={() => setCaptureIntent(null)}
+        onCreditNotice={setCreditNotice}
       />
 
       {showOnboarding && (

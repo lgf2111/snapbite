@@ -29,6 +29,8 @@ interface ReviseWithAiDialogProps {
    */
   onDraft: (revised: MealResult) => void;
   onToast?: (kind: ToastKind, message: string) => void;
+  /** One-line credit trace when a BYOK call overflowed onto our key. */
+  onCreditNotice?: (notice: string) => void;
 }
 
 /**
@@ -44,6 +46,7 @@ export function ReviseWithAiDialog({
   initialInstruction = '',
   onDraft,
   onToast,
+  onCreditNotice,
 }: ReviseWithAiDialogProps) {
   const [text, setText] = useState(initialInstruction);
   const [busy, setBusy] = useState(false);
@@ -80,7 +83,8 @@ export function ReviseWithAiDialog({
     if (!instruction || busy) return;
     setBusy(true);
     try {
-      const revised = await backend.reviseDraft(mealId, instruction);
+      const { notice, ...revised } = await backend.reviseDraft(mealId, instruction);
+      if (notice) onCreditNotice?.(notice);
       hapticNotify('success');
       onToast?.('success', 'Applied — review and save');
       onDraft(revised);

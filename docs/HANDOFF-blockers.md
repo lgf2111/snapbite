@@ -53,6 +53,9 @@ without any of them.
 - **What:** already an existing worker secret (used by `/api/admin/broadcast`).
 - **Why:** Stage 3's `POST /api/admin/topup` uses the same `x-admin-token` to
   test credits and support a user without Stripe.
+- **Testing the paid UI without Stripe:** a dev build with `VITE_ADMIN_TOKEN`
+  set to the same value reveals a hidden topup by long-pressing the credit
+  balance in Settings. Production builds never render it.
 - **Status:** no action unless it was never provisioned; the route answers 503
   when unset.
 

@@ -12,6 +12,7 @@ import {
 } from '@snapbite/core';
 import {
   ApiClient,
+  type BillingSummary,
   type CreatedDeviceToken,
   type CustomProviderInput,
   type DeviceTokenInfo,
@@ -75,7 +76,7 @@ export interface Backend {
    * AI-revise a meal from a plain-language instruction. Returns a DRAFT
    * MealResult (not persisted) for the caller to review and save via update().
    */
-  reviseDraft(id: string, instruction: string): Promise<MealResult>;
+  reviseDraft(id: string, instruction: string): Promise<MealResult & { notice?: string }>;
   remove(id: string): Promise<void>;
   recent(): Promise<RecentMeal[]>;
   /** Meals for one day (YYYY-MM-DD), newest first. */
@@ -86,6 +87,16 @@ export interface Backend {
   mealDates(): Promise<MealDates>;
   /** Advanced reports: 90-day or 12-month trends. Supporter-gated in worker mode. */
   analytics(range: ReportRange): Promise<AdvancedReport>;
+  /** Credits, trial, supporter and packs. Worker mode only. */
+  billingSummary(): Promise<BillingSummary>;
+  /** Turns credit overflow on/off for a signed-in account. */
+  setOverflowEnabled(enabled: boolean): Promise<void>;
+  /** Grants the once-per-identity trial (best-effort; already granted is a no-op). */
+  startTrial(): Promise<{ granted: boolean; trialUntil: number | null }>;
+  /** Creates a Checkout Session for a pack id; resolves to the Stripe URL. */
+  checkout(pack: string): Promise<string>;
+  /** Development-only topup through the operator endpoint. */
+  devTopup(email: string, credits: number): Promise<number>;
   detail(id: string): Promise<MealDetail>;
   /** Saved meals ("favorites") the user can re-log with one tap. */
   listFavorites(): Promise<Favorite[]>;
@@ -104,7 +115,11 @@ export interface Backend {
    * Analyzes a photo (AI, needs a saved key) and returns a DRAFT meal the caller
    * reviews or logs straight away. `hint` may carry a local date/time note.
    */
-  analyze(base64: string, mimeType: string, hint?: string): Promise<MealResult>;
+  analyze(
+    base64: string,
+    mimeType: string,
+    hint?: string,
+  ): Promise<MealResult & { notice?: string }>;
   /** Stores the user's profile + goal; returns the computed daily targets. */
   saveProfile(profile: UserProfile): Promise<DailyTargets>;
   /** Stores/replaces the fallback provider + key (enabled). Returns fresh settings. */
@@ -200,6 +215,23 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
       },
       analytics(range) {
         return api.analytics(range);
+      },
+      billingSummary() {
+        return api.billingSummary();
+      },
+      async setOverflowEnabled(enabled) {
+        await api.setOverflowEnabled(enabled);
+      },
+      async startTrial() {
+        const res = await api.startTrial();
+        return { granted: res.granted, trialUntil: res.trialUntil };
+      },
+      async checkout(pack) {
+        const res = await api.checkout(pack);
+        return res.url;
+      },
+      devTopup(email, credits) {
+        return api.devTopup(email, credits);
       },
       detail(id) {
         return api.getMeal(id);
@@ -386,6 +418,21 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
               }
             : null,
       });
+    },
+    billingSummary() {
+      return Promise.reject(new Error('Credits need the hosted backend.'));
+    },
+    setOverflowEnabled() {
+      return Promise.reject(new Error('Credits need the hosted backend.'));
+    },
+    startTrial() {
+      return Promise.reject(new Error('Credits need the hosted backend.'));
+    },
+    checkout() {
+      return Promise.reject(new Error('Credits need the hosted backend.'));
+    },
+    devTopup() {
+      return Promise.reject(new Error('Credits need the hosted backend.'));
     },
     async detail(id) {
       const saved = loadMeals().find((m) => m.id === id);

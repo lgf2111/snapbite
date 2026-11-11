@@ -199,6 +199,32 @@ export class ApiError extends Error {
 }
 
 /**
+ * What the client may know about billing. The packs are the server's constants:
+ * the client never sends a price or a credit count when buying.
+ */
+export interface BillingPack {
+  id: string;
+  label: string;
+  credits: number;
+  priceCents: number;
+  currency: string;
+}
+
+export interface BillingSummary {
+  signedIn: boolean;
+  email: string | null;
+  supporter: boolean;
+  credits: number;
+  source: 'byok' | 'credits' | 'trial' | 'none';
+  trialUntil: number | null;
+  trialAvailable: boolean;
+  overflowEnabled: boolean;
+  overflowUsedToday: number;
+  overflowCap: number;
+  packs: BillingPack[];
+}
+
+/**
  * Thin client for the SnapBite Worker API. Attaches the signed Telegram initData
  * on every request so the Worker can authenticate.
  */
@@ -283,8 +309,55 @@ export class ApiClient {
     return this.#request('/api/auth/logout', { method: 'POST' });
   }
 
-  analyze(image: MealImage, hint?: string): Promise<MealResult> {
-    return this.#request<MealResult>('/api/meals/analyze', {
+  /* ---------------- billing (credits + supporter) ---------------- */
+
+  /** Balance, trial state, overflow setting and the server's packs. */
+  billingSummary(): Promise<BillingSummary> {
+    return this.#request('/api/billing/summary');
+  }
+
+  setOverflowEnabled(overflowEnabled: boolean): Promise<{ ok: boolean }> {
+    return this.#request('/api/billing/settings', {
+      method: 'POST',
+      body: JSON.stringify({ overflowEnabled }),
+    });
+  }
+
+  /** Grants the once-per-identity trial; safe to call again. */
+  startTrial(): Promise<{ ok: boolean; granted: boolean; trialUntil: number | null }> {
+    return this.#request('/api/billing/trial', { method: 'POST' });
+  }
+
+  /** Creates a Stripe Checkout Session for a pack id and returns its URL. */
+  checkout(pack: string): Promise<{ url: string; id: string | null }> {
+    return this.#request('/api/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ pack }),
+    });
+  }
+
+  /**
+   * Development-only topup through the operator endpoint. The admin token is
+   * read from `VITE_ADMIN_TOKEN` at build time and never shipped without it.
+   */
+  async devTopup(email: string, credits: number): Promise<number> {
+    const token = (import.meta.env.VITE_ADMIN_TOKEN ?? '').trim();
+    if (!token) {
+      throw new ApiError(0, 'Set VITE_ADMIN_TOKEN to use the dev topup.');
+    }
+    const res = await this.#request<{ ok: boolean; email: string; credits: number }>(
+      '/api/admin/topup',
+      {
+        method: 'POST',
+        headers: { 'x-admin-token': token },
+        body: JSON.stringify({ email, credits }),
+      },
+    );
+    return res.credits;
+  }
+
+  analyze(image: MealImage, hint?: string): Promise<MealResult & { notice?: string }> {
+    return this.#request<MealResult & { notice?: string }>('/api/meals/analyze', {
       method: 'POST',
       body: JSON.stringify({ base64: image.base64, mimeType: image.mimeType, hint }),
       timeoutMs: AI_TIMEOUT_MS,
@@ -380,8 +453,8 @@ export class ApiClient {
    * AI-revise an owned meal from a plain-language instruction. Returns a DRAFT
    * MealResult (not persisted) for the client to review and save via update().
    */
-  async reviseMeal(id: string, instruction: string): Promise<MealResult> {
-    const res = await this.#request<{ meal: MealResult }>(
+  async reviseMeal(id: string, instruction: string): Promise<MealResult & { notice?: string }> {
+    const res = await this.#request<{ meal: MealResult; notice?: string }>(
       `/api/meals/${encodeURIComponent(id)}/revise`,
       {
         method: 'POST',
@@ -389,7 +462,7 @@ export class ApiClient {
         timeoutMs: AI_TIMEOUT_MS,
       },
     );
-    return res.meal;
+    return res.notice ? { ...res.meal, notice: res.notice } : res.meal;
   }
 
   /**
