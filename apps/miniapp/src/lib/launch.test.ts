@@ -71,7 +71,9 @@ describe('takeLaunchIntent', () => {
     const file = await intent.photo;
     expect(file?.name).toBe('lunch.jpg');
     expect(file?.type).toBe('image/jpeg');
-    expect(await file?.text()).toBe('jpeg-bytes');
+    // Read through Response rather than File.text(): the polyfilled File in CI
+    // stringifies to "[object Blob]" instead of returning the bytes.
+    expect(await new Response(file as Blob).text()).toBe('jpeg-bytes');
     expect(store.size).toBe(0);
     expect(window.location.search).toBe('');
   });
