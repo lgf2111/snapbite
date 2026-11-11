@@ -1,5 +1,5 @@
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { FAN, FAN_ACTIONS, labelBox, wedgeAt, wedgeCentre, wedgePath } from '../lib/fan.js';
+import { FAN, FAN_ACTIONS, wedgeAt, wedgeCentre, wedgePath } from '../lib/fan.js';
 import { hapticImpact } from '../lib/telegram.js';
 import { CAPTURE_ACTIONS, type CaptureAction } from './CaptureMenu.js';
 
@@ -55,8 +55,8 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     });
     const el = label.current;
     if (el) {
-      // The element keeps its size when empty, so nothing moves between states.
-      el.textContent = idx == null ? '' : CAPTURE_ACTIONS[FAN_ACTIONS[idx] as CaptureAction].title;
+      el.textContent =
+        idx == null ? 'Slide to choose' : CAPTURE_ACTIONS[FAN_ACTIONS[idx] as CaptureAction].title;
       el.dataset.active = String(idx != null);
     }
   };
@@ -223,15 +223,15 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
             </span>
           );
         })}
-        {/* In the hollow between the button and the arc (see `labelBox`): what releasing
-            now would do. One line, truncated rather than overlapping a wedge. */}
+        {/* In the hollow above the button: what releasing now would do. */}
         <span
           ref={label}
           data-active="false"
-          data-testid="capture-fan-label"
-          className="text-foreground text-caption absolute truncate text-center font-medium"
-          style={{ ...labelBox(), lineHeight: `${FAN.labelHeightPx}px` }}
-        />
+          className="text-muted-foreground data-[active=true]:text-foreground text-caption absolute w-32 text-center font-medium"
+          style={{ left: FAN.outerPx - 64, top: FAN.outerPx - 70 }}
+        >
+          Slide to choose
+        </span>
       </div>
     </>
   );
