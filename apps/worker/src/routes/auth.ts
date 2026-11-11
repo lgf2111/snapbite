@@ -6,7 +6,13 @@ import {
   mintDeviceToken,
   readCookies,
 } from '../auth/cookies.js';
-import { google, newState, oauthStateCookie, redirectUriFor } from '../auth/social.js';
+import {
+  google,
+  newState,
+  oauthStateCookie,
+  publicOrigin,
+  redirectUriFor,
+} from '../auth/social.js';
 import {
   type AuthDb,
   attachEmailToUser,
@@ -102,7 +108,7 @@ export function authRoutes() {
       return c.json({ error: 'Not configured', detail: 'Google sign-in is not enabled' }, 400);
     }
     const state = newState();
-    const apiOrigin = new URL(c.req.url).origin;
+    const apiOrigin = publicOrigin(c.env, c.req.raw.headers, c.req.url);
     const redirectUri = redirectUriFor(apiOrigin);
 
     const jar = readCookies(c.req.header('cookie'));
@@ -136,7 +142,8 @@ export function authRoutes() {
       return c.redirect(`${appOrigin}/?auth=state`, 302);
     }
 
-    const apiOrigin = new URL(c.req.url).origin;
+    // Must be the very string /start/google sent, or Google refuses the code.
+    const apiOrigin = publicOrigin(c.env, c.req.raw.headers, c.req.url);
     const profile = await google.exchange(c.env, { code, redirectUri: redirectUriFor(apiOrigin) });
     if (!profile) return c.redirect(`${appOrigin}/?auth=error`, 302);
     if (!profile.emailVerified) return c.redirect(`${appOrigin}/?auth=unverified`, 302);

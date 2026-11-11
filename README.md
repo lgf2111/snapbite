@@ -107,6 +107,9 @@ pnpm --filter @snapbite/worker exec wrangler deploy
 # Mini App (Pages)
 VITE_WORKER_URL=https://<worker-url> pnpm --filter @snapbite/miniapp build
 pnpm --filter @snapbite/miniapp exec wrangler pages deploy dist --project-name=snapbite
+# `apps/miniapp/functions/api/[[path]].ts` is a Pages Function that proxies /api/* to the Worker
+# (same-origin API, first-party session cookie). `wrangler pages deploy` finds `functions/` in the
+# directory it runs from, so run it from apps/miniapp (as `exec` and the package script do), not the repo root.
 
 # Bot: register the webhook (with the secret) via the Telegram Bot API. The Mini App is set as
 # the bot's Main Mini App in BotFather, so it launches from the bot profile's "Open App" button
