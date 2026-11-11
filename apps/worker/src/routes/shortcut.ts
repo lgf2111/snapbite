@@ -1,5 +1,6 @@
 import { type MealImage, decryptSecret, resolveMeal } from '@snapbite/core';
 import { type Context, Hono } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import {
   createDeviceTokensDb,
   hashDeviceToken,
@@ -144,10 +145,70 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-function oneLine(foods: string[], kcal: number): string {
-  const shown = foods.slice(0, 3).join(', ');
-  const extra = foods.length > 3 ? ` +${foods.length - 3} more` : '';
-  return `Logged ${Math.round(kcal)} kcal — ${shown}${extra}`;
+/** A notification shows about two lines; past this the macros are dropped. */
+const MAX_LINE = 120;
+const MAX_LABEL = 60;
+
+interface Logged {
+  kcal: number;
+  label: string;
+  macros: { proteinG: number; carbsG: number; fatG: number };
+}
+
+/** The analyser's meal name, else the first foods: never the whole ingredient list. */
+function mealLabel(title: string | undefined, foods: string[]): string {
+  const raw = (title?.trim() || foods.slice(0, 2).join(', ')).replace(/\s+/g, ' ').trim();
+  return raw.length > MAX_LABEL ? `${raw.slice(0, MAX_LABEL - 1).trimEnd()}…` : raw;
+}
+
+/** `Logged 612 kcal — Grilled salmon, rice (P 42 · C 58 · F 21)`; macros only if they fit. */
+function oneLine({ kcal, label, macros }: Logged): string {
+  const line = `Logged ${Math.round(kcal)} kcal — ${label}`;
+  const withMacros = `${line} (P ${Math.round(macros.proteinG)} · C ${Math.round(macros.carbsG)} · F ${Math.round(macros.fatG)})`;
+  return withMacros.length < MAX_LINE ? withMacros : line;
+}
+
+type Reply = { ok: true; logged: Logged; mealId: string } | { ok: false; message: string };
+
+/**
+ * Plain text by default (the Shortcut shows the body in a notification verbatim);
+ * `?format=json` answers the same message, same status, as a structured object.
+ */
+function reply(c: Context<AppBindings>, r: Reply, status: ContentfulStatusCode = 200): Response {
+  c.header('Cache-Control', 'no-store');
+  if (c.req.query('format') === 'json') {
+    return c.json(
+      r.ok
+        ? {
+            ok: true,
+            message: oneLine(r.logged),
+            mealId: r.mealId,
+            label: r.logged.label,
+            kcal: Math.round(r.logged.kcal),
+            macros: {
+              proteinG: Math.round(r.logged.macros.proteinG),
+              carbsG: Math.round(r.logged.macros.carbsG),
+              fatG: Math.round(r.logged.macros.fatG),
+            },
+          }
+        : { ok: false, message: r.message },
+      status,
+    );
+  }
+  return c.body(r.ok ? oneLine(r.logged) : r.message, status, {
+    'Content-Type': 'text/plain; charset=utf-8',
+  });
+}
+
+const fail = (c: Context<AppBindings>, message: string, status: ContentfulStatusCode) =>
+  reply(c, { ok: false, message: `SnapBite: ${message}` }, status);
+
+/** What went wrong with the analysis, in a sentence a person can act on. */
+function analysisFailure(err: unknown): string {
+  const kind = describeError(err).kind;
+  if (kind === 'parse') return 'the photo was not readable, try again';
+  if (kind === 'empty') return 'no meal detected in that photo';
+  return 'the analysis failed, try again in a minute';
 }
 
 /**
@@ -168,10 +229,10 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
   // token and the network path before the photo pipeline is involved.
   app.get('/ping', async (c) => {
     const raw = readToken(c);
-    if (!raw) return c.text('Missing device token.', 401);
+    if (!raw) return fail(c, 'missing device token', 401);
     const tokensDb = createDeviceTokensDb(c.env.DB);
     const resolved = await resolveDeviceToken(tokensDb, await hashDeviceToken(raw));
-    if (!resolved) return c.text('Device token is invalid or revoked.', 401);
+    if (!resolved) return fail(c, 'device token is invalid or revoked', 401);
     return c.text('pong');
   });
 
@@ -179,20 +240,17 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
     /* -------- identity -------- */
     const raw = readToken(c);
     if (!raw) {
-      return c.text('Missing device token. Create this request from the SnapBite Shortcut.', 401);
+      return fail(c, 'missing device token, create this request from the SnapBite Shortcut', 401);
     }
     const tokensDb = createDeviceTokensDb(c.env.DB);
     const resolved = await resolveDeviceToken(tokensDb, await hashDeviceToken(raw));
     if (!resolved) {
-      return c.text(
-        'Device token is invalid or revoked. Send /token to the SnapBite bot for a new one.',
-        401,
-      );
+      return fail(c, 'device token is invalid or revoked, create a new one in Settings', 401);
     }
     await touchDeviceToken(tokensDb, resolved.tokenId);
 
     if (!c.env.ENCRYPTION_KEY) {
-      return c.text('Server is missing its encryption key.', 500);
+      return fail(c, 'the server is missing its encryption key', 500);
     }
 
     /* -------- image -------- */
@@ -206,7 +264,7 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
         const form = await c.req.formData();
         const field = form.get('photo') as unknown;
         if (field == null || typeof field === 'string') {
-          return c.text('Send the photo as a form field named "photo".', 400);
+          return fail(c, 'send the photo as a form field named "photo"', 400);
         }
         const file = field as File;
         mimeType = file.type || 'image/jpeg';
@@ -228,21 +286,23 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
         mimeType = typeof body.mimeType === 'string' ? body.mimeType : '';
         if (typeof body.hint === 'string' && body.hint.trim()) hint = body.hint.trim();
       } else {
-        return c.text(
-          `Unsupported Content-Type: ${contentType}. Send the photo as a form field named "photo", or as a raw image body.`,
+        return fail(
+          c,
+          `unsupported Content-Type ${contentType}, send the photo as a form field named "photo" or a raw image body`,
           415,
         );
       }
     } catch {
-      return c.text('Could not read the request body.', 400);
+      return fail(c, 'the photo was not readable, try again', 400);
     }
 
-    if (!base64) return c.text('No image in the request.', 400);
+    if (!base64) return fail(c, 'the photo was not readable, try again', 400);
     if (!ALLOWED_MIME.has(mimeType)) {
-      return c.text(
+      return fail(
+        c,
         mimeType === 'image/heic'
-          ? 'iOS sent a HEIC photo. In the Shortcut, add "Convert Image" to JPEG before the request.'
-          : `Unsupported image type: ${mimeType || 'unknown'}.`,
+          ? 'iOS sent a HEIC photo, add "Convert Image" to JPEG before the request'
+          : `unsupported image type ${mimeType || 'unknown'}`,
         400,
       );
     }
@@ -255,7 +315,7 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
     /* -------- key -------- */
     const settings = await getSettings(createSettingsDb(c.env.DB), resolved.userId);
     if (!settings?.apiKeyCiphertext || !settings?.apiKeyIv) {
-      return c.text('Add your AI key in SnapBite first (Settings → AI provider).', 400);
+      return fail(c, 'add your AI key in Settings first', 400);
     }
 
     let apiKey: string;
@@ -265,7 +325,7 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
         c.env.ENCRYPTION_KEY,
       );
     } catch {
-      return c.text('Could not decrypt your saved AI key.', 500);
+      return fail(c, 'could not decrypt your saved AI key, add it again in Settings', 500);
     }
 
     /* -------- analyse + save -------- */
@@ -299,8 +359,16 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
         await recordMealSave(c.env.DB, resolved.telegramUserId, isFirstMeal).catch(() => {});
       }
 
-      const foods = meal.foods.map((f) => f.food.name);
-      return c.text(oneLine(foods, meal.total.energyKcal));
+      const { energyKcal, proteinG, carbsG, fatG } = meal.total;
+      const label = mealLabel(
+        meal.title,
+        meal.foods.map((f) => f.food.name),
+      );
+      return reply(c, {
+        ok: true,
+        mealId,
+        logged: { kcal: energyKcal, label, macros: { proteinG, carbsG, fatG } },
+      });
     } catch (err) {
       const desc = describeError(err);
       await logError(c.env.DB, {
@@ -311,7 +379,7 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
         message: desc.message,
         detail: desc.detail ?? null,
       });
-      return c.text(`Analysis failed: ${desc.message}`, 502);
+      return fail(c, analysisFailure(err), 502);
     }
   });
 

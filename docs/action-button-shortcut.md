@@ -57,8 +57,17 @@ Search `Get Contents of URL`. Tap the chevron and set:
 
 **Action 4 — Show Notification**
 Search `Show Notification`, and set its text to the **Contents of URL** variable
-from Action 3. You will see `Logged 612 kcal — salmon, rice`, or a plain-English
-error.
+from Action 3. The notification text is exactly the server's reply: SnapBite
+answers with one plain sentence, so there is nothing to parse or format. A
+successful one reads:
+
+```
+Logged 612 kcal — Grilled salmon, rice (P 42 · C 58 · F 21)
+```
+
+If something is wrong, the reply says so in the same place, for example
+`SnapBite: add your AI key in Settings first`. (Add `?format=json` to the URL
+only if you want a structured reply to build your own Shortcut around.)
 
 ## Step 3 — put it on the Action Button
 
