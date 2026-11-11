@@ -27,9 +27,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # setup-node reads `packageManager: pnpm@…` from the root package.json and
+      # expects pnpm on the PATH, so nothing here runs without this step first.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.2
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: pnpm
 
       - name: Install wrangler
         run: npm i -g wrangler
