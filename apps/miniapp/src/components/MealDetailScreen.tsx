@@ -472,7 +472,7 @@ export function MealDetailScreen({
   const resolvedByFood = new Map(resolved.foods.map((mf) => [mf.food, mf.nutrition]));
 
   return (
-    <div className="flex flex-1 flex-col gap-4 pb-4">
+    <div className="flex flex-1 flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-title">Edit meal</h1>
         <Button variant="ghost" size="icon" onClick={discardAndBack} aria-label="Discard and close">
