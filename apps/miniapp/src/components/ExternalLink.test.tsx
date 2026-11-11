@@ -134,7 +134,7 @@ describe('the key hint', () => {
     expect(container.textContent).toContain('Get a free key at');
     fireEvent.click(screen.getByRole('button', { name: /copy link to aistudio\.google\.com/i }));
     await waitFor(() =>
-      expect(clipboard.writeText).toHaveBeenCalledWith('https://aistudio.google.com'),
+      expect(clipboard.writeText).toHaveBeenCalledWith('https://aistudio.google.com/apikey'),
     );
     expect((await screen.findByRole('status')).textContent).toContain('Paste it into Safari');
   });
@@ -156,6 +156,34 @@ describe('the key hint', () => {
     // The form is still usable: no overlay took it over.
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByLabelText('API key')).toBeTruthy();
+  });
+
+  it('reads exactly "Get a free key at aistudio.google.com/apikey", with the path visible', () => {
+    expect(PROVIDER_PRESETS.gemini.keyHint).toBe('Get a free key at aistudio.google.com/apikey');
+    setStandalone(false);
+    const { container } = render(<LinkifiedHint text={PROVIDER_PRESETS.gemini.keyHint} />);
+    expect(container.textContent).toBe('Get a free key at aistudio.google.com/apikey');
+  });
+
+  it('links to the key page, not the AI Studio home', () => {
+    setStandalone(false);
+    const { container } = render(<LinkifiedHint text={PROVIDER_PRESETS.gemini.keyHint} />);
+    const a = container.querySelector('a') as HTMLAnchorElement;
+    expect(a.getAttribute('href')).toBe('https://aistudio.google.com/apikey');
+    expect(a.textContent).toBe('aistudio.google.com/apikey');
+  });
+
+  it('shows the same text on the onboarding key step, and the help panel links the same page', () => {
+    setStandalone(false);
+    const backend = { mode: 'worker', saveApiKey: vi.fn() } as unknown as Backend;
+    render(<OnboardingScreen backend={backend} startAtKeyStep onDone={vi.fn()} onSkip={vi.fn()} />);
+
+    const links = screen.getAllByRole('link', { name: 'aistudio.google.com/apikey' });
+    const hint = links.find((l) => l.closest('p')?.textContent?.startsWith('Get a free key at'));
+    expect(hint?.closest('p')?.textContent).toBe('Get a free key at aistudio.google.com/apikey');
+    // Every one of them, the hint and the help panel's steps, lands on the key page.
+    for (const l of links)
+      expect(l.getAttribute('href')).toBe('https://aistudio.google.com/apikey');
   });
 
   it('in a browser tab it is a plain anchor', () => {

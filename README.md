@@ -130,7 +130,7 @@ TELEGRAM_BOT_TOKEN=<your-bot-token> pnpm --filter @snapbite/worker bot:profile
 
 SnapBite is provider-agnostic. Pick a provider and paste your key in **Settings**:
 
-- **Google Gemini** (default, recommended) — best food-vision value; free tier at aistudio.google.com. Default model `gemini-3.6-flash` (Gemini rotates/retires model names; override in Settings if needed).
+- **Google Gemini** (default, recommended) — best food-vision value; free tier at aistudio.google.com/apikey. Default model `gemini-3.6-flash` (Gemini rotates/retires model names; override in Settings if needed).
 - **OpenAI** — `gpt-4o-mini` by default; strong and reliable.
 - **DeepSeek** — cheapest; weaker at food recognition.
 

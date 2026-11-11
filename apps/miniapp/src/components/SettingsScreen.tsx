@@ -858,9 +858,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                       onChange={(e) => setFbKey(e.target.value)}
                     />
                     {fbCfg.provider !== 'custom' && (
-                      <p className="text-muted-foreground text-xs">
-                        {PROVIDER_PRESETS[fbCfg.provider].keyHint}
-                      </p>
+                      <LinkifiedHint
+                        text={PROVIDER_PRESETS[fbCfg.provider].keyHint}
+                        className="text-muted-foreground text-xs"
+                      />
                     )}
                   </div>
 

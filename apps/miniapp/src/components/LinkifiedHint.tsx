@@ -5,7 +5,7 @@ import { ExternalLink } from './ExternalLink.js';
  * link.
  *
  * The hints come from `PROVIDER_PRESETS` as plain text ("Get a free key at
- * aistudio.google.com"), which left the most important instruction on the screen
+ * aistudio.google.com/apikey"), which left the most important instruction on the screen
  * untappable. Splitting on URLs keeps the copy in one place (core) while making
  * the address a link.
  */
