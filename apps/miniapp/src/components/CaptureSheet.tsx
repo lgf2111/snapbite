@@ -48,8 +48,8 @@ export function CaptureSheet({
   onManualLogged,
   onToast,
 }: Props) {
-  /** The by-hand form, opened plain or straight onto the saved-meals list. */
-  const [manual, setManual] = useState<'manual' | 'saved' | null>(null);
+  /** The by-hand dialog; it carries the saved-meals list, so both cards open it. */
+  const [manualOpen, setManualOpen] = useState(false);
   const [stage, setStage] = useState<Stage>('idle');
   const [draft, setDraft] = useState<MealResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +116,7 @@ export function CaptureSheet({
   function pick(action: CaptureAction) {
     if (action === 'photo') cameraInput.current?.click();
     else if (action === 'upload') libraryInput.current?.click();
-    else setManual(action);
+    else setManualOpen(true);
     onOpenChange(false);
   }
 
@@ -244,11 +244,8 @@ export function CaptureSheet({
 
       <ManualMealDialog
         backend={backend}
-        open={manual !== null}
-        onOpenChange={(next) => {
-          if (!next) setManual(null);
-        }}
-        startWithSaved={manual === 'saved'}
+        open={manualOpen}
+        onOpenChange={setManualOpen}
         onLogged={onManualLogged}
         onToast={onToast}
       />
