@@ -71,9 +71,9 @@ describe('takeLaunchIntent', () => {
     const file = await intent.photo;
     expect(file?.name).toBe('lunch.jpg');
     expect(file?.type).toBe('image/jpeg');
-    // Read through Response rather than File.text(): the polyfilled File in CI
-    // stringifies to "[object Blob]" instead of returning the bytes.
-    expect(await new Response(file as Blob).text()).toBe('jpeg-bytes');
+    // Size, not text(): jsdom's File stringifies Blob parts, so .text() returns
+    // "[object Blob]" there while a real browser returns the bytes.
+    expect(file?.size).toBe(10);
     expect(store.size).toBe(0);
     expect(window.location.search).toBe('');
   });
