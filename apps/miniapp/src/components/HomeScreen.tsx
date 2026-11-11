@@ -18,6 +18,7 @@ import { type DailyTargets, type MealResult, PROVIDER_PRESETS } from '@snapbite/
 import { RefreshCw, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DateSelector } from './DateSelector.js';
+import { InstallGuide } from './InstallGuide.js';
 import { MacroLegend, MacroLine } from './MacroLine.js';
 import { ProgressRing } from './ProgressRing.js';
 import { SwipeableRow } from './SwipeableRow.js';
@@ -46,6 +47,8 @@ interface HomeScreenProps {
   refreshSignal: number;
   onOpenMeal: (meal: RecentMeal) => void;
   onSetGoal: () => void;
+  /** Setup is covering Home: the install tip must not render behind it. */
+  hideInstallGuide?: boolean;
   onToast?: (kind: ToastKind, message: string) => void;
 }
 
@@ -73,6 +76,7 @@ export function HomeScreen({
   refreshSignal,
   onOpenMeal,
   onSetGoal,
+  hideInstallGuide = false,
   onToast,
 }: HomeScreenProps) {
   const [refreshing, setRefreshing] = useState(false);
@@ -254,6 +258,8 @@ export function HomeScreen({
           <ToggleGroupItem value="weekly">Weekly</ToggleGroupItem>
         </ToggleGroup>
       </div>
+
+      {!hideInstallGuide && <InstallGuide />}
 
       {viewTargets ? (
         <section
