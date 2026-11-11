@@ -10,10 +10,7 @@ import {
   reportRangeStartKey,
 } from '@snapbite/core';
 import { Hono } from 'hono';
-import {
-  createEntitlementMemo,
-  getEntitlement,
-} from '../billing/accounts.js';
+import { createEntitlementMemo, getEntitlement } from '../billing/accounts.js';
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import type { AppBindings } from '../env.js';
 import { localDayKey, parseTzOffset } from './meals.js';
@@ -93,11 +90,7 @@ export function analyticsRoutes() {
   const app = new Hono<AppBindings>();
 
   app.get('/', async (c) => {
-    const entitlement = await getEntitlement(
-      c.env.DB,
-      c.get('userId'),
-      createEntitlementMemo(),
-    );
+    const entitlement = await getEntitlement(c.env.DB, c.get('userId'), createEntitlementMemo());
     if (!entitlement.supporter) {
       return c.json(
         {
@@ -111,17 +104,13 @@ export function analyticsRoutes() {
 
     const range = c.req.query('range') ?? RANGE_90D;
     if (range !== RANGE_90D && range !== RANGE_12M) {
-      return c.json(
-        { error: 'Bad request', detail: "range must be '90d' or '12m'" },
-        400,
-      );
+      return c.json({ error: 'Bad request', detail: "range must be '90d' or '12m'" }, 400);
     }
 
     const tzOffsetMinutes = parseTzOffset(c.req.query('tz'));
     const todayKey = localDayKey(Date.now(), tzOffsetMinutes);
     const rangeStartKey = reportRangeStartKey(range, todayKey);
-    const startMs =
-      Date.parse(`${rangeStartKey}T00:00:00Z`) + tzOffsetMinutes * 60_000;
+    const startMs = Date.parse(`${rangeStartKey}T00:00:00Z`) + tzOffsetMinutes * 60_000;
 
     const { results } = await c.env.DB.prepare(
       `SELECT m.id AS meal_id,

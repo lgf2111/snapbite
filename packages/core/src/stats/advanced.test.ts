@@ -112,8 +112,18 @@ describe('trend series and totals', () => {
     });
 
     // 2026-11-12 is a Thursday (4); 2026-11-11 is a Wednesday (3).
-    expect(report.weekdays[4]).toMatchObject({ label: 'Thu', loggedDays: 1, meals: 2, avgKcal: 1200 });
-    expect(report.weekdays[3]).toMatchObject({ label: 'Wed', loggedDays: 1, meals: 1, avgKcal: 600 });
+    expect(report.weekdays[4]).toMatchObject({
+      label: 'Thu',
+      loggedDays: 1,
+      meals: 2,
+      avgKcal: 1200,
+    });
+    expect(report.weekdays[3]).toMatchObject({
+      label: 'Wed',
+      loggedDays: 1,
+      meals: 1,
+      avgKcal: 600,
+    });
   });
 
   it('distribution by time of day and dish frequency', () => {
@@ -141,7 +151,12 @@ describe('trend series and totals', () => {
     const report = buildAdvancedReport({
       range: '90d',
       todayKey: TODAY,
-      meals: [meal('2026-11-12', 12, 500, 30, [['Rice', 100], ['rice', 50]])],
+      meals: [
+        meal('2026-11-12', 12, 500, 30, [
+          ['Rice', 100],
+          ['rice', 50],
+        ]),
+      ],
       target: null,
     });
     expect(report.dishes).toEqual([{ name: 'Rice', meals: 1, sharePct: 100 }]);
@@ -214,9 +229,18 @@ describe('portion drift', () => {
       range: '90d',
       todayKey: TODAY,
       meals: [
-        meal('2026-09-01', 12, 500, 30, [['Chicken breast', 200], ['Rice', 100]]),
-        meal('2026-10-01', 12, 550, 33, [['chicken breast', 220], ['Rice', 100]]),
-        meal('2026-11-01', 12, 600, 36, [['Chicken breast', 250], ['Rice', 100]]),
+        meal('2026-09-01', 12, 500, 30, [
+          ['Chicken breast', 200],
+          ['Rice', 100],
+        ]),
+        meal('2026-10-01', 12, 550, 33, [
+          ['chicken breast', 220],
+          ['Rice', 100],
+        ]),
+        meal('2026-11-01', 12, 600, 36, [
+          ['Chicken breast', 250],
+          ['Rice', 100],
+        ]),
       ],
       target: null,
     });
@@ -238,8 +262,14 @@ describe('portion drift', () => {
       range: '90d',
       todayKey: TODAY,
       meals: [
-        meal('2026-10-01', 12, 500, 30, [['Chicken', 200], ['Rice', 100]]),
-        meal('2026-11-01', 12, 550, 33, [['Chicken', 260], ['Rice', 103]]),
+        meal('2026-10-01', 12, 500, 30, [
+          ['Chicken', 200],
+          ['Rice', 100],
+        ]),
+        meal('2026-11-01', 12, 550, 33, [
+          ['Chicken', 260],
+          ['Rice', 103],
+        ]),
       ],
       target: null,
     });
@@ -342,9 +372,7 @@ describe('empty and boundary cases', () => {
     const report = buildAdvancedReport({
       range: '90d',
       todayKey: TODAY,
-      meals: [5, 10, 11, 16, 17, 21, 22, 4].map((hour) =>
-        meal('2026-11-12', hour, 100, 5),
-      ),
+      meals: [5, 10, 11, 16, 17, 21, 22, 4].map((hour) => meal('2026-11-12', hour, 100, 5)),
       target: null,
     });
 
