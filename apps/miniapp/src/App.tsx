@@ -180,6 +180,7 @@ export function App() {
               refreshSignal={homeVersion}
               onOpenMeal={openMeal}
               onSetGoal={() => setShowOnboarding(true)}
+              hideInstallGuide={showOnboarding}
               onToast={toastFn}
             />
           )}

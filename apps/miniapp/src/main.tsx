@@ -52,6 +52,9 @@ async function completeSignIn(token: string, apiBase: string): Promise<void> {
 }
 
 void (async () => {
+  // Chrome can fire `beforeinstallprompt` before the app has mounted; start
+  // listening now so the install card still gets it.
+  void import('./lib/install.js').then((m) => m.watchInstallEvents());
   // Telegram Mini App and plain browser both mount the same React app. In a
   // browser it runs in demo mode until sessions land (see lib/backend.ts), but
   // the shell, capture and compression are real.

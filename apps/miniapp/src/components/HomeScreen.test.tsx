@@ -167,6 +167,26 @@ describe('HomeScreen', () => {
     expect(screen.queryByText(/over/i)).not.toBeInTheDocument();
   });
 
+  it('mounts the install tip on a phone, but never while setup covers Home', async () => {
+    Object.defineProperty(navigator, 'userAgent', {
+      value:
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1',
+      configurable: true,
+    });
+    Object.defineProperty(navigator, 'maxTouchPoints', { value: 5, configurable: true });
+    localStorage.clear();
+    const backend = stubBackend();
+
+    const { rerender } = render(<HomeScreen {...props(backend)} />);
+    expect(screen.getByTestId('install-guide')).toBeInTheDocument();
+
+    rerender(<HomeScreen {...props(backend, { hideInstallGuide: true })} />);
+    expect(screen.queryByTestId('install-guide')).not.toBeInTheDocument();
+    await waitFor(() => expect(backend.mealsByDate).toHaveBeenCalled());
+    Reflect.deleteProperty(navigator, 'userAgent');
+    Reflect.deleteProperty(navigator, 'maxTouchPoints');
+  });
+
   it('fires onOpenMeal when a meal row is tapped', async () => {
     const onOpenMeal = vi.fn();
     const backend = stubBackend({

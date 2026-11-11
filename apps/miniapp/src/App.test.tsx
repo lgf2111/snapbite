@@ -45,6 +45,28 @@ describe('first-run onboarding', () => {
     expect(document.body.style.overflow).toBe('hidden');
   });
 
+  it('keeps the install tip off Home while setup is open, and shows it after', async () => {
+    Object.defineProperty(navigator, 'userAgent', {
+      value:
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1',
+      configurable: true,
+    });
+    Object.defineProperty(navigator, 'maxTouchPoints', { value: 5, configurable: true });
+    try {
+      getSettings.mockResolvedValue({ profile: null, targets: null, connected: false });
+      render(<App />);
+      await screen.findByRole('dialog');
+      expect(screen.queryByTestId('install-guide')).toBeNull();
+
+      // Skip setup: Home is visible, so the tip may now render.
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+      await waitFor(() => expect(screen.getByTestId('install-guide')).toBeTruthy());
+    } finally {
+      Reflect.deleteProperty(navigator, 'userAgent');
+      Reflect.deleteProperty(navigator, 'maxTouchPoints');
+    }
+  });
+
   it('does not reopen the sheet once the visitor has dismissed it', async () => {
     localStorage.setItem('snapbite.onboarding.keyDecision', 'skipped');
     getSettings.mockResolvedValue({ profile: null, targets: null, connected: false });

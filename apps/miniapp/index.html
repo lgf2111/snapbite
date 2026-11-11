@@ -19,7 +19,12 @@
     />
     <meta property="og:image" content="/icon.png" />
     <link rel="icon" type="image/webp" href="/favicon.webp" />
-    <link rel="apple-touch-icon" href="/icon.png" />
+    <!-- iOS has no install API; these make "Add to Home Screen" open full screen
+         with the right name and icon. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SnapBite" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <style>
       /* Only what the page needs before the app mounts: no landing chrome, so
