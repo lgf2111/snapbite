@@ -130,3 +130,18 @@ describe('palette wiring', () => {
     expect(light.primary).not.toBe(light.accent);
   });
 });
+
+describe('app shell top', () => {
+  it('clears the status bar with a floor of 12px', () => {
+    const rule = css.match(/\.pt-top\s*{([^}]*)}/)?.[1] ?? '';
+    expect(rule).toContain('max(env(safe-area-inset-top');
+    expect(rule).toContain('12px');
+  });
+
+  it('draws nothing over the header: no mask, gradient or backdrop on the shell classes', () => {
+    const shell = readFileSync(resolve(process.cwd(), 'src/components/AppShell.tsx'), 'utf8');
+    const root = shell.match(/<div className="(pt-top[^"]*)"/)?.[1] ?? '';
+    expect(root).toBeTruthy();
+    expect(root).not.toMatch(/mask|gradient|backdrop|opacity|\/\d\d/);
+  });
+});

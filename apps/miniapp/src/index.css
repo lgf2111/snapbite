@@ -273,6 +273,11 @@ body {
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+/* The top of the app shell: clears the status bar / Dynamic Island, and keeps a
+   floor of 12px on phones without an inset so the header never touches the edge. */
+.pt-top {
+  padding-top: max(env(safe-area-inset-top, 0px), 12px);
+}
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0px);
 }

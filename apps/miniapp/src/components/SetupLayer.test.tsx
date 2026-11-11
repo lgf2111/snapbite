@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SetupLayer } from './SetupLayer.js';
 
@@ -73,5 +74,28 @@ describe('SetupLayer', () => {
     unmount();
     expect(document.body.style.overflow).toBe('');
     opener.remove();
+  });
+
+  it('survives React StrictMode remounting (dev) without reading it as Back', async () => {
+    // Earlier tests leave history traversals in flight; let them land first.
+    await new Promise((r) => setTimeout(r, 50));
+    window.history.replaceState(null, '');
+    const onDismiss = vi.fn();
+    const push = vi.spyOn(window.history, 'pushState');
+    render(
+      <StrictMode>
+        <SetupLayer onDismiss={onDismiss}>
+          <button type="button">x</button>
+        </SetupLayer>
+      </StrictMode>,
+    );
+    // Let any queued history traversal settle.
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(window.history.state?.sbSetup).toBe(true);
+    // The remount reused the entry the first mount pushed.
+    expect(push).toHaveBeenCalledTimes(1);
+    push.mockRestore();
   });
 });
