@@ -9,6 +9,9 @@ on:
   schedule:
     - cron: '0 18 * * *' # 18:00 UTC = 02:00 SGT
   workflow_dispatch:
+  # A change to this file proves itself: it runs the first step, at least.
+  push:
+    paths: ['.github/workflows/d1-backup.yml']
 
 permissions:
   contents: read
@@ -25,6 +28,19 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
+      # First, so a missing secret fails in seconds with the fix spelled out,
+      # instead of inside the export with wrangler's generic auth error.
+      - name: Check the Cloudflare secrets
+        shell: bash
+        run: |
+          missing=""
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error title=D1 backup is missing repository secrets::Not set:$missing. Create an API token with D1 edit rights at https://dash.cloudflare.com/profile/api-tokens, then run: gh secret set CLOUDFLARE_API_TOKEN   and   gh secret set CLOUDFLARE_ACCOUNT_ID   (the account id is on the dashboard's account home or in the Workers & Pages sidebar)."
+            exit 1
+          fi
+
       - uses: actions/checkout@v5
 
       # setup-node reads `packageManager: pnpm@…` from the root package.json and
