@@ -101,11 +101,10 @@ export function SetupLayer({ onDismiss, children }: Props) {
       aria-label="Set up SnapBite"
       tabIndex={-1}
       onKeyDown={onKeyDown}
-      // Safe areas: the welcome must clear the notch and the form must clear the
-      // home indicator. scroll-pb keeps a focused field above the keyboard.
-      className="fixed inset-0 z-50 scroll-pb-28 overflow-y-auto overscroll-contain bg-background pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))] outline-none"
+      // The screen inside owns scrolling, snapping and safe-area padding.
+      className="fixed inset-0 z-50 overflow-hidden bg-background outline-none"
     >
-      <div className="mx-auto flex min-h-full w-full max-w-md flex-col px-4">{children}</div>
+      {children}
     </div>
   );
 }

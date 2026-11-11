@@ -95,6 +95,20 @@
   }
 }
 
+/* Scroll-down cue: a small repeating drift. Applied with `motion-safe:` only. */
+@theme {
+  --animate-drift: drift 1.8s ease-in-out infinite;
+  @keyframes drift {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(6px);
+    }
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
