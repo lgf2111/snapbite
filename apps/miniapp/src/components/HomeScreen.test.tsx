@@ -98,6 +98,40 @@ describe('HomeScreen', () => {
     expect(screen.getByText('Set a goal to see your rings')).toBeInTheDocument();
     // Let the background meals fetch settle so no state update escapes the test.
     await waitFor(() => expect(screen.getByText(/Nothing logged yet/)).toBeInTheDocument());
+    // The goal card carries the one empty message; there is no second paragraph.
+    expect(screen.getAllByText(/Nothing logged yet/)).toHaveLength(1);
+  });
+
+  it('shows exactly one empty message when targets exist', async () => {
+    const backend = stubBackend();
+    render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    await waitFor(() => expect(screen.getByText('Nothing logged yet')).toBeInTheDocument());
+    expect(screen.getAllByText(/Nothing logged yet/)).toHaveLength(1);
+  });
+
+  it('has no add-by-hand control in the header (manual entry lives in the capture sheet)', async () => {
+    const backend = stubBackend();
+    render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    await waitFor(() => expect(screen.getByText('Nothing logged yet')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /add a meal by hand/i })).not.toBeInTheDocument();
+  });
+
+  it('draws a macro bar per row, capped at 100%', async () => {
+    const backend = stubBackend({
+      // protein 75/150 = 50%, carbs 400/200 = capped, fat 0/60 = empty
+      mealsByDate: vi.fn(async () => [
+        meal({ energyKcal: 800, proteinG: 75, carbsG: 400, fatG: 0 }),
+      ]),
+    });
+    const { container } = render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    await screen.findByText('Chicken rice');
+    const fills = [...container.querySelectorAll('[data-slot="macro-bar"] > div')].map(
+      (el) => (el as HTMLElement).style.width,
+    );
+    expect(fills).toEqual(['50%', '100%', '0%']);
   });
 
   it('shows progress rings instead of the goal prompt when targets are set', async () => {
@@ -115,6 +149,19 @@ describe('HomeScreen', () => {
     render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
 
     await waitFor(() => expect(screen.getByText('Over by 400')).toBeInTheDocument());
+    // The ring's caption says "over" in words, not just in hue.
+    expect(screen.getByText('kcal over')).toBeInTheDocument();
+    expect(screen.queryByText('kcal left')).not.toBeInTheDocument();
+  });
+
+  it('says "left" rather than "over" while under target', async () => {
+    const backend = stubBackend({
+      mealsByDate: vi.fn(async () => [meal({ energyKcal: 500 })]),
+    });
+    render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    await waitFor(() => expect(screen.getByText('kcal left')).toBeInTheDocument());
+    expect(screen.queryByText(/over/i)).not.toBeInTheDocument();
   });
 
   it('fires onOpenMeal when a meal row is tapped', async () => {

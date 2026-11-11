@@ -474,18 +474,18 @@ export function MealDetailScreen({
   return (
     <div className="flex flex-1 flex-col gap-4 pb-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Edit meal</h1>
+        <h1 className="text-title">Edit meal</h1>
         <Button variant="ghost" size="icon" onClick={discardAndBack} aria-label="Discard and close">
           <X className="size-5" />
         </Button>
       </div>
 
-      {error && <p className="text-destructive text-sm">{error}</p>}
-      {!detail && !error && <p className="text-muted-foreground text-sm">Loading…</p>}
+      {error && <p className="text-destructive text-caption">{error}</p>}
+      {!detail && !error && <p className="text-muted-foreground text-caption">Loading…</p>}
 
       {detail && (
         <>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-caption">
             {new Date(detail.loggedAt).toLocaleString()}
             {detail.aiProvider
               ? ` · analyzed by ${PROVIDER_LABEL[detail.aiProvider] ?? detail.aiProvider}`
@@ -575,13 +575,17 @@ export function MealDetailScreen({
                       )}
                     </div>
                     {removing ? (
-                      <p className="text-muted-foreground text-xs">
+                      <p className="text-muted-foreground text-caption">
                         Will be removed when you save.
                       </p>
                     ) : (
                       <div className="flex flex-wrap items-center gap-2">
                         {macroFields.map(({ key, icon, suffix }) => (
-                          <div key={key} className="flex items-center gap-1 text-xs" title={key}>
+                          <div
+                            key={key}
+                            className="text-caption flex items-center gap-1"
+                            title={key}
+                          >
                             <span aria-hidden="true">{icon}</span>
                             <Input
                               aria-label={`Food ${i + 1} ${key}`}

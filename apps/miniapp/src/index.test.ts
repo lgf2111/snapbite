@@ -103,6 +103,13 @@ describe.each(['light', 'dark'] as const)('%s palette', (mode) => {
     expect(Number(ratio.toFixed(2))).toBeGreaterThanOrEqual(min);
   });
 
+  it('keeps the macro bar fill visible on its muted track', () => {
+    // The track is --muted and the fill --primary; the bar is the only
+    // non-colour progress cue on the macro rows, so the fill must separate.
+    const ratio = contrast(vars.primary as string, vars.muted as string);
+    expect(Number(ratio.toFixed(2))).toBeGreaterThanOrEqual(1.8);
+  });
+
   it('keeps the border visible against both surfaces (>= 1.5:1)', () => {
     // Decorative, so not held to 3:1 — but at 1.1:1 a card edge disappears.
     expect(contrast(vars.border as string, vars.background as string)).toBeGreaterThanOrEqual(1.5);
