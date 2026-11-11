@@ -1,5 +1,5 @@
 import type { DailyTargets } from '@snapbite/core';
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { AppShell, type ShellTab } from './components/AppShell.js';
 import { CaptureSheet } from './components/CaptureSheet.js';
@@ -53,7 +53,8 @@ export function App() {
   // Home's selected day comes from the URL; the view toggle stays in memory.
   const [homeDate, setHomeDate] = useState(() => (route.name === 'day' ? route.date : todayKey()));
   const [homeView, setHomeView] = useState<'daily' | 'weekly'>('daily');
-  const [captureOpen, setCaptureOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const cameraRef = useRef<HTMLButtonElement>(null);
 
   // Profile/targets drive the Home rings + onboarding gate.
   const [targets, setTargets] = useState<DailyTargets | null>(null);
@@ -98,6 +99,8 @@ export function App() {
     () =>
       onRouteChange((next) => {
         setRoute(next);
+        // Navigating (tab bar, Back) leaves the add-meal menu behind.
+        setMenuOpen(false);
         if (next.name === 'day') setHomeDate(next.date);
       }),
     [],
@@ -147,8 +150,9 @@ export function App() {
           onNavigate={(next) =>
             navigate(next === 'settings' ? { name: 'settings' } : { name: 'day', date: homeDate })
           }
-          onCapture={() => setCaptureOpen(true)}
-          captureBusy={captureOpen}
+          menuOpen={menuOpen}
+          onToggleMenu={() => setMenuOpen((v) => !v)}
+          captureRef={cameraRef}
         >
           {detailId ? (
             <Suspense fallback={<ScreenFallback />}>
@@ -192,8 +196,9 @@ export function App() {
 
       <CaptureSheet
         backend={backend}
-        open={captureOpen}
-        onOpenChange={setCaptureOpen}
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+        triggerRef={cameraRef}
         onLogged={() => setHomeVersion((v) => v + 1)}
         onManualLogged={() => setHomeVersion((v) => v + 1)}
         onToast={toastFn}

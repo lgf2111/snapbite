@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { Camera, Home, Settings as SettingsIcon } from 'lucide-react';
+import { Camera, Home, Plus, Settings as SettingsIcon } from 'lucide-react';
 import type * as React from 'react';
 
 export type ShellTab = 'home' | 'settings';
@@ -7,8 +7,11 @@ export type ShellTab = 'home' | 'settings';
 interface Props {
   active: ShellTab;
   onNavigate: (tab: ShellTab) => void;
-  onCapture: () => void;
-  captureBusy?: boolean;
+  /** The add-a-meal menu is open: the camera button shows its quiet × state. */
+  menuOpen: boolean;
+  onToggleMenu: () => void;
+  /** The camera button; the menu grows out of it and returns focus to it. */
+  captureRef: React.Ref<HTMLButtonElement>;
   children: React.ReactNode;
 }
 
@@ -22,7 +25,14 @@ interface Props {
  * screen. Capture is a sibling button, not a tab: it opens a sheet and owns no
  * panel.
  */
-export function AppShell({ active, onNavigate, onCapture, captureBusy = false, children }: Props) {
+export function AppShell({
+  active,
+  onNavigate,
+  menuOpen,
+  onToggleMenu,
+  captureRef,
+  children,
+}: Props) {
   return (
     <div className="pt-top mx-auto flex min-h-svh w-full max-w-md flex-col bg-background">
       <main className="reserve-bar flex-1 px-4 pt-5">{children}</main>
@@ -49,16 +59,43 @@ export function AppShell({ active, onNavigate, onCapture, captureBusy = false, c
           <div className="relative flex w-20 items-start justify-center">
             <button
               type="button"
-              onClick={onCapture}
-              disabled={captureBusy}
-              aria-label="Log a meal"
+              ref={captureRef}
+              onClick={onToggleMenu}
+              aria-label={menuOpen ? 'Close add-meal menu' : 'Log a meal'}
+              aria-expanded={menuOpen}
+              aria-haspopup="true"
               className={cn(
-                'absolute -top-5 flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl ring-4 ring-background transition-[transform,box-shadow] duration-[160ms] ease-[var(--ease-spring)] hover:shadow-2xl',
-                'active:scale-90 motion-reduce:active:scale-100 disabled:opacity-60',
+                'absolute -top-5 flex size-16 items-center justify-center rounded-full shadow-xl ring-4 ring-background transition-[transform,box-shadow,background-color,color] duration-[160ms] ease-[var(--ease-spring)] hover:shadow-2xl',
+                'active:scale-90 motion-reduce:transition-none motion-reduce:active:scale-100',
                 'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
+                // Open: a quiet ×, not a second loud button.
+                menuOpen
+                  ? 'bg-card text-foreground border border-border'
+                  : 'bg-primary text-primary-foreground',
               )}
             >
-              <Camera className="size-7" aria-hidden />
+              {/* The camera turns 45deg into a ×: the plus is the ×'s other half. */}
+              <span
+                className={cn(
+                  'relative flex size-7 items-center justify-center transition-transform duration-200 ease-[var(--ease-spring)] motion-reduce:transition-none',
+                  menuOpen && 'rotate-45 motion-reduce:rotate-0',
+                )}
+              >
+                <Camera
+                  className={cn(
+                    'absolute size-7 transition-opacity duration-150 motion-reduce:transition-none',
+                    menuOpen ? 'opacity-0' : 'opacity-100',
+                  )}
+                  aria-hidden
+                />
+                <Plus
+                  className={cn(
+                    'absolute size-7 transition-opacity duration-150 motion-reduce:transition-none',
+                    menuOpen ? 'opacity-100 motion-reduce:rotate-45' : 'opacity-0',
+                  )}
+                  aria-hidden
+                />
+              </span>
             </button>
           </div>
 
@@ -91,7 +128,7 @@ function NavButton({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex min-w-16 flex-col items-center justify-center gap-1 rounded-md px-3 py-2 text-caption transition-[transform,color] duration-[140ms] ease-[var(--ease-out-quint)] active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100',
+        'flex w-20 flex-col items-center justify-center gap-1 rounded-md px-3 py-2 text-caption transition-[transform,color] duration-[140ms] ease-[var(--ease-out-quint)] active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100',
         'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
         active ? 'text-primary-text' : 'text-muted-foreground hover:text-foreground',
       )}
