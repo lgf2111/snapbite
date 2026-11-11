@@ -282,7 +282,7 @@ export function OnboardingScreen({
 
   if (step === 'apikey') {
     return (
-      <div className="h-[100svh] overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div className="h-[calc(100svh-var(--keyboard-inset,0px))] overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-6">
           <div className="flex flex-col gap-1">
             <h1 className="text-title">Add your AI key</h1>
@@ -430,7 +430,7 @@ export function OnboardingScreen({
         <section
           ref={formPanel}
           data-testid="onboarding-form-panel"
-          className="h-[100svh] snap-start snap-always scroll-pb-28 overflow-y-auto pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))]"
+          className="h-[calc(100svh-var(--keyboard-inset,0px))] snap-start snap-always scroll-pb-28 overflow-y-auto pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))]"
         >
           <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-6">
             {reached && !formReady && (
