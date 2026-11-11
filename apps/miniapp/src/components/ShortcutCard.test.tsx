@@ -141,20 +141,67 @@ describe('ShortcutCard: the three steps', () => {
     expect(screen.queryByText('How it works')).toBeNull();
   });
 
-  it('step 1 is a plain link to the file: no new tab, no download attribute, no token', async () => {
+  const FILE = 'https://snapbite.leeguanfeng.com/shortcut/snapbite-log-meal.shortcut';
+  const asUserAgent = (ua: string) =>
+    Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true });
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'userAgent');
+  });
+
+  it('on iOS, step 1 hands the file to Shortcuts through its URL scheme (no navigation to the file)', async () => {
+    asUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15');
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
     const link = screen.getByRole('link', { name: 'Add the Shortcut' });
-    expect(link.getAttribute('href')).toBe(HREF);
+    const href = link.getAttribute('href') as string;
+
+    expect(href.startsWith('shortcuts://import-shortcut?url=')).toBe(true);
+    const url = new URL(href.replace('shortcuts://', 'https://x/'));
+    expect(url.searchParams.get('url')).toBe(FILE);
+    expect(href).toContain(encodeURIComponent(FILE));
+    expect(href.endsWith('&name=SnapBite%20Log%20Meal')).toBe(true);
+    // A plain anchor: no new tab, no download, nothing fetched.
     expect(link.hasAttribute('target')).toBe(false);
     expect(link.hasAttribute('download')).toBe(false);
-    expect(screen.getByText('It opens Shortcuts — tap Add Shortcut.')).toBeTruthy();
 
     await userEvent.click(screen.getByRole('button', { name: 'Create Shortcut token' }));
     await screen.findByText(RAW);
     expect(
       screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href'),
     ).not.toContain(RAW);
+  });
+
+  it('elsewhere, step 1 falls back to the plain https file link', () => {
+    asUserAgent('Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0 Safari/537.36');
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    expect(screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href')).toBe(FILE);
+  });
+
+  it('always shows the same https link as copyable text under the button', () => {
+    for (const ua of [
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+      'Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0',
+    ]) {
+      asUserAgent(ua);
+      const { backend } = stub();
+      const view = render(<ShortcutCard backend={backend} />);
+      expect(screen.getByTestId('shortcut-file-url').textContent).toBe(FILE);
+      expect(screen.getByRole('button', { name: 'Copy shortcut link' })).toBeTruthy();
+      view.unmount();
+    }
+  });
+
+  it('says it opens the Shortcuts app and to come back, and that the token step happens there', () => {
+    const { backend } = stub();
+    const { container } = render(<ShortcutCard backend={backend} />);
+    expect(
+      screen.getByText('It opens the Shortcuts app — tap Add Shortcut, then come back here.'),
+    ).toBeTruthy();
+    expect(container.textContent).toContain(
+      'after the shortcut is added, inside the Shortcuts app — not in SnapBite',
+    );
   });
 
   it('step 2 names the field and the text to replace exactly, and says the token is shown once', () => {

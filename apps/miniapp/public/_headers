@@ -18,3 +18,6 @@
 # running for a day. It is also what the browser byte-compares to detect updates.
 /sw.js
   Cache-Control: no-cache, must-revalidate
+
+/shortcut/*
+  Content-Type: application/octet-stream

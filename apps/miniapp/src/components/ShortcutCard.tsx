@@ -3,11 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CreatedDeviceToken, DeviceTokenInfo } from '../lib/api.js';
 import type { Backend } from '../lib/backend.js';
 import { readConfig } from '../lib/config.js';
-import { isStandalone } from '../lib/install.js';
+import { installPlatform, isStandalone } from '../lib/install.js';
 import {
-  SHORTCUT_TEMPLATE_URL,
+  SHORTCUT_FILE_URL,
   SHORTCUT_TOKEN_FIELD,
   SHORTCUT_TOKEN_PLACEHOLDER,
+  shortcutImportUrl,
 } from '../lib/shortcut.js';
 import { Button } from './ui/button.js';
 import { Card, CardContent } from './ui/card.js';
@@ -110,6 +111,7 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
   const [confirm, setConfirm] = useState<Confirm>(null);
   const tokenRef = useRef<HTMLElement | null>(null);
   const urlRef = useRef<HTMLElement | null>(null);
+  const fileRef = useRef<HTMLElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -160,6 +162,10 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
   }
 
   const standalone = useState(isStandalone)[0];
+  // The Shortcuts URL scheme exists on iOS only; anywhere else it would go nowhere.
+  const addHref = useState(() =>
+    installPlatform() === 'ios' ? shortcutImportUrl() : SHORTCUT_FILE_URL,
+  )[0];
   const hasToken = tokens != null && tokens.length > 0;
   // Three steps, visible. Once there is a token the person has been through them, so
   // they fold into one line (and only then).
@@ -170,14 +176,31 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
       <li className="flex flex-col gap-1.5">
         <p className="font-medium">1. Get the shortcut</p>
         <Button asChild>
-          {/* A plain link: iOS opens it in Shortcuts. No fetch, no blob, no new tab. */}
-          <a href={SHORTCUT_TEMPLATE_URL}>Add the Shortcut</a>
+          {/* A plain link to the Shortcuts URL scheme: iOS hands the file to the
+              Shortcuts app, and the person comes back here. No fetch, no blob, no
+              download attribute, and never a navigation to the file itself. */}
+          <a href={addHref}>Add the Shortcut</a>
         </Button>
-        <p className="text-muted-foreground text-caption">It opens Shortcuts — tap Add Shortcut.</p>
+        <p className="text-muted-foreground text-caption">
+          It opens the Shortcuts app — tap Add Shortcut, then come back here.
+        </p>
+        <div className="flex flex-col gap-1">
+          <code
+            ref={fileRef}
+            data-testid="shortcut-file-url"
+            className="text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
+          >
+            {SHORTCUT_FILE_URL}
+          </code>
+          <CopyButton text={SHORTCUT_FILE_URL} target={fileRef} label="Copy shortcut link" />
+        </div>
       </li>
 
       <li className="flex flex-col gap-1.5">
         <p className="font-medium">2. Put your token in it</p>
+        <p className="text-muted-foreground text-caption">
+          You do this after the shortcut is added, inside the Shortcuts app — not in SnapBite.
+        </p>
         <p className="text-caption">
           Open the shortcut → tap the {SHORTCUT_TOKEN_FIELD} field → replace{' '}
           <code className="font-mono">{SHORTCUT_TOKEN_PLACEHOLDER}</code> with your token (keep the
