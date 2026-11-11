@@ -1,4 +1,6 @@
 import { Button } from '@/components/ui/button';
+import { KeyHelp } from './KeyHelp.js';
+import { LinkifiedHint } from './LinkifiedHint.js';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Backend } from '@/lib/backend';
@@ -8,13 +10,15 @@ import {
   type ProviderId,
   type UserProfile,
 } from '@snapbite/core';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ProfileForm } from './ProfileForm.js';
 
 type ToastKind = 'success' | 'error' | 'info';
 
 interface OnboardingScreenProps {
   backend: Backend;
+  /** Open straight at the optional key step (profile already saved). */
+  startAtKeyStep?: boolean;
   onDone: (targets: DailyTargets) => void;
   onSkip: () => void;
   onToast?: (kind: ToastKind, message: string) => void;
@@ -28,14 +32,59 @@ interface OnboardingScreenProps {
  *     rather than blocking.
  * Both steps are skippable; the app is usable either way.
  */
-export function OnboardingScreen({ backend, onDone, onSkip, onToast }: OnboardingScreenProps) {
-  const [step, setStep] = useState<'profile' | 'apikey'>('profile');
+/**
+ * Where the user got to, so a reload (or a phone that backgrounds the tab) does
+ * not throw away typed input. The profile is already saved server-side; this
+ * only records that the key step is next, plus the unsaved key text.
+ * Never used for anything sensitive beyond the user's own API key on their own
+ * device, which they typed here moments ago.
+ */
+const RESUME_KEY = 'snapbite.onboarding.resume';
+
+interface ResumeState {
+  step: 'profile' | 'apikey';
+  provider?: ProviderId;
+}
+
+function readResume(): ResumeState | null {
+  try {
+    const raw = localStorage.getItem(RESUME_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ResumeState;
+    return parsed.step === 'apikey' || parsed.step === 'profile' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeResume(state: ResumeState | null): void {
+  try {
+    if (state) localStorage.setItem(RESUME_KEY, JSON.stringify(state));
+    else localStorage.removeItem(RESUME_KEY);
+  } catch {
+    // Private mode: lose the resume, never break the screen.
+  }
+}
+
+export function OnboardingScreen({ backend, onDone, onSkip, onToast, startAtKeyStep }: OnboardingScreenProps) {
+  const [step, setStep] = useState<'profile' | 'apikey'>(() => {
+    const resume = readResume();
+    // A saved profile (passed in) outranks a stale resume record.
+    if (startAtKeyStep) return 'apikey';
+    return resume?.step ?? 'profile';
+  });
   const [saving, setSaving] = useState(false);
   const [savedTargets, setSavedTargets] = useState<DailyTargets | null>(null);
 
   // API-key step state.
-  const [provider, setProvider] = useState<ProviderId>('gemini');
+  const [provider, setProvider] = useState<ProviderId>(() => readResume()?.provider ?? 'gemini');
   const [apiKey, setApiKey] = useState('');
+
+  // Remember only *where* the user got to (step + provider). The key itself is
+  // never written to disk — it is a live credential, and the form is one paste.
+  useEffect(() => {
+    writeResume({ step, provider });
+  }, [step, provider]);
 
   async function saveProfile(profile: UserProfile) {
     setSaving(true);
@@ -72,6 +121,7 @@ export function OnboardingScreen({ backend, onDone, onSkip, onToast }: Onboardin
   }
 
   function finishWithTargets() {
+    writeResume(null);
     if (savedTargets) onDone(savedTargets);
     else onSkip();
   }
@@ -113,8 +163,10 @@ export function OnboardingScreen({ backend, onDone, onSkip, onToast }: Onboardin
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
           />
-          <p className="text-muted-foreground text-xs">{PROVIDER_PRESETS[provider].keyHint}</p>
+          <LinkifiedHint text={PROVIDER_PRESETS[provider].keyHint} className="text-muted-foreground text-xs" />
         </div>
+
+        <KeyHelp />
 
         <Button disabled={!apiKey.trim() || saving} onClick={() => void saveKey()}>
           {saving ? 'Saving…' : 'Save key & finish'}

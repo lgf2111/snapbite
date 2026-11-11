@@ -15,6 +15,8 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
+import { LinkifiedHint } from './LinkifiedHint.js';
+import { AccountCard } from './AccountCard.js';
 import { cacheKey, getCached, revalidate } from '@/lib/cache';
 import { downloadViaTelegram, openExportUrl } from '@/lib/telegram';
 import { cn } from '@/lib/utils';
@@ -538,6 +540,9 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-semibold">Settings</h1>
 
+      {/* Optional sign-in: the app works without it. */}
+      <AccountCard />
+
       <Card>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
@@ -792,9 +797,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                   onChange={(e) => setApiKey(e.target.value)}
                 />
                 {primaryCfg.provider !== 'custom' && (
-                  <p className="text-muted-foreground text-xs">
-                    {PROVIDER_PRESETS[primaryCfg.provider].keyHint}
-                  </p>
+                  <LinkifiedHint
+                    text={PROVIDER_PRESETS[primaryCfg.provider].keyHint}
+                    className="text-muted-foreground text-xs"
+                  />
                 )}
               </div>
 
