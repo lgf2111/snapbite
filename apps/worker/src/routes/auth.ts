@@ -209,9 +209,12 @@ export function authRoutes() {
     const link = `${base}/verify?token=${encodeURIComponent(token)}`;
 
     const delivered = await sendMagicLink(c.env, email, link);
-    // Not configured (or Resend failed): hand the link straight back so the flow
-    // is testable from a phone. Never do this once email works in production.
-    const devLink = delivered ? undefined : link;
+    // The link is a password for that address's account, so the only place it may
+    // go is the inbox. Handing it back to whoever asked would let anyone sign in as
+    // any email address, including one that already owns a Google account. A
+    // developer can opt in (DEV_LOGIN_LINKS=1, in .dev.vars or tests); production
+    // never sets it, and a failed or unconfigured send just reports delivered:false.
+    const devLink = !delivered && c.env.DEV_LOGIN_LINKS === '1' ? link : undefined;
 
     // Same answer whether or not the address has an account — no enumeration.
     return c.json({ ok: true, delivered, ...(devLink ? { link: devLink } : {}) });
