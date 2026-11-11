@@ -2,16 +2,25 @@ import { useRef } from 'react';
 import { Toaster as Sonner, type ToasterProps } from 'sonner';
 
 /**
+ * How far the toast's bottom edge sits above the bottom of the screen: past the
+ * tab bar, the home-indicator inset, AND the camera button, which stands 1.25rem
+ * above the bar's top edge (`-top-5` in AppShell). 2.75rem is that 1.25rem plus
+ * 1.5rem of air. Measure from the button, not the bar: the first version of this
+ * was bar + 12px, which put the toast on top of the button. This is the only
+ * place the value is written; `toastClearance.test.tsx` checks it against the
+ * button's real classes.
+ */
+export const TOAST_BOTTOM = 'calc(var(--spacing-bar) + 2.75rem + env(safe-area-inset-bottom, 0px))';
+
+/**
  * Where toasts sit, in one place.
  *
- * Bottom: clear of the tab bar (`--spacing-bar`) and the home-indicator inset,
- * plus a little air, so a toast is never on top of the bar or inside the curved
- * bottom corners. Sides: at least 16px, or the side safe-area inset when that
- * is larger (landscape). Sonner's `offset` covers wider screens and
+ * Bottom: `TOAST_BOTTOM`. Sides: at least 16px, or the side safe-area inset when
+ * that is larger (landscape). Sonner's `offset` covers wider screens and
  * `mobileOffset` covers <=600px; both get the same value.
  */
 export const TOAST_OFFSET = {
-  bottom: 'calc(var(--spacing-bar) + env(safe-area-inset-bottom, 0px) + 12px)',
+  bottom: TOAST_BOTTOM,
   left: 'max(16px, env(safe-area-inset-left, 0px))',
   right: 'max(16px, env(safe-area-inset-right, 0px))',
 } as const;
