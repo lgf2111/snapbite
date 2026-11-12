@@ -69,7 +69,7 @@ export function PushReminders({ push }: { push?: PushStatusView | null }) {
   const sinceLabel = since && Number.isFinite(since.getTime()) ? since.toLocaleDateString() : null;
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+    <div className="flex flex-col gap-2 rounded-control border border-border p-3">
       <p className="text-muted-foreground text-caption">
         Reminders arrive as notifications from SnapBite, not from Telegram. On iPhone they only work
         once the app is on your Home Screen.

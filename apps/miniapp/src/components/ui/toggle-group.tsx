@@ -12,7 +12,7 @@ import * as React from 'react';
  * knows about selected state.
  */
 const toggleGroupVariants = cva(
-  'relative inline-flex items-center justify-center rounded-md bg-muted text-muted-foreground',
+  'relative inline-flex items-center justify-center rounded-control bg-muted text-muted-foreground',
   {
     variants: {
       size: {
@@ -37,7 +37,7 @@ const toggleGroupVariants = cva(
  * the highlight can travel between segments instead of swapping.
  */
 const toggleGroupItemVariants = cva(
-  'relative inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-sm px-3 text-caption font-medium whitespace-nowrap transition-[transform,color] duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=on]:font-semibold data-[state=on]:text-foreground',
+  'relative inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-control px-3 text-caption font-medium whitespace-nowrap transition-[transform,color] duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=on]:font-semibold data-[state=on]:text-foreground',
   {
     variants: {
       size: {
@@ -133,7 +133,7 @@ function ToggleGroup({
           ref={indicator}
           aria-hidden="true"
           data-slot="toggle-group-indicator"
-          className="pointer-events-none absolute inset-y-[var(--seg-pad)] left-[var(--seg-pad)] rounded-sm bg-background shadow-xs ring-1 ring-primary-text/50"
+          className="pointer-events-none absolute inset-y-[var(--seg-pad)] left-[var(--seg-pad)] rounded-control bg-background shadow-xs ring-1 ring-primary-text/50"
         />
       )}
       {children}

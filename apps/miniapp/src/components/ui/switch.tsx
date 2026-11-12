@@ -29,7 +29,7 @@ export function Switch({
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        'hit-slop group relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 motion-reduce:transition-none outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50',
+        'hit-slop group relative inline-flex h-6 w-11 shrink-0 items-center rounded-control transition-colors duration-200 motion-reduce:transition-none outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50',
         checked ? 'bg-primary' : 'bg-input',
       )}
       {...aria}

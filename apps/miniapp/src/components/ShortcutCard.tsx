@@ -50,7 +50,7 @@ function AccordionRow({
 }) {
   const id = useId();
   return (
-    <div className="rounded-lg border border-border">
+    <div className="rounded-surface border border-border">
       <button
         type="button"
         aria-expanded={open}
@@ -63,7 +63,7 @@ function AccordionRow({
           {badge && (
             <span
               aria-label={badge}
-              className="bg-secondary text-muted-foreground text-caption shrink-0 rounded-full px-2 py-0.5 font-normal whitespace-nowrap"
+              className="bg-secondary text-muted-foreground text-caption shrink-0 rounded-control px-2 py-0.5 font-normal whitespace-nowrap"
             >
               {badge}
             </span>
@@ -295,7 +295,7 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
 
         {/* The token comes first: both ways below end by pasting it. */}
         {fresh ? (
-          <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+          <div className="flex flex-col gap-2 rounded-control border border-border p-3">
             <code
               ref={tokenRef}
               className="tabular text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
@@ -519,7 +519,7 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
           {confirm?.kind === 'one' && (
             <p
               data-testid="revoke-target"
-              className="bg-secondary text-secondary-foreground text-caption min-w-0 rounded-md px-3 py-2 font-medium break-words [overflow-wrap:anywhere]"
+              className="bg-secondary text-secondary-foreground text-caption min-w-0 rounded-control px-3 py-2 font-medium break-words [overflow-wrap:anywhere]"
             >
               {tokenName(confirm.token)} · {fmtDate(confirm.token.createdAt)}
             </p>

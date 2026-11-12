@@ -108,7 +108,7 @@ export function SwipeableRow({ children, onDelete, animateIn = false }: Swipeabl
       // painted while the action is out, so its antialiased edge cannot tint
       // the rounded corners of a resting row.
       className={cn(
-        'relative mb-2 overflow-hidden rounded-xl',
+        'relative mb-2 overflow-hidden rounded-surface',
         revealed ? 'bg-destructive' : 'bg-card',
         removing && 'pointer-events-none',
       )}
@@ -122,7 +122,7 @@ export function SwipeableRow({ children, onDelete, animateIn = false }: Swipeabl
     >
       {/*
         The red is the row: one full-bleed layer under everything, with no
-        radius of its own. The root's rounded-xl clip shapes it, so the card
+        radius of its own. The root's rounded-surface clip shapes it, so the card
         and the action always share the same outside corners. It is painted
         only while the action is out; at rest the row is card-coloured and the
         layer is invisible.

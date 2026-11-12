@@ -25,7 +25,7 @@ interface Props {
 export function SharePreviewDialog({ open, onOpenChange, card, sharing, onShare }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent hideClose className="gap-0 rounded-xl p-0">
+      <DialogContent hideClose className="gap-0 rounded-surface p-0">
         <DialogTitle className="sr-only">Share this meal</DialogTitle>
         <DialogDescription className="sr-only">
           Preview your meal card, then share it.

@@ -350,7 +350,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
       </div>
 
       <Collapsible open={advanced}>
-        <div className="flex flex-col gap-3 rounded-md border p-3">
+        <div className="flex flex-col gap-3 rounded-control border p-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="cal">Calorie target (kcal)</Label>
             <Input
@@ -400,7 +400,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
         </div>
       </Collapsible>
 
-      <div className="bg-muted/50 flex flex-col gap-1 rounded-md p-3">
+      <div className="bg-muted/50 flex flex-col gap-1 rounded-control p-3">
         <span className="text-muted-foreground text-xs">Your daily targets</span>
         <MacroLine
           energyKcal={targets.energyKcal}

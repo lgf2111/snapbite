@@ -35,7 +35,7 @@ describe('SwipeableRow: the reveal is part of the row', () => {
 
     // The only clip is the row itself, with the card's radius.
     expect(row.className).toContain('overflow-hidden');
-    expect(row.className).toContain('rounded-xl');
+    expect(row.className).toContain('rounded-surface');
     // At rest the row is card-coloured: no red under the radius to tint it.
     expect(row.className).toContain('bg-card');
     expect(row.className).not.toContain('bg-destructive');
@@ -73,7 +73,7 @@ describe('SwipeableRow: the reveal is part of the row', () => {
     // The strip is transparent: the row's destructive layer is the colour.
     expect(action().className).not.toMatch(/(^|\s)bg-/);
     expect(action().style.width).toBe(`${REVEAL}px`);
-    // No radius of its own: the root's rounded-xl does the outside corner.
+    // No radius of its own: the root's rounded-surface does the outside corner.
     expect(action().className).not.toMatch(/\brounded/);
     const surface = screen.getByTestId('swipe-action-surface');
     expect(surface.className).toContain('inset-0');

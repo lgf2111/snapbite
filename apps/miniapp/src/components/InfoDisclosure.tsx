@@ -17,7 +17,7 @@ interface InfoDisclosureProps {
  */
 export function InfoDisclosure({ title, children, className }: InfoDisclosureProps) {
   return (
-    <details className={cn('group border-input rounded-md border px-3 py-2', className)}>
+    <details className={cn('group border-input rounded-control border px-3 py-2', className)}>
       <summary className="text-muted-foreground flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-medium [&::-webkit-details-marker]:hidden">
         <span>{title}</span>
         <ChevronDown className="size-4 shrink-0 transition-transform group-open:rotate-180" />

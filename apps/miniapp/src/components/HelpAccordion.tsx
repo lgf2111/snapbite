@@ -24,7 +24,7 @@ export function HelpAccordion({
   const [open, setOpen] = useState<number | null>(null);
 
   return (
-    <div className="rounded-xl border border-border/60">
+    <div className="rounded-surface border border-border/60">
       <div className="flex items-center gap-2 px-4 pt-3 pb-1">
         <Lightbulb className="size-4 stroke-[1.75]" aria-hidden />
         <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -82,7 +82,7 @@ export function Step({
 }) {
   return (
     <li className="flex gap-3">
-      <span className="bg-primary/15 text-primary-text mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
+      <span className="bg-primary/15 text-primary-text mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-control text-xs font-semibold">
         {n}
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -113,7 +113,7 @@ export function HelpFigure({
 
   return (
     <figure className="m-0 flex flex-col gap-1.5">
-      <div className="overflow-hidden rounded-lg border border-border/60 bg-black/20">
+      <div className="overflow-hidden rounded-control border border-border/60 bg-black/20">
         {missing ? (
           fallback
         ) : (

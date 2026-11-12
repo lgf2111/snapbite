@@ -63,7 +63,7 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+    <section className="flex flex-col gap-3 rounded-surface border border-border bg-card p-4">
       <div>
         <h2 className="font-display text-body font-medium">{title}</h2>
         {hint && <p className="text-muted-foreground text-caption">{hint}</p>}
@@ -157,7 +157,7 @@ function ReportCardSection({
           {grade && (
             <span
               aria-label={`Grade ${grade}`}
-              className="bg-secondary text-primary-text font-display flex size-11 shrink-0 items-center justify-center rounded-full text-xl font-semibold"
+              className="bg-secondary text-primary-text font-display flex size-11 shrink-0 items-center justify-center rounded-control text-xl font-semibold"
             >
               {grade}
             </span>
@@ -234,9 +234,9 @@ function AdherenceSection({ weeks }: { weeks: ReportWeek[] }) {
             <span className="text-muted-foreground text-caption">
               {shortDate(week.weekStartKey)}
             </span>
-            <div className="bg-muted h-2 overflow-hidden rounded-full">
+            <div className="bg-muted h-2 overflow-hidden rounded-control">
               <div
-                className="bg-primary h-full rounded-full"
+                className="bg-primary h-full rounded-control"
                 style={{ width: `${week.scorePct ?? 0}%` }}
               />
             </div>
@@ -303,9 +303,9 @@ function TimeOfDaySection({ buckets }: { buckets: ReportTimeOfDay[] }) {
         {buckets.map((bucket) => (
           <div key={bucket.bucket} className="grid grid-cols-[7.5rem_1fr_2rem] items-center gap-2">
             <span className="text-caption">{bucket.label}</span>
-            <div className="bg-muted h-2 overflow-hidden rounded-full">
+            <div className="bg-muted h-2 overflow-hidden rounded-control">
               <div
-                className="bg-primary h-full rounded-full"
+                className="bg-primary h-full rounded-control"
                 style={{ width: `${bucket.sharePct}%` }}
               />
             </div>
@@ -416,16 +416,16 @@ export function ReportsScreen({ backend, onBack, onSeeCredits }: ReportsScreenPr
 
       {status === 'loading' && (
         <div className="flex flex-col gap-3">
-          <Skeleton className="h-36 w-full rounded-lg" />
-          <Skeleton className="h-40 w-full rounded-lg" />
-          <Skeleton className="h-32 w-full rounded-lg" />
+          <Skeleton className="h-36 w-full rounded-surface" />
+          <Skeleton className="h-40 w-full rounded-surface" />
+          <Skeleton className="h-32 w-full rounded-surface" />
         </div>
       )}
 
       {status === 'locked' && (
         <Card>
           <CardContent className="flex flex-col gap-3 p-4">
-            <div className="bg-secondary text-primary-text flex size-10 items-center justify-center rounded-md">
+            <div className="bg-secondary text-primary-text flex size-10 items-center justify-center rounded-control">
               <Lock className="size-5" />
             </div>
             <div>

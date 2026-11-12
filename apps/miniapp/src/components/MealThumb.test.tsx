@@ -37,7 +37,7 @@ describe('MealThumb', () => {
     expect(ph.getAttribute('aria-hidden')).toBe('true');
     expect(ph.className).toContain('bg-secondary');
     // The slot keeps its size, so the row does not jump.
-    for (const c of ['size-14', 'shrink-0', 'rounded-md']) {
+    for (const c of ['size-14', 'shrink-0', 'rounded-control']) {
       expect(photoClasses).toContain(c);
       expect(ph.className.split(/\s+/)).toContain(c);
     }
@@ -150,13 +150,13 @@ describe('a meal card on Home', () => {
     // Same slot, so rows keep one height: the photo, the manual placeholder, and a
     // failed photo's placeholder all share the same size classes.
     const slot = (el: Element) =>
-      ['size-14', 'shrink-0', 'rounded-md'].filter((c) => el.classList.contains(c));
-    expect(slot(img)).toEqual(['size-14', 'shrink-0', 'rounded-md']);
-    expect(slot(ph)).toEqual(['size-14', 'shrink-0', 'rounded-md']);
+      ['size-14', 'shrink-0', 'rounded-control'].filter((c) => el.classList.contains(c));
+    expect(slot(img)).toEqual(['size-14', 'shrink-0', 'rounded-control']);
+    expect(slot(ph)).toEqual(['size-14', 'shrink-0', 'rounded-control']);
     fireEvent.error(img);
     expect(screen.getAllByTestId('meal-thumb-placeholder')).toHaveLength(2);
     for (const p of screen.getAllByTestId('meal-thumb-placeholder')) {
-      expect(slot(p)).toEqual(['size-14', 'shrink-0', 'rounded-md']);
+      expect(slot(p)).toEqual(['size-14', 'shrink-0', 'rounded-control']);
     }
   });
 
