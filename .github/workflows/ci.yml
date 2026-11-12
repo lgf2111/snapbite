@@ -38,16 +38,11 @@ jobs:
       - name: Lint (Biome)
         run: pnpm lint
 
-      # UI tells: the high-severity gate fails the build. Medium findings are
-      # printed for visibility but do not fail it. Current medium count: 4 —
-      # rounded-full only on the allowed circles (capture button, avatars,
-      # status dot). A rise means a new tell.
-      - name: UI scanner (high-severity gate)
-        run: python3 scripts/devibe_scan.py apps/miniapp/src --severity high
-
-      - name: UI scanner (medium report)
-        if: always()
-        run: python3 scripts/devibe_scan.py apps/miniapp/src
+      # UI tells: emoji in shipped JSX strings and radii outside the role scale
+      # fail the build. Tests are excluded because they quote old classes to
+      # assert their absence.
+      - name: UI tells
+        run: pnpm lint:ui
 
       - name: Typecheck
         run: pnpm typecheck

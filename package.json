@@ -13,6 +13,7 @@
     "test": "pnpm --filter @snapbite/core build && pnpm -r test",
     "typecheck": "pnpm --filter @snapbite/core build && pnpm -r typecheck",
     "lint": "biome check .",
+    "lint:ui": "node scripts/check-ui-tells.mjs",
     "format": "biome format --write ."
   },
   "devDependencies": {
