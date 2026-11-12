@@ -621,7 +621,7 @@ export function KeyHelp() {
             <div className="text-muted-foreground flex flex-col gap-2 text-xs">
               <p>
                 The key is encrypted before it is stored, is only decrypted for the moment a photo
-                is analysed, and is never sent back to the screen or written to logs.
+                is analyzed, and is never sent back to the screen or written to logs.
               </p>
               <p>
                 You can replace or delete it any time in Settings. Deleting your account deletes it.

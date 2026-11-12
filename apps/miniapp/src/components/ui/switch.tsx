@@ -36,7 +36,7 @@ export function Switch({
     >
       <span
         className={cn(
-          'bg-background pointer-events-none block size-5 rounded-[50%] shadow transition-transform duration-200 ease-[var(--ease-spring)] group-active:scale-x-110 motion-reduce:transition-none motion-reduce:group-active:scale-x-100',
+          'bg-background pointer-events-none block size-5 rounded-full shadow transition-transform duration-200 ease-[var(--ease-spring)] group-active:scale-x-110 motion-reduce:transition-none motion-reduce:group-active:scale-x-100',
           checked ? 'translate-x-[22px]' : 'translate-x-0.5',
         )}
       />

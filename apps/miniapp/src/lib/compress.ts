@@ -1,7 +1,7 @@
 /**
  * Client-side photo compression.
  *
- * A modern phone photo is 3–6 MB of 12 MP. The analyser does not need that, and
+ * A modern phone photo is 3–6 MB of 12 MP. The analyzer does not need that, and
  * R2 should not store it: we downscale to a long edge, re-encode as JPEG and
  * step the quality down until the file fits a byte budget. Deterministic and
  * cheap — the whole thing is one canvas draw plus `toBlob`.

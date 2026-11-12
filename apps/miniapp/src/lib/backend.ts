@@ -69,7 +69,7 @@ export interface Backend {
   readonly mode: 'worker' | 'local';
   /** Manually log a meal (no AI/photo). Works without an API key. */
   logManual(meal: MealResult): Promise<void>;
-  /** Logs a meal the AI just analysed in-app, with the photo it came from. */
+  /** Logs a meal the AI just analyzed in-app, with the photo it came from. */
   logWithPhoto(meal: MealResult, photo: { base64: string; mimeType: string }): Promise<void>;
   update(id: string, meal: MealResult): Promise<void>;
   /**

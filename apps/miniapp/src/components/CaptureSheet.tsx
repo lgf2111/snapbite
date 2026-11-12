@@ -11,7 +11,7 @@ import { ManualMealDialog } from './ManualMealDialog.js';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
-type Stage = 'idle' | 'analysing' | 'review' | 'saving' | 'error';
+type Stage = 'idle' | 'analyzing' | 'review' | 'saving' | 'error';
 
 interface Props {
   backend: Backend;
@@ -43,10 +43,10 @@ export type CaptureIntent =
   | { type: 'menu'; highlight: Extract<CaptureAction, 'photo' | 'upload'> }
   /** Open the by-hand form. */
   | { type: 'manual' }
-  /** A photo to run through the normal analyse, confirm, save path. */
+  /** A photo to run through the normal analyze, confirm, save path. */
   | { type: 'file'; file: File };
 
-/** Most photos taken from one library pick: the analyser is slow and rate-limited. */
+/** Most photos taken from one library pick: the analyzer is slow and rate-limited. */
 export const MAX_BATCH = 5;
 
 /**
@@ -75,7 +75,7 @@ export const PICKER_PROBE_MS = 400;
  * looks at it; saving is a separate, retryable step, and a failed save keeps the
  * draft on screen instead of closing.
  *
- *   idle → analysing → review → saving → closed
+ *   idle → analyzing → review → saving → closed
  *                    ↘ error → (retry reuses the same photo)
  */
 export function CaptureSheet({
@@ -125,7 +125,7 @@ export function CaptureSheet({
     if (!file) return;
     if (preview.current) URL.revokeObjectURL(preview.current);
     preview.current = URL.createObjectURL(file);
-    setStage('analysing');
+    setStage('analyzing');
     setError(null);
     try {
       const compressed = await compressPhoto(file);
@@ -142,7 +142,7 @@ export function CaptureSheet({
 
   /**
    * Several photos from the library: each becomes its own meal, one at a time. The
-   * analyser is the slow, rate-limited part, so parallel uploads would only earn
+   * analyzer is the slow, rate-limited part, so parallel uploads would only earn
    * 429s. A failure is counted and the next photo still goes; nothing is abandoned.
    * There is no review step per photo: the summary toast is the feedback.
    */
@@ -226,7 +226,7 @@ export function CaptureSheet({
     onToast('success', `Logged ${Math.round(result.total.energyKcal)} kcal`);
   }
 
-  const busy = stage === 'analysing' || stage === 'saving';
+  const busy = stage === 'analyzing' || stage === 'saving';
 
   /**
    * iOS opens a file picker only from inside the tap or release that asked for
@@ -392,7 +392,7 @@ export function CaptureSheet({
               {stage === 'review' || stage === 'saving' ? 'Log this meal?' : 'Add a meal photo'}
             </DialogTitle>
             <DialogDescription>
-              {stage === 'analysing'
+              {stage === 'analyzing'
                 ? 'Reading the photo…'
                 : stage === 'review' || stage === 'saving'
                   ? 'Check the estimate, then save it.'
@@ -408,7 +408,7 @@ export function CaptureSheet({
             />
           )}
 
-          {stage === 'analysing' && (
+          {stage === 'analyzing' && (
             <div className="text-muted-foreground flex items-center gap-2 text-caption">
               <Loader2 className="size-4 animate-spin" aria-hidden />
               Analysing…

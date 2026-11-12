@@ -73,7 +73,7 @@ describe('SharePreviewDialog', () => {
     // The card itself is flush with the sheet, with no border of its own.
     const card = screen.getByTestId('share-card');
     expect(card.className).not.toContain('border');
-    expect(card.className).not.toContain('rounded');
+    expect(card.className).not.toMatch(/\brounded\b/);
   });
 
   it('fits a 430×932 screen above the 72 px tab bar', () => {
