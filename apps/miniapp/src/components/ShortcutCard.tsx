@@ -36,11 +36,14 @@ type Panel = 'easy' | 'hand';
  */
 function AccordionRow({
   title,
+  badge,
   open,
   onToggle,
   children,
 }: {
   title: string;
+  /** A short qualifier beside the title, e.g. "iOS only". */
+  badge?: string;
   open: boolean;
   onToggle: () => void;
   children: ReactNode;
@@ -55,7 +58,17 @@ function AccordionRow({
         onClick={onToggle}
         className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left font-medium transition-[background-color,transform] duration-[120ms] active:scale-[0.99] active:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none motion-reduce:transition-none motion-reduce:active:scale-100"
       >
-        <span className="min-w-0">{title}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0">{title}</span>
+          {badge && (
+            <span
+              aria-label={badge}
+              className="bg-secondary text-muted-foreground text-caption shrink-0 rounded-full px-2 py-0.5 font-normal whitespace-nowrap"
+            >
+              {badge}
+            </span>
+          )}
+        </span>
         <ChevronDown
           aria-hidden
           className="text-muted-foreground size-4 shrink-0 transition-transform duration-200 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
@@ -312,7 +325,8 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
         )}
 
         <AccordionRow
-          title="Install with the Shortcuts app"
+          title="Set up with Shortcut app"
+          badge="iOS only"
           open={panel === 'easy'}
           onToggle={() => setPanel(panel === 'easy' ? null : 'easy')}
         >
@@ -359,7 +373,7 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
         </AccordionRow>
 
         <AccordionRow
-          title="Set it up by hand"
+          title="Set up manually"
           open={panel === 'hand'}
           onToggle={() => setPanel(panel === 'hand' ? null : 'hand')}
         >
