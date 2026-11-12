@@ -70,7 +70,7 @@ export function InstallGuide() {
           aria-expanded={expanded}
           aria-controls="install-guide-body"
           onClick={() => setExpanded((v) => !v)}
-          className="text-caption flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-4 text-left focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="text-caption flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-control px-4 text-left focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <Smartphone className="text-primary-text size-4 shrink-0" aria-hidden />
           <span className="min-w-0 flex-1 font-medium">Install SnapBite on your phone</span>

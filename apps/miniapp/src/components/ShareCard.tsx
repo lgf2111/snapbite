@@ -37,7 +37,7 @@ export function ShareCard({ photoUrl, title, calories, proteinG, carbsG, fatG }:
     >
       <div
         data-testid="share-card-photo"
-        className="bg-secondary relative h-[60%] w-full shrink-0 overflow-hidden rounded-t-xl"
+        className="bg-secondary relative h-[60%] w-full shrink-0 overflow-hidden rounded-t-surface"
       >
         {photoUrl ? (
           <img
@@ -55,7 +55,7 @@ export function ShareCard({ photoUrl, title, calories, proteinG, carbsG, fatG }:
         )}
 
         {photoUrl && (
-          <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/40 py-1 pr-2.5 pl-1 text-white backdrop-blur-sm">
+          <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-control bg-black/40 py-1 pr-2.5 pl-1 text-white backdrop-blur-sm">
             <img src="/icon.png" alt="" className="size-5 rounded-full" />
             <span className="text-[0.6875rem] font-bold tracking-tight">SnapBite</span>
           </div>

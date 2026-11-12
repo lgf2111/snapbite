@@ -123,7 +123,7 @@ export function ExportData({ backend }: { backend: Backend }) {
           <pre
             ref={pre}
             data-testid="export-json"
-            className="bg-background border-border max-h-64 min-w-0 overflow-auto rounded-md border p-3 font-mono text-xs whitespace-pre"
+            className="bg-background border-border max-h-64 min-w-0 overflow-auto rounded-control border p-3 font-mono text-xs whitespace-pre"
           >
             {sheet?.text}
           </pre>

@@ -157,7 +157,7 @@ describe('HomeScreen', () => {
     const badge = await screen.findByRole('button', { name: '5-day logging streak' });
     for (const cls of [
       'min-h-11',
-      'rounded-full',
+      'rounded-control',
       'bg-secondary',
       'text-foreground',
       'px-3',

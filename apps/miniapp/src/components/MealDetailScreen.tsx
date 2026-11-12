@@ -496,7 +496,7 @@ export function MealDetailScreen({
             <img
               src={backend.photoUrl(mealId) as string}
               alt="Meal"
-              className="w-full rounded-xl border object-cover"
+              className="w-full rounded-surface border object-cover"
             />
           )}
 

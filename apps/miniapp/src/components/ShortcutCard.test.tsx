@@ -167,7 +167,7 @@ describe('ShortcutCard: the two accordions', () => {
     expect(badge.className).toContain('bg-secondary');
     expect(badge.className).toContain('text-muted-foreground');
     expect(badge.className).toContain('text-caption');
-    expect(badge.className).toContain('rounded-full');
+    expect(badge.className).toContain('rounded-control');
     // Beside the title, never on its own line: the row is a flex line and the
     // badge holds its width, so it cannot wrap under the title at 375pt.
     expect(badge.className).toContain('shrink-0');

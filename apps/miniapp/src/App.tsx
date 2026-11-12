@@ -40,9 +40,9 @@ const toastFn = (kind: 'success' | 'error' | 'info', msg: string): void => {
 function ScreenFallback() {
   return (
     <div className="flex flex-col gap-3">
-      <Skeleton className="h-8 w-32 rounded-md" />
-      <Skeleton className="h-24 w-full rounded-lg" />
-      <Skeleton className="h-24 w-full rounded-lg" />
+      <Skeleton className="h-8 w-32 rounded-control" />
+      <Skeleton className="h-24 w-full rounded-surface" />
+      <Skeleton className="h-24 w-full rounded-surface" />
     </div>
   );
 }

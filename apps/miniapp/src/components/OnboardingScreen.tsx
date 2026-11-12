@@ -296,7 +296,7 @@ export function OnboardingScreen({
             <Label htmlFor="onb-provider">Provider</Label>
             <select
               id="onb-provider"
-              className="border-input text-body h-9 rounded-md border bg-transparent px-3"
+              className="border-input text-body h-9 rounded-control border bg-transparent px-3"
               value={provider}
               onChange={(e) => chooseProvider(e.target.value as ProviderId)}
             >
@@ -397,7 +397,7 @@ export function OnboardingScreen({
                   type="button"
                   data-testid="scroll-cue"
                   onClick={scrollToForm}
-                  className="motion-safe:animate-in motion-safe:fade-in text-muted-foreground text-caption flex w-fit flex-col items-center gap-1 rounded-md px-3 py-2 duration-500 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="motion-safe:animate-in motion-safe:fade-in text-muted-foreground text-caption flex w-fit flex-col items-center gap-1 rounded-control px-3 py-2 duration-500 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   <span>Scroll down to set your goal</span>
                   <ArrowDown
@@ -415,7 +415,7 @@ export function OnboardingScreen({
                   ref={signInTrigger}
                   data-testid="signin-link"
                   onClick={() => setSignInOpen(true)}
-                  className="text-muted-foreground text-caption flex min-h-11 items-center gap-1 rounded-md px-4 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="text-muted-foreground text-caption flex min-h-11 items-center gap-1 rounded-control px-4 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   Already have an account?
                   <span className="text-primary-text font-medium underline underline-offset-4">
@@ -435,11 +435,11 @@ export function OnboardingScreen({
           <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-6">
             {reached && !formReady && (
               <div data-testid="onboarding-skeleton" aria-hidden className="flex flex-col gap-4">
-                <Skeleton className="h-5 w-3/4 rounded-md" />
+                <Skeleton className="h-5 w-3/4 rounded-control" />
                 {[0, 1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-11 w-full rounded-md" />
+                  <Skeleton key={i} className="h-11 w-full rounded-control" />
                 ))}
-                <Skeleton className="h-11 w-full rounded-md" />
+                <Skeleton className="h-11 w-full rounded-control" />
               </div>
             )}
 

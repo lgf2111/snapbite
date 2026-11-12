@@ -146,9 +146,9 @@ export function CreditsCard({ backend, refreshSignal = 0, onNavigate }: CreditsC
     return (
       <Card>
         <CardContent className="flex flex-col gap-3" aria-busy="true">
-          <Skeleton className="h-5 w-40 rounded-md" />
-          <Skeleton className="h-10 w-28 rounded-md" />
-          <Skeleton className="h-20 w-full rounded-md" />
+          <Skeleton className="h-5 w-40 rounded-control" />
+          <Skeleton className="h-10 w-28 rounded-control" />
+          <Skeleton className="h-20 w-full rounded-control" />
         </CardContent>
       </Card>
     );
@@ -211,7 +211,7 @@ export function CreditsCard({ backend, refreshSignal = 0, onNavigate }: CreditsC
                   : 'Buy a pack, or add your own AI key in Settings to keep analyzing for free.'}
             </p>
 
-            <div className="flex items-start gap-2 rounded-md border border-border p-3">
+            <div className="flex items-start gap-2 rounded-control border border-border p-3">
               {summary.supporter ? (
                 <>
                   <Check className="text-primary-text mt-0.5 size-4 shrink-0" />
@@ -275,7 +275,7 @@ export function CreditsCard({ backend, refreshSignal = 0, onNavigate }: CreditsC
           {summary.packs.map((pack) => (
             <div
               key={pack.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-border p-3"
+              className="flex items-center justify-between gap-3 rounded-control border border-border p-3"
             >
               <div className="min-w-0">
                 <p className="font-medium">{pack.label}</p>
@@ -302,7 +302,7 @@ export function CreditsCard({ backend, refreshSignal = 0, onNavigate }: CreditsC
         </div>
 
         {!import.meta.env.PROD && devOpen && signedIn && (
-          <div className="flex flex-col gap-2 rounded-md border border-dashed border-border p-3">
+          <div className="flex flex-col gap-2 rounded-control border border-dashed border-border p-3">
             <p className="text-muted-foreground text-caption">
               Development only — grants 100 credits through ADMIN_TOKEN.
             </p>

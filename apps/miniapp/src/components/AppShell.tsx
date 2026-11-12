@@ -146,7 +146,7 @@ function NavButton({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex w-20 flex-col items-center justify-center gap-1 rounded-md px-3 py-2 text-caption transition-[transform,color] duration-[140ms] ease-[var(--ease-out-quint)] active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100',
+        'flex w-20 flex-col items-center justify-center gap-1 rounded-control px-3 py-2 text-caption transition-[transform,color] duration-[140ms] ease-[var(--ease-out-quint)] active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100',
         'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
         active ? 'text-primary-text' : 'text-muted-foreground hover:text-foreground',
       )}

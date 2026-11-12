@@ -244,7 +244,7 @@ export function CaptureMenu({ open, onClose, onPick, triggerRef, highlight = nul
                     onPick(id);
                   }}
                   data-highlighted={highlight === id ? 'true' : undefined}
-                  className="flex min-h-24 w-full flex-col items-start gap-2 rounded-lg border border-border bg-card p-4 text-left text-card-foreground shadow-lg focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none data-[highlighted=true]:border-primary data-[highlighted=true]:ring-2 data-[highlighted=true]:ring-primary"
+                  className="flex min-h-24 w-full flex-col items-start gap-2 rounded-surface border border-border bg-card p-4 text-left text-card-foreground shadow-lg focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none data-[highlighted=true]:border-primary data-[highlighted=true]:ring-2 data-[highlighted=true]:ring-primary"
                   style={{
                     pointerEvents: shown ? 'auto' : 'none',
                     opacity: shown ? 1 : 0,

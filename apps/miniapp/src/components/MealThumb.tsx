@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 
 /** The row's photo slot: one size, whatever it ends up showing. 56 px. */
-const SLOT = 'size-14 shrink-0 rounded-md';
+const SLOT = 'size-14 shrink-0 rounded-control';
 
 /** How long the row waits before asking for a failed photo one more time. */
 export const THUMB_RETRY_DELAY_MS = 1000;
@@ -68,7 +68,7 @@ export function MealThumb({ src }: { src?: string | null }) {
         {/* The mark, as a background: a missing file shows nothing, not a glyph. */}
         <span
           data-testid="meal-thumb-mark"
-          className="size-7 rounded-md bg-contain bg-center bg-no-repeat opacity-80"
+          className="size-7 rounded-control bg-contain bg-center bg-no-repeat opacity-80"
           style={{ backgroundImage: 'url(/icon-192.png)' }}
         />
       </div>

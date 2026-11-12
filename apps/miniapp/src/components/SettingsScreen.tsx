@@ -670,7 +670,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           {weekPrefs.mode === 'calendar' && (
             <div className="flex flex-col gap-1.5">
               <Label>Week starts on</Label>
-              <div className="bg-muted flex gap-1 rounded-md p-1">
+              <div className="bg-muted flex gap-1 rounded-control p-1">
                 {(
                   [
                     { value: 'monday', label: 'Monday' },
@@ -682,7 +682,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                     type="button"
                     onClick={() => updateWeekPrefs({ weekStart: o.value })}
                     className={cn(
-                      'min-h-9 flex-1 rounded px-2 py-1.5 text-sm font-medium transition-[transform,background-color,color,box-shadow] duration-[160ms] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100',
+                      'min-h-9 flex-1 rounded-control px-2 py-1.5 text-sm font-medium transition-[transform,background-color,color,box-shadow] duration-[160ms] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100',
                       weekPrefs.weekStart === o.value
                         ? 'bg-background text-foreground shadow-sm'
                         : 'text-muted-foreground',

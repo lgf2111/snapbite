@@ -428,7 +428,7 @@ describe('the sheet cannot be wider than the screen', () => {
       expect(input.parentElement?.className).toContain('min-w-0');
     }
     const dialog = document.querySelector('[data-slot=dialog-content]') as HTMLElement;
-    expect(dialog.className).toContain('rounded-xl');
+    expect(dialog.className).toContain('rounded-surface');
 
     const primary = screen.getByRole('button', { name: 'Log meal' });
     const cancel = screen.getByRole('button', { name: 'Cancel' });

@@ -59,7 +59,7 @@ describe('ShareCard', () => {
     expect(photo.className).toContain('h-[60%]');
     // The photo's top corners follow the sheet's radius, so the flush card is
     // not cropped square over the rounded sheet.
-    expect(photo.className).toContain('rounded-t-xl');
+    expect(photo.className).toContain('rounded-t-surface');
     const img = screen.getByTestId('share-card-photo-img');
     expect(img.className).toContain('size-full');
     expect(img.className).toContain('object-cover');

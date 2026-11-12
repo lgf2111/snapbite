@@ -67,7 +67,7 @@ describe('SharePreviewDialog', () => {
 
     expect(sheet.className).toContain('p-0');
     expect(sheet.className).toContain('gap-0');
-    expect(sheet.className).toContain('rounded-xl');
+    expect(sheet.className).toContain('rounded-surface');
     expect(sheet.className).toContain('border');
     expect(sheet.className).toContain('bg-card');
     // The card itself is flush with the sheet, with no border of its own.

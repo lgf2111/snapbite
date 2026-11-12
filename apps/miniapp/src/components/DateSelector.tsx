@@ -77,7 +77,7 @@ export function DateSelector({ value, onChange, loggedDates }: DateSelectorProps
           align="center"
           collisionPadding={16}
         >
-          <Suspense fallback={<Skeleton className="h-64 w-64 rounded-md" />}>
+          <Suspense fallback={<Skeleton className="h-64 w-64 rounded-surface" />}>
             <Calendar
               mode="single"
               selected={fromKey(value)}

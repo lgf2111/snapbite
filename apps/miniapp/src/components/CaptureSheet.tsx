@@ -386,7 +386,7 @@ export function CaptureSheet({
           if (!next) reset();
         }}
       >
-        <DialogContent className="sheet-safe bottom-0 top-auto max-w-md translate-y-0 rounded-b-none rounded-t-xl duration-200 data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2 data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100">
+        <DialogContent className="sheet-safe bottom-0 top-auto max-w-md translate-y-0 rounded-b-none rounded-t-surface duration-200 data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2 data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100">
           <DialogHeader>
             <DialogTitle className="text-title">
               {stage === 'review' || stage === 'saving' ? 'Log this meal?' : 'Add a meal photo'}
@@ -404,7 +404,7 @@ export function CaptureSheet({
             <img
               src={preview.current}
               alt=""
-              className="max-h-56 w-full rounded-md border border-border object-cover"
+              className="max-h-56 w-full rounded-control border border-border object-cover"
             />
           )}
 
@@ -416,7 +416,7 @@ export function CaptureSheet({
           )}
 
           {draft && (stage === 'review' || stage === 'saving' || stage === 'error') && (
-            <div className="rounded-md border border-border bg-background p-3">
+            <div className="rounded-control border border-border bg-background p-3">
               <p className="font-display text-display tabular leading-none">
                 {Math.round(draft.total.energyKcal)}
                 <span className="text-muted-foreground ml-1 text-caption">kcal</span>

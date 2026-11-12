@@ -363,7 +363,7 @@ export function HomeScreen({
               type="button"
               aria-label={`${streak}-day logging streak`}
               onClick={() => setStreakOpen(true)}
-              className="bg-secondary text-foreground text-caption inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full px-3 font-medium"
+              className="bg-secondary text-foreground text-caption inline-flex min-h-11 shrink-0 items-center gap-1 rounded-control px-3 font-medium"
             >
               <Flame className="size-4 stroke-[1.75]" aria-hidden data-testid="streak-flame" />
               <span className="tabular">{streak}</span>
@@ -402,7 +402,7 @@ export function HomeScreen({
       {viewTargets ? (
         <section
           aria-label="Today's progress"
-          className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4"
+          className="flex flex-col gap-4 rounded-surface border border-border bg-card p-4"
         >
           <div className="flex items-center gap-4">
             <ProgressRing
@@ -472,13 +472,13 @@ export function HomeScreen({
                       <dd
                         aria-hidden
                         data-slot="macro-bar"
-                        className="bg-muted ring-border/60 col-span-2 h-[3px] overflow-hidden rounded-full ring-1"
+                        className="bg-muted ring-border/60 col-span-2 h-[3px] overflow-hidden rounded-control ring-1"
                       >
                         <div
                           data-slot="macro-fill"
                           data-tone={tone}
                           className={cn(
-                            'h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out-quint)] motion-reduce:transition-none',
+                            'h-full w-full origin-left rounded-control transition-transform duration-500 ease-[var(--ease-out-quint)] motion-reduce:transition-none',
                             MACRO_FILL[tone],
                           )}
                           style={{
@@ -510,7 +510,7 @@ export function HomeScreen({
           )}
         </section>
       ) : (
-        <section className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
+        <section className="flex items-center justify-between gap-3 rounded-surface border border-border bg-card p-4">
           <div className="min-w-0">
             <p className="text-body font-medium">Set a goal to see your rings</p>
             <p className="text-muted-foreground text-caption">
@@ -530,10 +530,10 @@ export function HomeScreen({
       <button
         type="button"
         onClick={onOpenReports}
-        className="flex w-full items-center justify-between gap-3 rounded-lg border border-border bg-card p-4 text-left transition-transform duration-[120ms] active:scale-[0.99] motion-reduce:transition-none"
+        className="flex w-full items-center justify-between gap-3 rounded-surface border border-border bg-card p-4 text-left transition-transform duration-[120ms] active:scale-[0.99] motion-reduce:transition-none"
       >
         <div className="flex min-w-0 items-center gap-3">
-          <div className="bg-secondary text-primary-text flex size-9 shrink-0 items-center justify-center rounded-md">
+          <div className="bg-secondary text-primary-text flex size-9 shrink-0 items-center justify-center rounded-control">
             <TrendingUp className="size-4" />
           </div>
           <div className="min-w-0">
@@ -553,7 +553,7 @@ export function HomeScreen({
       {mealsLoading && mealsData === undefined && !error && (
         <div className="flex flex-col gap-2">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-lg" />
+            <Skeleton key={i} className="h-16 w-full rounded-surface" />
           ))}
         </div>
       )}
@@ -567,7 +567,7 @@ export function HomeScreen({
                   <MealThumb src={m.previewUrl} />
                   <button
                     type="button"
-                    className="min-w-0 flex-1 rounded-md text-left transition-transform duration-[120ms] active:scale-[0.99] motion-reduce:transition-none"
+                    className="min-w-0 flex-1 rounded-control text-left transition-transform duration-[120ms] active:scale-[0.99] motion-reduce:transition-none"
                     onClick={() => onOpenMeal(m)}
                   >
                     <div className="truncate font-medium">{m.label}</div>

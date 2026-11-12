@@ -194,7 +194,7 @@ export function ManualMealDialog({
               Log a meal by hand — no photo or AI key needed.
             </DialogDescription>
           </div>
-          <DialogClose className="focus-visible:ring-ring/50 -mt-1 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-[3px] focus-visible:outline-none">
+          <DialogClose className="focus-visible:ring-ring/50 -mt-1 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-control opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-[3px] focus-visible:outline-none">
             <X className="size-5" />
             <span className="sr-only">Close</span>
           </DialogClose>
@@ -221,7 +221,7 @@ export function ManualMealDialog({
                         disabled={busy || loggingFavId !== null}
                         title={fav.label}
                         onClick={() => pickFavorite(fav)}
-                        className="border-input hover:bg-accent flex min-w-0 flex-1 items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50"
+                        className="border-input hover:bg-accent flex min-w-0 flex-1 items-center gap-2 rounded-control border px-3 py-2 text-left text-sm transition-colors disabled:opacity-50"
                       >
                         <Star className="text-primary-text size-4 shrink-0 fill-current" />
                         <span className="min-w-0 flex-1 truncate">{fav.label}</span>

@@ -39,7 +39,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          'bg-card fixed left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 grid-cols-[minmax(0,1fr)] gap-4 max-h-[calc(100svh-var(--keyboard-inset,0px)-2rem)] overflow-y-auto overscroll-contain rounded-xl border p-5 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+          'bg-card fixed left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 grid-cols-[minmax(0,1fr)] gap-4 max-h-[calc(100svh-var(--keyboard-inset,0px)-2rem)] overflow-y-auto overscroll-contain rounded-surface border p-5 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
           // With the keyboard up, sit directly above it (top edge on screen)
           // instead of centring in the half-dark space that is left.
           keyboardInset > 0
@@ -51,7 +51,7 @@ function DialogContent({
       >
         {children}
         {!hideClose && (
-          <DialogPrimitive.Close className="absolute top-4 right-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none">
+          <DialogPrimitive.Close className="absolute top-4 right-4 rounded-control opacity-70 transition-opacity hover:opacity-100 focus:outline-none">
             <XIcon className="size-4" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
