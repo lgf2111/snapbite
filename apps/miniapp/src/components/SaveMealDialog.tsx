@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogActions,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -73,7 +74,7 @@ export function SaveMealDialog({ open, name, saving, onNameChange, onOpenChange,
             />
           </div>
 
-          <div className="flex flex-col gap-2">
+          <DialogActions>
             <Button type="submit" className="h-12 w-full" disabled={saving || !valid}>
               {saving ? 'Saving…' : 'Save'}
             </Button>
@@ -86,7 +87,7 @@ export function SaveMealDialog({ open, name, saving, onNameChange, onOpenChange,
             >
               Cancel
             </Button>
-          </div>
+          </DialogActions>
         </form>
       </DialogContent>
     </Dialog>

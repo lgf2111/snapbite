@@ -1,9 +1,9 @@
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogActions,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -12,7 +12,7 @@ import type { Backend } from '@/lib/backend';
 import { hapticNotify } from '@/lib/telegram';
 import type { MealResult } from '@snapbite/core';
 import { Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type ToastKind = 'success' | 'error' | 'info';
 
@@ -51,6 +51,10 @@ export function ReviseWithAiDialog({
   const [text, setText] = useState(initialInstruction);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const instruction = text.trim();
+  /** A one-word instruction is not enough to revise a meal. */
+  const valid = instruction.length >= 3;
 
   // Reset the input to the initial instruction whenever the dialog opens.
   useEffect(() => {
@@ -79,8 +83,7 @@ export function ReviseWithAiDialog({
   }, [busy]);
 
   async function submit() {
-    const instruction = text.trim();
-    if (!instruction || busy) return;
+    if (!valid || busy) return;
     setBusy(true);
     try {
       const { notice, ...revised } = await backend.reviseDraft(mealId, instruction);
@@ -100,7 +103,12 @@ export function ReviseWithAiDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => (busy ? null : onOpenChange(o))}>
-      <DialogContent>
+      <DialogContent
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          inputRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Update with AI</DialogTitle>
           <DialogDescription>
@@ -108,38 +116,60 @@ export function ReviseWithAiDialog({
             "remove the fries". You'll review the result before saving.
           </DialogDescription>
         </DialogHeader>
-        <Input
-          autoFocus
-          placeholder="Describe the change…"
-          value={text}
-          maxLength={500}
-          disabled={busy}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit();
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
           }}
-        />
-        {busy && (
-          <p className="text-muted-foreground flex items-center gap-2 text-sm" aria-live="polite">
-            <Loader2 className="size-4 animate-spin" />
-            {status}
-          </p>
-        )}
-        <DialogFooter>
-          <Button variant="secondary" disabled={busy} onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button disabled={busy || !text.trim()} onClick={() => void submit()}>
-            {busy ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Updating…
-              </>
-            ) : (
-              'Apply'
-            )}
-          </Button>
-        </DialogFooter>
+        >
+          <div className="grid gap-2">
+            <Input
+              ref={inputRef}
+              placeholder="Describe the change…"
+              value={text}
+              maxLength={500}
+              disabled={busy}
+              enterKeyHint="send"
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                if (valid) void submit();
+              }}
+            />
+            <p className="text-caption text-muted-foreground">
+              Try "add a can of coke" · "the rice was double".
+            </p>
+          </div>
+          {busy && (
+            <p className="text-muted-foreground flex items-center gap-2 text-sm" aria-live="polite">
+              <Loader2 className="size-4 animate-spin" />
+              {status}
+            </p>
+          )}
+          <DialogActions>
+            <Button type="submit" className="h-12 w-full" disabled={busy || !valid}>
+              {busy ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Updating…
+                </>
+              ) : (
+                'Apply'
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-muted-foreground h-11 w-full"
+              disabled={busy}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+          </DialogActions>
+        </form>
       </DialogContent>
     </Dialog>
   );

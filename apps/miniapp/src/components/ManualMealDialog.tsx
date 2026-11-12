@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogActions,
   DialogClose,
   DialogContent,
   DialogDescription,
@@ -177,6 +178,11 @@ export function ManualMealDialog({
       <DialogContent
         hideClose
         className="flex max-h-[calc(100svh-var(--keyboard-inset,0px)-2rem)] w-[calc(100%-2rem)] max-w-sm flex-col gap-0 overflow-hidden p-0"
+        onOpenAutoFocus={(event) => {
+          // The keyboard should come up on the name, not on a saved meal.
+          event.preventDefault();
+          nameRef.current?.focus();
+        }}
       >
         <header
           data-slot="manual-header"
@@ -288,20 +294,27 @@ export function ManualMealDialog({
 
         <div
           data-slot="manual-footer"
-          className="bg-card flex shrink-0 gap-4 border-t px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
+          className="bg-card flex shrink-0 flex-col border-t px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
         >
-          <Button
-            type="button"
-            variant="secondary"
-            className="h-12 flex-1"
-            disabled={busy}
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" form="manual-meal-form" className="h-12 flex-1" disabled={!canSave}>
-            {busy ? 'Logging…' : 'Log meal'}
-          </Button>
+          <DialogActions>
+            <Button
+              type="submit"
+              form="manual-meal-form"
+              className="h-12 w-full"
+              disabled={!canSave}
+            >
+              {busy ? 'Logging…' : 'Log meal'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-muted-foreground h-11 w-full"
+              disabled={busy}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+          </DialogActions>
         </div>
       </DialogContent>
     </Dialog>

@@ -141,15 +141,21 @@ describe('the sheet is a header / body / footer flex column', () => {
     expect(footer.contains(screen.getByRole('button', { name: 'Log meal' }))).toBe(true);
     expect(footer.contains(screen.getByRole('button', { name: 'Cancel' }))).toBe(true);
 
-    // A row of 48px actions with 16px between them; Cancel is a secondary
-    // button, not a second primary slab.
-    expect(footer.className).toContain('gap-4');
-    expect(footer.className).not.toContain('flex-col');
+    // A 48px primary slab over a 44px text Cancel: one weight of action, not
+    // two equal slabs. The footer's pt-4 is the 16px above the buttons.
+    expect(footer.className).toContain('flex-col');
+    expect(footer.className).toContain('pt-4');
+    const actions = footer.querySelector('[data-slot=dialog-actions]') as HTMLElement;
+    expect(actions.className).toContain('flex-col');
+    expect(actions.className).toContain('gap-2');
     const cancel = screen.getByRole('button', { name: 'Cancel' });
     const primary = screen.getByRole('button', { name: 'Log meal' });
-    expect(cancel.className).toContain('h-12');
+    expect(cancel.className).toContain('h-11');
+    expect(cancel.className).toContain('w-full');
+    expect(cancel.className).toContain('text-muted-foreground');
+    expect(cancel.className).not.toContain('bg-secondary');
     expect(primary.className).toContain('h-12');
-    expect(cancel.className).toContain('bg-secondary');
+    expect(primary.className).toContain('w-full');
     expect(primary.className).toContain('bg-primary');
   });
 
@@ -175,6 +181,7 @@ describe('the sheet is a header / body / footer flex column', () => {
 
     for (const id of FIELD_IDS) {
       expect(field(id).className).toContain('h-11');
+      expect(field(id).className).toContain('ring-inset');
     }
   });
 
@@ -217,11 +224,12 @@ describe('the footer cannot cover a field', () => {
     const sheetTop = 16;
     const sheetHeight = 932 - 336 - 16 - sheetTop; // 564
     const headerHeight = 94;
-    const footerHeight = 81;
+    // 1px border + 16px pt + 48px primary + 8px gap + 44px Cancel + 16px pb.
+    const footerHeight = 133;
     const headerTop = sheetTop + border; // 17
     const bodyTop = headerTop + headerHeight; // 111
-    const bodyHeight = sheetHeight - 2 * border - headerHeight - footerHeight; // 387
-    const bodyBottom = bodyTop + bodyHeight; // 498
+    const bodyHeight = sheetHeight - 2 * border - headerHeight - footerHeight; // 335
+    const bodyBottom = bodyTop + bodyHeight; // 446
     const width = 398;
 
     for (const [el, top, height] of [
@@ -422,10 +430,11 @@ describe('the sheet cannot be wider than the screen', () => {
     const dialog = document.querySelector('[data-slot=dialog-content]') as HTMLElement;
     expect(dialog.className).toContain('rounded-xl');
 
-    for (const name of ['Log meal', 'Cancel']) {
-      const button = screen.getByRole('button', { name });
-      expect(button.className).toContain('h-12');
-      expect(button.className).toContain('flex-1');
-    }
+    const primary = screen.getByRole('button', { name: 'Log meal' });
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    expect(primary.className).toContain('h-12');
+    expect(primary.className).toContain('w-full');
+    expect(cancel.className).toContain('h-11');
+    expect(cancel.className).toContain('w-full');
   });
 });
