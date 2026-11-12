@@ -18,20 +18,11 @@ import { describeError, logError } from '../db/errors.js';
 import { countMealsSince, createMealsDb, saveMeal, setMealPhoto } from '../db/meals.js';
 import { recordMealSave } from '../db/metrics.js';
 import type { AppBindings } from '../env.js';
+import { base64FromBytes, base64ToBytes, shrinkImage } from '../storage/images.js';
 import { photoKey, r2Store } from '../storage/photos.js';
 import { ALLOWED_MIME } from './meals.js';
 
 const BEARER = /^Bearer\s+/i;
-
-function base64FromBytes(bytes: ArrayBuffer): string {
-  const view = new Uint8Array(bytes);
-  let binary = '';
-  // Chunked so a large photo doesn't blow the argument limit of fromCharCode.
-  for (let i = 0; i < view.length; i += 0x8000) {
-    binary += String.fromCharCode(...view.subarray(i, i + 0x8000));
-  }
-  return btoa(binary);
-}
 
 /** Image type from magic bytes — Shortcuts often sends octet-stream. */
 function sniffMime(b: Uint8Array): string | null {
@@ -54,96 +45,6 @@ function readToken(c: Context<AppBindings>): string {
   const header = (c.req.header('authorization') ?? '').replace(BEARER, '');
   const query = c.req.query('token') ?? '';
   return (header || query).replace(/\s+/g, '');
-}
-
-/**
- * Downscale + re-encode a photo before it is stored or analysed.
- *
- * Phones upload 3–6 MB originals. We keep the longest edge at MAX_EDGE px and
- * encode JPEG in QUALITY_STEPS until the result fits MAX_BYTES, so both the AI
- * payload and the R2 object stay small. Uses the Workers-native
- * `createImageBitmap` + `OffscreenCanvas`, so there is no extra dependency.
- * Any failure falls back to the original bytes — storage must never lose a meal.
- */
-const MAX_EDGE = 1600;
-const MAX_BYTES = 400 * 1024;
-const QUALITY_STEPS = [0.82, 0.7, 0.6, 0.5, 0.42];
-
-interface CompressedImage {
-  base64: string;
-  mimeType: string;
-  bytes: number;
-}
-
-async function shrinkImage(base64: string, mimeType: string): Promise<CompressedImage> {
-  const original: CompressedImage = {
-    base64,
-    mimeType,
-    bytes: Math.floor((base64.length * 3) / 4),
-  };
-  // Already small, or a format the decode path may not handle in this runtime.
-  if (original.bytes <= MAX_BYTES || !/^image\/(jpeg|png|webp)$/.test(mimeType)) return original;
-  // The Workers runtime provides both of these, but @cloudflare/workers-types
-  // doesn't declare them yet — narrow casts keep tsc honest without `any`.
-  const canvasCtor = (
-    globalThis as unknown as {
-      OffscreenCanvas?: new (
-        w: number,
-        h: number,
-      ) => {
-        getContext(
-          t: '2d',
-        ): { drawImage(img: unknown, x: number, y: number, w: number, h: number): void } | null;
-        convertToBlob(o: { type: string; quality?: number }): Promise<Blob>;
-      };
-    }
-  ).OffscreenCanvas;
-  const decode = (
-    globalThis as unknown as {
-      createImageBitmap?: (
-        src: Blob,
-      ) => Promise<{ width: number; height: number; close?: () => void }>;
-    }
-  ).createImageBitmap;
-  if (!canvasCtor || !decode) return original;
-
-  try {
-    const raw = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
-    const bitmap = await decode(new Blob([raw], { type: mimeType }));
-    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-    const width = Math.max(1, Math.round(bitmap.width * scale));
-    const height = Math.max(1, Math.round(bitmap.height * scale));
-
-    const canvas = new canvasCtor(width, height);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return original;
-    ctx.drawImage(bitmap, 0, 0, width, height);
-    bitmap.close?.();
-
-    let blob: Blob | null = null;
-    for (const quality of QUALITY_STEPS) {
-      const attempt: Blob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
-      blob = attempt;
-      if (attempt.size <= MAX_BYTES) break;
-    }
-    if (!blob || blob.size >= original.bytes) return original;
-
-    const out = new Uint8Array(await blob.arrayBuffer());
-    return {
-      base64: base64FromBytes(out.buffer as ArrayBuffer),
-      mimeType: 'image/jpeg',
-      bytes: out.length,
-    };
-  } catch {
-    return original;
-  }
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
 }
 
 /*

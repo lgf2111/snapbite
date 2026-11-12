@@ -468,12 +468,17 @@ export class ApiClient {
   /**
    * Builds a photo URL for a meal. Inside Telegram the initData rides in the
    * query (an <img> cannot send headers); in a browser the cookies do the work,
-   * so no credential ever appears in a URL there.
+   * so no credential ever appears in a URL there. `width` asks the Worker for a
+   * thumbnail (`?w=`) whose long edge is at most that many pixels.
    */
-  photoUrl(id: string): string {
+  photoUrl(id: string, opts: { width?: number } = {}): string {
+    const params = new URLSearchParams();
     const initData = this.#getInitData();
+    if (initData) params.set('initData', initData);
+    if (opts.width && opts.width > 0) params.set('w', String(Math.round(opts.width)));
     const base = `${this.#baseUrl}/api/meal-photo/${encodeURIComponent(id)}`;
-    return initData ? `${base}?initData=${encodeURIComponent(initData)}` : base;
+    const query = params.toString();
+    return query ? `${base}?${query}` : base;
   }
 
   getSettings(): Promise<SettingsView> {
