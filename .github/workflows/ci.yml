@@ -39,9 +39,9 @@ jobs:
         run: pnpm lint
 
       # UI tells: the high-severity gate fails the build. Medium findings are
-      # printed for visibility but do not fail it. Current medium count: 7 —
-      # rounded-full on genuinely circular things (capture button, avatars,
-      # status dot, switch thumb, slider thumbs). A rise means a new tell.
+      # printed for visibility but do not fail it. Current medium count: 4 —
+      # rounded-full only on the allowed circles (capture button, avatars,
+      # status dot). A rise means a new tell.
       - name: UI scanner (high-severity gate)
         run: python3 scripts/devibe_scan.py apps/miniapp/src --severity high
 
