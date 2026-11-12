@@ -114,10 +114,10 @@ describe('HomeScreen', () => {
     render(<HomeScreen {...props(backend)} />);
 
     const badge = await screen.findByRole('button', { name: '5-day logging streak' });
-    expect(within(badge).getByText('🔥')).toBeInTheDocument();
+    expect(within(badge).getByTestId('streak-flame')).toBeInTheDocument();
     expect(within(badge).getByText('5')).toBeInTheDocument();
-    // The old prose caption is gone: the badge is the only streak surface.
-    expect(screen.queryByText(/🔥 5-day streak/)).not.toBeInTheDocument();
+    // The badge is the only streak surface.
+    expect(screen.queryByText(/5-day streak/)).not.toBeInTheDocument();
   });
 
   it.each([0, null])('hides the streak badge when the streak is %s', async (value) => {

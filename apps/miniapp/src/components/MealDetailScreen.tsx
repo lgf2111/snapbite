@@ -25,7 +25,19 @@ import {
   resolveFoodNutrition,
   sourceLabel,
 } from '@snapbite/core';
-import { RotateCcw, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
+import {
+  Beef,
+  Droplet,
+  Flame,
+  type LucideIcon,
+  RotateCcw,
+  Share2,
+  Sparkles,
+  Star,
+  Trash2,
+  Wheat,
+  X,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { MealTotals } from './MealTotals.js';
 import { SaveMealDialog } from './SaveMealDialog.js';
@@ -450,11 +462,11 @@ export function MealDetailScreen({
     loading: busy === 'saving',
   });
 
-  const macroFields: Array<{ key: MacroKey; icon: string; suffix: string }> = [
-    { key: 'energyKcal', icon: '🔥', suffix: 'kcal' },
-    { key: 'proteinG', icon: '🥩', suffix: 'g' },
-    { key: 'carbsG', icon: '🍚', suffix: 'g' },
-    { key: 'fatG', icon: '🧈', suffix: 'g' },
+  const macroFields: Array<{ key: MacroKey; icon: LucideIcon; suffix: string }> = [
+    { key: 'energyKcal', icon: Flame, suffix: 'kcal' },
+    { key: 'proteinG', icon: Beef, suffix: 'g' },
+    { key: 'carbsG', icon: Wheat, suffix: 'g' },
+    { key: 'fatG', icon: Droplet, suffix: 'g' },
   ];
 
   // Map draft-food indices to their resolved nutrition (kept foods only).
@@ -564,13 +576,13 @@ export function MealDetailScreen({
                       </p>
                     ) : (
                       <div className="flex flex-wrap items-center gap-2">
-                        {macroFields.map(({ key, icon, suffix }) => (
+                        {macroFields.map(({ key, icon: Icon, suffix }) => (
                           <div
                             key={key}
                             className="text-caption flex items-center gap-1"
                             title={key}
                           >
-                            <span aria-hidden="true">{icon}</span>
+                            <Icon className="size-4 stroke-[1.75]" aria-hidden />
                             <Input
                               aria-label={`Food ${i + 1} ${key}`}
                               type="number"

@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { Beef, Droplet, Flame, type LucideIcon, Sprout, Wheat } from 'lucide-react';
 
 interface MacroLineProps {
   energyKcal: number | null;
@@ -14,8 +15,9 @@ interface MacroLineProps {
 
 const DASH = '—';
 const fmt = (n: number | null | undefined) => (n == null ? DASH : String(n));
+const ICON = 'size-4 stroke-[1.75]';
 
-/** Macro display with icons: 🔥 kcal · 🥩 protein · 🍚 carbs · 🧈 fat. */
+/** Macro display with icons: kcal, protein, carbs and fat. */
 export function MacroLine({
   energyKcal,
   proteinG,
@@ -28,11 +30,12 @@ export function MacroLine({
   if (compact) {
     return (
       <span
-        className="text-muted-foreground text-sm"
+        className="text-muted-foreground inline-flex items-center gap-1 text-sm"
         title="calories"
         aria-label={`${fmt(energyKcal)} calories`}
       >
-        <span aria-hidden="true">🔥</span> {fmt(energyKcal)} kcal
+        <Flame className={ICON} aria-hidden />
+        {fmt(energyKcal)} kcal
       </span>
     );
   }
@@ -40,27 +43,44 @@ export function MacroLine({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
       <span
         title="calories"
-        className="whitespace-nowrap"
+        className="inline-flex items-center gap-1 whitespace-nowrap"
         aria-label={`${fmt(energyKcal)} calories`}
       >
-        <span aria-hidden="true">🔥</span> {fmt(energyKcal)} kcal
+        <Flame className={ICON} aria-hidden />
+        {fmt(energyKcal)} kcal
       </span>
       <span
         title="protein"
-        className="whitespace-nowrap"
+        className="inline-flex items-center gap-1 whitespace-nowrap"
         aria-label={`${fmt(proteinG)} grams protein`}
       >
-        <span aria-hidden="true">🥩</span> {fmt(proteinG)}g
+        <Beef className={ICON} aria-hidden />
+        {fmt(proteinG)}g
       </span>
-      <span title="carbs" className="whitespace-nowrap" aria-label={`${fmt(carbsG)} grams carbs`}>
-        <span aria-hidden="true">🍚</span> {fmt(carbsG)}g
+      <span
+        title="carbs"
+        className="inline-flex items-center gap-1 whitespace-nowrap"
+        aria-label={`${fmt(carbsG)} grams carbs`}
+      >
+        <Wheat className={ICON} aria-hidden />
+        {fmt(carbsG)}g
       </span>
-      <span title="fat" className="whitespace-nowrap" aria-label={`${fmt(fatG)} grams fat`}>
-        <span aria-hidden="true">🧈</span> {fmt(fatG)}g
+      <span
+        title="fat"
+        className="inline-flex items-center gap-1 whitespace-nowrap"
+        aria-label={`${fmt(fatG)} grams fat`}
+      >
+        <Droplet className={ICON} aria-hidden />
+        {fmt(fatG)}g
       </span>
       {fiberG != null ? (
-        <span title="fiber" className="whitespace-nowrap" aria-label={`${fmt(fiberG)} grams fiber`}>
-          <span aria-hidden="true">🌾</span> {fmt(fiberG)}g
+        <span
+          title="fiber"
+          className="inline-flex items-center gap-1 whitespace-nowrap"
+          aria-label={`${fmt(fiberG)} grams fiber`}
+        >
+          <Sprout className={ICON} aria-hidden />
+          {fmt(fiberG)}g
         </span>
       ) : null}
       {sourceLabel ? (
@@ -72,23 +92,24 @@ export function MacroLine({
   );
 }
 
-/** What each macro emoji means — shown once so the icons are self-explaining. */
-export const MACRO_LEGEND: Array<{ icon: string; label: string }> = [
-  { icon: '🔥', label: 'calories' },
-  { icon: '🥩', label: 'protein' },
-  { icon: '🍚', label: 'carbs' },
-  { icon: '🧈', label: 'fat' },
+/** What each macro icon means — shown once so the icons are self-explaining. */
+export const MACRO_LEGEND: Array<{ icon: LucideIcon; label: string }> = [
+  { icon: Flame, label: 'calories' },
+  { icon: Beef, label: 'protein' },
+  { icon: Wheat, label: 'carbs' },
+  { icon: Droplet, label: 'fat' },
 ];
 
-/** A small inline legend explaining the macro emojis (🔥/🥩/🍚/🧈). */
+/** A small inline legend explaining the macro icons. */
 export function MacroLegend({ className }: { className?: string }) {
   return (
     <div
       className={`text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs ${className ?? ''}`}
     >
       {MACRO_LEGEND.map((m) => (
-        <span key={m.label} className="whitespace-nowrap">
-          <span aria-hidden="true">{m.icon}</span> {m.label}
+        <span key={m.label} className="inline-flex items-center gap-1 whitespace-nowrap">
+          <m.icon className={ICON} aria-hidden />
+          {m.label}
         </span>
       ))}
     </div>

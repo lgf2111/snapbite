@@ -1,3 +1,4 @@
+import { Lightbulb } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 
 interface HelpItem {
@@ -25,9 +26,7 @@ export function HelpAccordion({
   return (
     <div className="rounded-xl border border-border/60">
       <div className="flex items-center gap-2 px-4 pt-3 pb-1">
-        <span aria-hidden className="text-sm">
-          💡
-        </span>
+        <Lightbulb className="size-4 stroke-[1.75]" aria-hidden />
         <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           {label}
         </span>

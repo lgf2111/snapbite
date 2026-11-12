@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Beef, Droplet, Flame, type LucideIcon, Wheat } from 'lucide-react';
 
 export interface MealTotalsProps {
   energyKcal: number;
@@ -12,7 +13,7 @@ export interface MealTotalsProps {
 
 interface Cell {
   key: string;
-  icon: string;
+  icon: LucideIcon;
   value: string;
   unit: string;
   label: string;
@@ -35,15 +36,15 @@ export function MealTotals({ energyKcal, proteinG, carbsG, fatG, source }: MealT
   const cells: Cell[] = [
     {
       key: 'kcal',
-      icon: '🔥',
+      icon: Flame,
       value: String(energyKcal),
       unit: 'kcal',
       label: 'calories',
       hero: true,
     },
-    { key: 'protein', icon: '🥩', value: String(proteinG), unit: 'g', label: 'protein' },
-    { key: 'carbs', icon: '🍚', value: String(carbsG), unit: 'g', label: 'carbs' },
-    { key: 'fat', icon: '🧈', value: String(fatG), unit: 'g', label: 'fat' },
+    { key: 'protein', icon: Beef, value: String(proteinG), unit: 'g', label: 'protein' },
+    { key: 'carbs', icon: Wheat, value: String(carbsG), unit: 'g', label: 'carbs' },
+    { key: 'fat', icon: Droplet, value: String(fatG), unit: 'g', label: 'fat' },
   ];
 
   return (
@@ -61,7 +62,7 @@ export function MealTotals({ energyKcal, proteinG, carbsG, fatG, source }: MealT
         {cells.map((cell) => (
           <div key={cell.key} data-testid="total-cell" className="min-w-0">
             <div aria-hidden="true" className="text-caption leading-none">
-              {cell.icon}
+              <cell.icon className="size-4 stroke-[1.75]" aria-hidden />
             </div>
             <div data-testid="total-value" className="mt-1 flex h-6 items-end whitespace-nowrap">
               <span
