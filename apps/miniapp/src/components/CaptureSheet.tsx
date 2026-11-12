@@ -57,6 +57,13 @@ export const MAX_BATCH = 5;
 const FILE_INPUT = 'sr-only';
 
 /**
+ * How long a fan release waits for a sign that the file picker actually opened.
+ * A picker blurs the page (or hides it); nothing after this long means the
+ * platform refused the open, and the next tap needs a working route.
+ */
+export const PICKER_PROBE_MS = 400;
+
+/**
  * The add-a-meal flow: the four-card menu, the hidden file inputs it drives, and
  * the sheet that shows a photo being read and then reviewed.
  *
@@ -99,6 +106,8 @@ export function CaptureSheet({
   const batchRunning = useRef(false);
   const cameraInput = useRef<HTMLInputElement | null>(null);
   const libraryInput = useRef<HTMLInputElement | null>(null);
+  /** Stops the wait for a picker signal; set while one is pending. */
+  const pickerWatch = useRef<(() => void) | null>(null);
 
   function reset() {
     setStage('idle');
@@ -110,6 +119,8 @@ export function CaptureSheet({
   }
 
   async function handleFile(file: File | undefined) {
+    // A change means the picker opened; the probe has done its job.
+    stopPickerWatch();
     // Picker cancelled: nothing to read.
     if (!file) return;
     if (preview.current) URL.revokeObjectURL(preview.current);
@@ -176,6 +187,7 @@ export function CaptureSheet({
 
   /** The library pick: one photo keeps the review step, several are logged as a batch. */
   function handleLibrary(list: FileList | null) {
+    stopPickerWatch();
     const picked = [...(list ?? [])];
     if (batchRunning.current || picked.length === 0) return;
     if (picked.length === 1) {
@@ -217,9 +229,10 @@ export function CaptureSheet({
   const busy = stage === 'analysing' || stage === 'saving';
 
   /**
-   * iOS opens a file picker only from inside the tap or release that asked for it.
-   * So these are plain synchronous calls: no await, no state change and no timer
-   * before `click()`, and nothing the menu's closing animation can delay.
+   * iOS opens a file picker only from inside the tap or release that asked for
+   * it. So these are plain synchronous calls: no await, no state change and no
+   * timer before `click()`, and nothing the menu's closing animation can delay.
+   * The fan reaches them from `touchend`, the event iOS accepts.
    */
   function takePhoto() {
     cameraInput.current?.click();
@@ -229,12 +242,68 @@ export function CaptureSheet({
     libraryInput.current?.click();
   }
 
+  /** Stops waiting for a picker signal, if a wait is pending. */
+  function stopPickerWatch() {
+    pickerWatch.current?.();
+    pickerWatch.current = null;
+  }
+
+  /**
+   * The fan can only ask; the platform decides whether a picker opens. If
+   * nothing signals that it did — no blur, no hidden page, no files — put the
+   * cards back with the same action highlighted, so the release leaves the
+   * person with a next tap instead of an unchanged screen.
+   */
+  function watchPickerOpen(action: Extract<CaptureAction, 'photo' | 'upload'>) {
+    stopPickerWatch();
+    let timer = 0;
+    let stopped = false;
+    function onVisibility() {
+      if (document.visibilityState === 'hidden') stop();
+    }
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      window.clearTimeout(timer);
+      window.removeEventListener('blur', stop);
+      window.removeEventListener('focus', stop);
+      window.removeEventListener('pagehide', stop);
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (pickerWatch.current === stop) pickerWatch.current = null;
+    };
+    window.addEventListener('blur', stop);
+    window.addEventListener('focus', stop);
+    window.addEventListener('pagehide', stop);
+    document.addEventListener('visibilitychange', onVisibility);
+    timer = window.setTimeout(() => {
+      stop();
+      const input = action === 'photo' ? cameraInput.current : libraryInput.current;
+      // The picker opened and came back with files: `change` is on its way.
+      if ((input?.files?.length ?? 0) > 0) return;
+      setHighlight(action);
+      onOpenChange(true);
+    }, PICKER_PROBE_MS);
+    pickerWatch.current = stop;
+  }
+
+  useEffect(() => {
+    return () => {
+      pickerWatch.current?.();
+      pickerWatch.current = null;
+    };
+  }, []);
+
   /**
    * A card was tapped. The menu closes at once so a file picker or a dialog is
    * not competing with an overlay; the picker's `click()` stays inside this tap,
    * which iOS requires.
+   *
+   * `fromFan` arms the picker probe: the fan's release is the one a platform
+   * may refuse from a pointer event, and its own route (touchend) cannot be
+   * verified from here. Card taps are left exactly as they were.
    */
-  function pick(action: CaptureAction) {
+  function pick(action: CaptureAction, fromFan = false) {
+    if (fromFan && (action === 'photo' || action === 'upload')) watchPickerOpen(action);
     if (action === 'photo') takePhoto();
     else if (action === 'upload') uploadImage();
     else setManualOpen(true);
@@ -303,7 +372,11 @@ export function CaptureSheet({
         highlight={highlight}
       />
       {/* Hold the button and slide: the same four actions, for the thumb. */}
-      <CaptureFan triggerRef={triggerRef} enabled={!open && !batching} onPick={pick} />
+      <CaptureFan
+        triggerRef={triggerRef}
+        enabled={!open && !batching}
+        onPick={(action) => pick(action, true)}
+      />
 
       <Dialog
         open={stage !== 'idle'}
