@@ -202,6 +202,66 @@ describe('HomeScreen', () => {
     expect(fills).toEqual(['scaleX(0.5)', 'scaleX(1)', 'scaleX(0)']);
   });
 
+  it('tones each macro bar and value by its share of the target', async () => {
+    const backend = stubBackend({
+      // protein 75/150 = 50%, carbs 220/200 = 110%, fat 78/60 = 130%
+      mealsByDate: vi.fn(async () => [
+        meal({ energyKcal: 1400, proteinG: 75, carbsG: 220, fatG: 78 }),
+      ]),
+    });
+    const { container } = render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    await screen.findByText('Chicken rice');
+    const fills = [...container.querySelectorAll<HTMLElement>('[data-slot="macro-fill"]')];
+    expect(fills.map((fill) => fill.getAttribute('data-tone'))).toEqual([
+      'primary',
+      'warning',
+      'destructive',
+    ]);
+    expect(fills.map((fill) => fill.className)).toEqual([
+      expect.stringContaining('bg-primary'),
+      expect.stringContaining('bg-warning'),
+      expect.stringContaining('bg-destructive'),
+    ]);
+
+    // Over-target bars are full, but no state draws past the track.
+    expect(fills.map((fill) => fill.style.transform)).toEqual([
+      'scaleX(0.5)',
+      'scaleX(1)',
+      'scaleX(1)',
+    ]);
+    for (const fill of fills) {
+      const scale = /scaleX\(([\d.]+)\)/.exec(fill.style.transform)?.[1];
+      expect(scale).toBeDefined();
+      expect(Number(scale)).toBeLessThanOrEqual(1);
+    }
+
+    // The value text carries the same state as the bar.
+    const values = [...container.querySelectorAll<HTMLElement>('[data-slot="macro-value"]')];
+    expect(values.map((value) => value.getAttribute('data-tone'))).toEqual([
+      'primary',
+      'warning',
+      'destructive',
+    ]);
+    expect(values.map((value) => value.className)).toEqual([
+      expect.stringContaining('text-primary'),
+      expect.stringContaining('text-warning'),
+      expect.stringContaining('text-destructive'),
+    ]);
+    expect(values[0]?.className).not.toContain('text-warning');
+    expect(values[0]?.className).not.toContain('text-destructive');
+
+    // A visible plus, with words for screen readers, carries the state
+    // without depending on the hue.
+    expect(values[0]?.querySelector('[data-slot="macro-over"]')).toBeNull();
+    const markers = container.querySelectorAll('[data-slot="macro-over"]');
+    expect(markers).toHaveLength(2);
+    for (const marker of markers) {
+      expect(marker.textContent).toContain('+');
+      expect(marker.textContent).toContain('over target');
+    }
+  });
+
   it('shows progress rings instead of the goal prompt when targets are set', async () => {
     const backend = stubBackend();
     render(<HomeScreen {...props(backend, { targets: TARGETS })} />);

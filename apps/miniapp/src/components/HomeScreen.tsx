@@ -71,9 +71,38 @@ interface HomeScreenProps {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
+type MacroTone = 'primary' | 'warning' | 'destructive';
+
+/** Consumed as a share of the target; a missing target reads as zero. */
+const macroRatio = (have: number, target: number) => (target > 0 ? Math.max(0, have / target) : 0);
+
 /** Consumed as a 0–100 share of the target; a missing target reads as empty. */
 const macroPercent = (have: number, target: number) =>
-  target > 0 ? Math.min(100, Math.max(0, (have / target) * 100)) : 0;
+  Math.min(100, macroRatio(have, target) * 100);
+
+/**
+ * Bar state by share of target: the brand fill while at or under target,
+ * `--warning` once over, and `--destructive` once more than 20% over. The
+ * value text uses the same tone so the state is never only a hue.
+ */
+const macroTone = (have: number, target: number): MacroTone => {
+  const ratio = macroRatio(have, target);
+  if (ratio > 1.2) return 'destructive';
+  if (ratio > 1) return 'warning';
+  return 'primary';
+};
+
+const MACRO_FILL: Record<MacroTone, string> = {
+  primary: 'bg-primary',
+  warning: 'bg-warning',
+  destructive: 'bg-destructive',
+};
+
+const MACRO_TEXT: Record<MacroTone, string> = {
+  primary: 'text-primary',
+  warning: 'text-warning',
+  destructive: 'text-destructive',
+};
 
 /**
  * Home answers one question: am I on track today?
@@ -402,33 +431,57 @@ export function HomeScreen({
                   ['Protein', consumed.proteinG, viewTargets.proteinG, 'g'],
                   ['Carbs', consumed.carbsG, viewTargets.carbsG, 'g'],
                   ['Fat', consumed.fatG, viewTargets.fatG, 'g'],
-                ].map(([label, have, target, unit]) => (
-                  <div key={String(label)} className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1">
-                    <dt className="text-muted-foreground text-caption">{label}</dt>
-                    <dd className="tabular text-caption font-medium">
-                      {Math.round(Number(have))}
-                      <span className="text-muted-foreground">
-                        {' / '}
-                        {Math.round(Number(target))}
-                        {unit}
-                      </span>
-                    </dd>
-                    {/* Progress as length, so it never rests on colour alone. The
-                      numbers above stay the source of truth. */}
-                    <dd
-                      aria-hidden
-                      data-slot="macro-bar"
-                      className="bg-muted ring-border/60 col-span-2 h-[3px] overflow-hidden rounded-full ring-1"
-                    >
-                      <div
-                        className="bg-primary h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
-                        style={{
-                          transform: `scaleX(${macroPercent(Number(have), Number(target)) / 100})`,
-                        }}
-                      />
-                    </dd>
-                  </div>
-                ))}
+                ].map(([label, have, target, unit]) => {
+                  const consumed = Number(have);
+                  const goal = Number(target);
+                  const tone = macroTone(consumed, goal);
+                  const over = tone !== 'primary';
+                  return (
+                    <div key={String(label)} className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1">
+                      <dt className="text-muted-foreground text-caption">{label}</dt>
+                      <dd
+                        data-slot="macro-value"
+                        data-tone={tone}
+                        className={cn('tabular text-caption font-medium', MACRO_TEXT[tone])}
+                      >
+                        {Math.round(consumed)}
+                        <span className={over ? 'opacity-80' : 'text-muted-foreground'}>
+                          {' / '}
+                          {Math.round(goal)}
+                          {unit}
+                        </span>
+                        {over && (
+                          <span
+                            data-slot="macro-over"
+                            className="ml-0.5 font-semibold"
+                            title="over target"
+                          >
+                            +<span className="sr-only"> over target</span>
+                          </span>
+                        )}
+                      </dd>
+                      {/* Progress as length, so it never rests on colour alone. The
+                        numbers above stay the source of truth. */}
+                      <dd
+                        aria-hidden
+                        data-slot="macro-bar"
+                        className="bg-muted ring-border/60 col-span-2 h-[3px] overflow-hidden rounded-full ring-1"
+                      >
+                        <div
+                          data-slot="macro-fill"
+                          data-tone={tone}
+                          className={cn(
+                            'h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out-quint)] motion-reduce:transition-none',
+                            MACRO_FILL[tone],
+                          )}
+                          style={{
+                            transform: `scaleX(${macroPercent(consumed, goal) / 100})`,
+                          }}
+                        />
+                      </dd>
+                    </div>
+                  );
+                })}
               </dl>
             </div>
           </div>
