@@ -3,7 +3,6 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -46,7 +45,6 @@ export function SaveMealDialog({ open, name, saving, onNameChange, onOpenChange,
       >
         <DialogHeader>
           <DialogTitle>Save this meal</DialogTitle>
-          <DialogDescription>Name it so you can find and log it again later.</DialogDescription>
         </DialogHeader>
 
         <form

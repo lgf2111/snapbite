@@ -116,7 +116,6 @@ describe('HomeScreen', () => {
     const badge = await screen.findByRole('button', { name: '5-day logging streak' });
     expect(within(badge).getByTestId('streak-flame')).toBeInTheDocument();
     expect(within(badge).getByText('5')).toBeInTheDocument();
-    // The badge is the only streak surface.
     expect(screen.queryByText(/5-day streak/)).not.toBeInTheDocument();
   });
 
@@ -604,7 +603,7 @@ describe('HomeScreen', () => {
     const onOpenReports = vi.fn();
     render(<HomeScreen {...props(stubBackend(), { targets: TARGETS, onOpenReports })} />);
 
-    expect(await screen.findByText('Trend · Adherence · Report card')).toBeInTheDocument();
+    expect(await screen.findByText('Reports')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /reports/i }));
     expect(onOpenReports).toHaveBeenCalledTimes(1);
   });
