@@ -26,11 +26,11 @@ interface ManualMealDialogProps {
 
 const EMPTY = { name: '', energyKcal: '', proteinG: '', carbsG: '', fatG: '' };
 
-/** A calorie count is usable when it is a real, non-negative number. */
+/** A calorie count is usable when it is a real, positive number. */
 function validKcal(raw: string): boolean {
   if (raw.trim() === '') return false;
   const value = Number(raw);
-  return Number.isFinite(value) && value >= 0;
+  return Number.isFinite(value) && value > 0;
 }
 
 /**
@@ -180,9 +180,14 @@ export function ManualMealDialog({
       >
         <header
           data-slot="manual-header"
-          className="flex shrink-0 items-start justify-between gap-2 border-b px-5 pt-5 pb-4"
+          className="flex shrink-0 items-start justify-between gap-3 border-b px-5 pt-5 pb-4"
         >
-          <DialogTitle>Add a meal</DialogTitle>
+          <div className="min-w-0 flex-1">
+            <DialogTitle>Add a meal</DialogTitle>
+            <DialogDescription className="text-caption mt-1">
+              Log a meal by hand — no photo or AI key needed.
+            </DialogDescription>
+          </div>
           <DialogClose className="focus-visible:ring-ring/50 -mt-1 -mr-2 flex size-11 shrink-0 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-[3px] focus-visible:outline-none">
             <X className="size-5" />
             <span className="sr-only">Close</span>
@@ -195,15 +200,10 @@ export function ManualMealDialog({
         >
           <form
             id="manual-meal-form"
-            className="flex min-w-0 flex-col gap-3"
+            className="flex min-w-0 flex-col gap-4"
             onSubmit={handleSubmit}
             onKeyDown={handleKeyDown}
           >
-            <DialogDescription className="text-caption">
-              Log a meal by hand — no photo or AI key needed. Enter what you ate and its macros
-              (estimates are fine; you can edit later).
-            </DialogDescription>
-
             {showSaved && favorites && favorites.length > 0 && (
               <div className="flex min-w-0 flex-col gap-1.5">
                 <Label>Saved meals</Label>
@@ -257,10 +257,11 @@ export function ManualMealDialog({
                 autoCapitalize="sentences"
                 spellCheck={false}
                 enterKeyHint="next"
+                className="h-11"
                 onChange={(e) => set('name', e.target.value)}
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {macroFields.map((f) => (
                 <div key={f.key} className="flex min-w-0 flex-col gap-1.5">
                   <Label htmlFor={`mm-${f.key}`}>
@@ -276,6 +277,7 @@ export function ManualMealDialog({
                     value={form[f.key]}
                     disabled={busy}
                     enterKeyHint={f.key === 'fatG' ? 'done' : 'next'}
+                    className="h-11"
                     onChange={(e) => set(f.key, e.target.value)}
                   />
                 </div>
@@ -286,19 +288,19 @@ export function ManualMealDialog({
 
         <div
           data-slot="manual-footer"
-          className="bg-card flex shrink-0 flex-col gap-2 border-t px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
+          className="bg-card flex shrink-0 gap-4 border-t px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
         >
-          <Button type="submit" form="manual-meal-form" className="h-12 w-full" disabled={!canSave}>
-            {busy ? 'Logging…' : 'Log meal'}
-          </Button>
           <Button
             type="button"
-            variant="ghost"
-            className="text-muted-foreground h-11 w-full"
+            variant="secondary"
+            className="h-12 flex-1"
             disabled={busy}
             onClick={() => onOpenChange(false)}
           >
             Cancel
+          </Button>
+          <Button type="submit" form="manual-meal-form" className="h-12 flex-1" disabled={!canSave}>
+            {busy ? 'Logging…' : 'Log meal'}
           </Button>
         </div>
       </DialogContent>
