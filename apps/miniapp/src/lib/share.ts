@@ -6,17 +6,36 @@
  *  - Web Share API with a File (`navigator.share`) opens the OS share sheet
  *    (Instagram, Save Image, etc.). This works on mobile, including inside the
  *    Telegram webview on modern iOS/Android.
- *  - Where file sharing isn't supported (desktop browsers), we fall back to a
- *    normal download of the blob.
+ *  - Where file sharing isn't supported (desktop browsers, or a file the
+ *    browser refuses), we fall back to a normal download of the blob.
  */
 
-/** Whether the browser can share files via the Web Share API. */
-export function canShareFiles(): boolean {
+/** The image MIME type the shared file advertises, with a matching extension. */
+function fileType(blob: Blob): { type: string; ext: string } {
+  if (blob.type === 'image/png') return { type: 'image/png', ext: '.png' };
+  return { type: 'image/jpeg', ext: '.jpg' };
+}
+
+/**
+ * Builds the `File` handed to the OS. iOS only draws a preview thumbnail when
+ * the name carries an extension and the type is concrete, so both are set here
+ * rather than trusting the caller.
+ */
+function shareFile(blob: Blob, fileName: string): File {
+  const { type, ext } = fileType(blob);
+  const name = /\.[a-z0-9]+$/i.test(fileName) ? fileName : `${fileName}${ext}`;
+  return new File([blob], name, { type });
+}
+
+/** Whether the browser can share this exact file, not just files in general. */
+function canShareFile(file: File): boolean {
   try {
-    if (typeof navigator === 'undefined' || !navigator.share || !navigator.canShare) return false;
-    // Probe with a tiny dummy file; canShare must accept files.
-    const probe = new File([new Uint8Array([0])], 'probe.png', { type: 'image/png' });
-    return navigator.canShare({ files: [probe] });
+    return (
+      typeof navigator !== 'undefined' &&
+      typeof navigator.share === 'function' &&
+      typeof navigator.canShare === 'function' &&
+      navigator.canShare({ files: [file] })
+    );
   } catch {
     return false;
   }
@@ -50,8 +69,8 @@ export async function shareOrSaveImage(
   fileName: string,
   shareText?: string,
 ): Promise<ShareResult> {
-  if (canShareFiles()) {
-    const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+  const file = shareFile(blob, fileName);
+  if (canShareFile(file)) {
     try {
       await navigator.share({
         files: [file],
@@ -62,10 +81,10 @@ export async function shareOrSaveImage(
       // AbortError = the user dismissed the sheet; treat as a no-op.
       if (err instanceof DOMException && err.name === 'AbortError') return 'cancelled';
       // Any other failure: fall back to a download so the user still gets it.
-      downloadBlob(blob, fileName);
+      downloadBlob(blob, file.name);
       return 'downloaded';
     }
   }
-  downloadBlob(blob, fileName);
+  downloadBlob(blob, file.name);
   return 'downloaded';
 }

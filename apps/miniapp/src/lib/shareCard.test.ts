@@ -20,6 +20,7 @@ interface TextCall {
 
 let calls: TextCall[];
 let canvas: HTMLCanvasElement | null;
+let encoded: { type?: string; quality?: number };
 
 function makeContext(): CanvasRenderingContext2D {
   const ctx = {
@@ -60,6 +61,7 @@ function makeContext(): CanvasRenderingContext2D {
 beforeEach(() => {
   calls = [];
   canvas = null;
+  encoded = {};
 
   const createElement = document.createElement.bind(document);
   vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
@@ -69,8 +71,9 @@ beforeEach(() => {
   });
 
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(makeContext());
-  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((cb) => {
-    cb(new Blob(['png'], { type: 'image/png' }));
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((cb, type, quality) => {
+    encoded = { type, quality };
+    cb(new Blob(['jpeg'], { type: String(type) }));
   });
 
   // Both the logo and the meal photo load through `new Image()`. Resolve on the
@@ -108,7 +111,7 @@ describe('renderMealShareCard', () => {
   it('draws a 4:5 card with the title below the photo and centred macro columns', async () => {
     const blob = await renderMealShareCard(CARD);
 
-    expect(blob.type).toBe('image/png');
+    expect(blob.type).toBe('image/jpeg');
     expect(canvas?.width).toBe(1080);
     expect(canvas?.height).toBe(1350);
 
@@ -144,6 +147,13 @@ describe('renderMealShareCard', () => {
     expect(centres[0]).toBeCloseTo(210);
     expect(centres[1]).toBeCloseTo(540);
     expect(centres[2]).toBeCloseTo(870);
+  });
+
+  it('encodes the photo card as JPEG at quality 0.9, not a 1.9 MB PNG', async () => {
+    await renderMealShareCard(CARD);
+
+    expect(encoded.type).toBe('image/jpeg');
+    expect(encoded.quality).toBe(0.9);
   });
 
   it('keeps the meal title off the photo: only the wordmark pill sits over it', async () => {

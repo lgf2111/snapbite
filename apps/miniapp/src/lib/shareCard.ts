@@ -1,6 +1,10 @@
 /**
- * Renders a shareable meal card to a PNG blob using the built-in Canvas 2D API
+ * Renders a shareable meal card to a JPEG blob using the built-in Canvas 2D API
  * — no image/canvas libraries (keeps the bundle light per project principles).
+ *
+ * JPEG rather than PNG: the card is a photo card, so lossless encoding only
+ * inflates the file (a full-resolution PNG ran ~1.9 MB) and slows the share
+ * sheet. Quality 0.9 is visually indistinguishable and a few hundred KB.
  *
  * The card mirrors the in-app preview (`ShareCard`): 4:5, the photo fills the
  * top 60%, and a fixed rhythm below it carries the title, calories, three equal
@@ -147,7 +151,7 @@ function drawImageCover(
 /**
  * Cleans an AI-written meal title for display: drops leading filler like
  * "Identified as " / "This is " / "A photo of " and capitalizes the first
- * letter. Falls back to "Meal" when empty. Shared by the preview and the PNG.
+ * letter. Falls back to "Meal" when empty. Shared by the preview and the JPEG.
  */
 export function cleanTitle(raw: string | undefined): string {
   let t = (raw ?? '').trim();
@@ -342,7 +346,8 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error('Could not create image'))),
-      'image/png',
+      'image/jpeg',
+      0.9,
     );
   });
 }
