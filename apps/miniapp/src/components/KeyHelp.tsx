@@ -32,10 +32,10 @@ function KeyMenuPanel() {
       <circle cx="300" cy="56" r="2" fill={MUTED} />
       <rect x="248" y="66" width="92" height="52" rx="8" fill="#16222e" stroke="#2b3947" />
       <text x="260" y="86" fontSize="8" fill={TEXT} fontFamily="system-ui, sans-serif">
-        ✎ Rename key
+        Rename key
       </text>
       <text x="260" y="106" fontSize="8" fill="#ff7b72" fontFamily="system-ui, sans-serif">
-        🗑 Delete key
+        Delete key
       </text>
     </svg>
   );

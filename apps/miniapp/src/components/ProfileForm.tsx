@@ -367,7 +367,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
           </p>
           <div className="grid grid-cols-3 gap-2">
             <div className="flex flex-col gap-1">
-              <Label htmlFor="p">🥩 g</Label>
+              <Label htmlFor="p">Protein (g)</Label>
               <Input
                 id="p"
                 type="number"
@@ -377,7 +377,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
               />
             </div>
             <div className="flex flex-col gap-1">
-              <Label htmlFor="c">🍚 g</Label>
+              <Label htmlFor="c">Carbs (g)</Label>
               <Input
                 id="c"
                 type="number"
@@ -387,7 +387,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
               />
             </div>
             <div className="flex flex-col gap-1">
-              <Label htmlFor="f">🧈 g</Label>
+              <Label htmlFor="f">Fat (g)</Label>
               <Input
                 id="f"
                 type="number"
