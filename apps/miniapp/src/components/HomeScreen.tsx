@@ -181,9 +181,11 @@ export function HomeScreen({
   );
   // Hidden rows are deleted optimistically: totals, verdict and the list all stop
   // counting the meal during the undo window, and Undo puts it straight back.
+  // A background revalidate may replace `mealsData`, but it never clears the
+  // list: only a first load with no cached value has no rows to show.
   const meals = useMemo(
-    () => (mealsLoading ? null : (mealsData ?? []).filter((m) => !hiddenIds.has(m.id))),
-    [mealsLoading, mealsData, hiddenIds],
+    () => (mealsData ?? []).filter((m) => !hiddenIds.has(m.id)),
+    [mealsData, hiddenIds],
   );
 
   // Logged days for the calendar dots + the current streak (cached).
@@ -281,7 +283,12 @@ export function HomeScreen({
       await backend.remove(id);
       toast.dismiss(pending.toastId);
       hapticNotify('success');
-      if (alive.current) refresh();
+      if (alive.current) {
+        // The backend drops the id from every cached meal list. Keep the row
+        // hidden and revalidate only the date dots: refetching the day here is
+        // what flashed the list through an empty loading state.
+        refreshDates();
+      }
     } catch (e) {
       if (!alive.current) return;
       setHiddenIds((prev) => {
@@ -330,7 +337,7 @@ export function HomeScreen({
   // Divisor: 1 for a day/weekly-total, or the number of days for weekly-average.
   const div = weeklyAverage ? range.days : 1;
   const sum = (pick: (m: RecentMeal) => number | null) =>
-    round1((meals?.reduce((s, m) => s + (pick(m) ?? 0), 0) ?? 0) / div);
+    round1(meals.reduce((s, m) => s + (pick(m) ?? 0), 0) / div);
   const consumed = {
     energyKcal: sum((m) => m.energyKcal),
     proteinG: sum((m) => m.proteinG),
@@ -340,7 +347,7 @@ export function HomeScreen({
 
   const kcalLeft = viewTargets ? Math.round(viewTargets.energyKcal - consumed.energyKcal) : null;
   const kcalOver = kcalLeft != null && kcalLeft < 0;
-  const hasMeals = (meals?.length ?? 0) > 0;
+  const hasMeals = meals.length > 0;
   // A verdict needs evidence: on an empty day "protein is short" is a statement
   // about the user, not about the data.
   const proteinShort =
@@ -543,7 +550,7 @@ export function HomeScreen({
 
       {error && <p className="text-destructive text-caption">{error}</p>}
 
-      {!meals && !error && (
+      {mealsLoading && mealsData === undefined && !error && (
         <div className="flex flex-col gap-2">
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-16 w-full rounded-lg" />
@@ -551,7 +558,7 @@ export function HomeScreen({
         </div>
       )}
 
-      {meals && meals.length > 0 && (
+      {meals.length > 0 && (
         <div className="flex flex-col gap-2">
           {meals.map((m) => (
             <SwipeableRow key={m.id} animateIn={newIds.has(m.id)} onDelete={() => handleDelete(m)}>

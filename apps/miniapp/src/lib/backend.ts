@@ -22,7 +22,7 @@ import {
   type SettingsView,
   type UserExport,
 } from './api.js';
-import { cacheKey, clearCache, invalidate, setCached } from './cache.js';
+import { cacheKey, clearCache, invalidate, removeCachedItem, setCached } from './cache.js';
 import { type AppConfig, readConfig } from './config.js';
 import {
   type SavedMeal,
@@ -194,7 +194,9 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
       },
       async remove(id) {
         await api.deleteMeal(id);
-        invalidate(cacheKey.mealsPrefix);
+        removeCachedItem(cacheKey.mealsPrefix, id);
+        // Streak/calendar dots depend on the meal, but are not lists.
+        invalidate(cacheKey.mealDates());
       },
       async recent() {
         const { meals } = await api.listMeals();
@@ -360,6 +362,8 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
     },
     async remove(id) {
       deleteSavedMeal(id);
+      removeCachedItem(cacheKey.mealsPrefix, id);
+      invalidate(cacheKey.mealDates());
     },
     async recent() {
       return loadMeals().map(fromSaved);

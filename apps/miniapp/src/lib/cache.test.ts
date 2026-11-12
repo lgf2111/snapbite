@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cacheKey, clearCache, getCached, invalidate, revalidate, setCached } from './cache';
+import {
+  cacheKey,
+  clearCache,
+  getCached,
+  invalidate,
+  removeCachedItem,
+  revalidate,
+  setCached,
+} from './cache';
 
 describe('cache', () => {
   beforeEach(() => {
@@ -23,6 +31,30 @@ describe('cache', () => {
     expect(getCached(cacheKey.mealsRange('2026-02-01', '2026-02-07'))).toBeUndefined();
     // Favorites are a different prefix and survive.
     expect(getCached(cacheKey.favorites())).toEqual([3]);
+  });
+
+  it('removeCachedItem drops one id from every cached meal list, leaving the rest', () => {
+    const day1 = [{ id: 'a' }, { id: 'b' }];
+    const day2 = [{ id: 'b' }, { id: 'c' }];
+    const range = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    const dates = { dates: ['2026-02-01'], streak: 1 };
+    setCached(cacheKey.mealsByDate('2026-02-01'), day1);
+    setCached(cacheKey.mealsByDate('2026-02-02'), day2);
+    setCached(cacheKey.mealsRange('2026-02-01', '2026-02-07'), range);
+    setCached(cacheKey.mealDates(), dates);
+    setCached(cacheKey.favorites(), [{ id: 'b' }]);
+
+    removeCachedItem(cacheKey.mealsPrefix, 'b');
+
+    expect(getCached(cacheKey.mealsByDate('2026-02-01'))).toEqual([{ id: 'a' }]);
+    expect(getCached(cacheKey.mealsByDate('2026-02-02'))).toEqual([{ id: 'c' }]);
+    expect(getCached(cacheKey.mealsRange('2026-02-01', '2026-02-07'))).toEqual([
+      { id: 'a' },
+      { id: 'c' },
+    ]);
+    // Non-list meal reads and other prefixes are untouched.
+    expect(getCached(cacheKey.mealDates())).toEqual(dates);
+    expect(getCached(cacheKey.favorites())).toEqual([{ id: 'b' }]);
   });
 
   it('revalidate updates the cache and returns the fresh value', async () => {
