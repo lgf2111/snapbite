@@ -132,10 +132,10 @@ describe('ShortcutCard', () => {
   });
 });
 
-const EASY = 'Install with the Shortcuts app';
-const HAND = 'Set it up by hand';
+const EASY = 'Set up with Shortcut app';
+const HAND = 'Set up manually';
 const FILE = 'https://snapbite.leeguanfeng.com/shortcut/snapbite-log-meal.shortcut';
-const accordion = (name: string) => screen.getByRole('button', { name, expanded: undefined });
+const accordion = (name: string) => screen.getByRole('button', { name: new RegExp(name) });
 const openEasy = async () => {
   const btn = accordion(EASY);
   if (btn.getAttribute('aria-expanded') !== 'true') await userEvent.click(btn);
@@ -153,6 +153,30 @@ const asUserAgent = (ua: string) =>
 describe('ShortcutCard: the two accordions', () => {
   afterEach(() => {
     Reflect.deleteProperty(navigator, 'userAgent');
+  });
+
+  it('marks the first row "iOS only" in a muted pill that stays on the title line', () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+
+    const btn = accordion(EASY);
+    expect(btn).toHaveAccessibleName('Set up with Shortcut app iOS only');
+    const badge = screen.getByLabelText('iOS only');
+    expect(badge).toHaveTextContent('iOS only');
+    // Muted caption on the secondary surface, not a coloured tag.
+    expect(badge.className).toContain('bg-secondary');
+    expect(badge.className).toContain('text-muted-foreground');
+    expect(badge.className).toContain('text-caption');
+    expect(badge.className).toContain('rounded-full');
+    // Beside the title, never on its own line: the row is a flex line and the
+    // badge holds its width, so it cannot wrap under the title at 375pt.
+    expect(badge.className).toContain('shrink-0');
+    expect(badge.className).toContain('whitespace-nowrap');
+    const line = badge.parentElement as HTMLElement;
+    expect(line.className).toContain('flex');
+    expect(line.className).toContain('items-center');
+    expect(line.className).not.toContain('flex-col');
+    expect(btn).toContainElement(badge);
   });
 
   it('are both closed to begin with, content mounted but hidden', () => {
@@ -190,7 +214,7 @@ describe('ShortcutCard: the two accordions', () => {
     expect(accordion(HAND).getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('"Install with the Shortcuts app" has its four numbered steps in order, and the closing line', () => {
+  it('"Set up with Shortcut app" has its four numbered steps in order, and the closing line', () => {
     const { backend } = stub();
     const { container } = render(<ShortcutCard backend={backend} />);
     expect(stepsOf(EASY)).toEqual([
@@ -206,7 +230,7 @@ describe('ShortcutCard: the two accordions', () => {
     );
   });
 
-  it('"Set it up by hand" has its four actions in order, each naming its fields', () => {
+  it('"Set up manually" has its four actions in order, each naming its fields', () => {
     const { backend } = stub();
     const { container } = render(<ShortcutCard backend={backend} />);
     const steps = stepsOf(HAND);
