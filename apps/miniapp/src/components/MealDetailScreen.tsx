@@ -399,7 +399,7 @@ export function MealDetailScreen({
     }
   }
 
-  /** Opens the preview. The PNG is only rendered when the user taps Share. */
+  /** Opens the preview. The JPEG is only rendered when the user taps Share. */
   function openCardPreview() {
     setCardOpen(true);
   }
@@ -408,7 +408,7 @@ export function MealDetailScreen({
     setCardOpen(false);
   }
 
-  /** Renders the previewed card and hands the PNG to the share sheet. */
+  /** Renders the previewed card and hands the JPEG to the share sheet. */
   async function shareFromPreview() {
     if (!cardInput || sharing) return;
     setSharing(true);
@@ -416,7 +416,7 @@ export function MealDetailScreen({
       const blob = await renderMealShareCard(cardInput);
       const result = await shareOrSaveImage(
         blob,
-        'snapbite-meal.png',
+        'snapbite-meal.jpg',
         'My meal, logged with SnapBite',
       );
       if (result === 'downloaded') onToast?.('success', 'Image saved');
