@@ -337,9 +337,6 @@ export function OnboardingScreen({
           >
             Skip — I'll track meals manually
           </Button>
-          <p className="text-muted-foreground text-center text-caption">
-            The photo bot won't analyze meals until a key is added.
-          </p>
         </div>
       </div>
     );

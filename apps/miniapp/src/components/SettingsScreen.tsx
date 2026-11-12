@@ -603,9 +603,8 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             />
           </div>
           <p className="text-muted-foreground text-xs">
-            Log your weight now and then and SnapBite learns your real daily burn, nudging your
-            calorie goal once a week to match what your logging + weight trend actually show. It's a
-            deterministic estimate (no AI) and stays editable.
+            Log your weight weekly. SnapBite adjusts your calorie goal once a week from your weight
+            trend, and the goal stays editable.
           </p>
           <div className="flex items-end gap-2 pt-1">
             <div className="flex flex-1 flex-col gap-1.5">
@@ -699,7 +698,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
         <Card>
           <CardContent>
             <p className="text-muted-foreground text-sm">
-              Demo mode: meals are analysed by a mock, so no key is needed.
+              Demo mode: meals are analyzed by a demo model, so no key is needed.
             </p>
           </CardContent>
         </Card>
@@ -748,7 +747,8 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
                 {saving ? 'Saving…' : 'Save'}
               </Button>
               <p className="text-muted-foreground text-xs">
-                Your key is sent over HTTPS, encrypted at rest, and never shown again or logged.
+                Your key is sent over HTTPS, encrypted on our servers, and never shown again or
+                logged.
               </p>
               <p className="text-muted-foreground text-caption">
                 Free keys stop at about 20 requests a day and return a &ldquo;quota exceeded&rdquo;
@@ -789,8 +789,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               <Collapsible open={fbEnabled && primaryConnected}>
                 <div className="flex flex-col gap-3 pt-1">
                   <p className="text-muted-foreground text-xs">
-                    OpenAI (gpt-4o-mini) is recommended — it's the most accurate at food
-                    recognition.
+                    OpenAI (gpt-4o-mini) is recommended.
                   </p>
 
                   <ProviderPicker idPrefix="fb" value={fbCfg} onChange={setFbCfg} />
@@ -879,8 +878,9 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               Meal photos are only kept for meals you send to the Telegram bot, and are served back
               only to you.
             </li>
-            <li>Your AI API key is encrypted at rest and never included in exports or logs.</li>
-            <li>You can export everything or delete your account at any time below.</li>
+            <li>
+              Your AI API key is encrypted on our servers and never included in exports or logs.
+            </li>
           </ul>
 
           <div className="flex flex-col gap-2 pt-1 sm:flex-row">
@@ -899,9 +899,6 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             <MessageSquare className="text-primary-text size-5" />
             <span className="font-medium">Feedback &amp; support</span>
           </div>
-          <p className="text-muted-foreground text-sm">
-            Hit a problem or have an idea? Send it straight to the maintainer.
-          </p>
           <Button variant="secondary" className="gap-2" onClick={() => setFeedbackOpen(true)}>
             <MessageSquare className="size-4" /> Send feedback
           </Button>
@@ -931,6 +928,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Send feedback</DialogTitle>
+            <DialogDescription>
+              Tell us what went wrong or what you'd like improved. This goes straight to the
+              maintainer.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
             <Textarea

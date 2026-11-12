@@ -15,12 +15,12 @@ import {
   weekRange,
 } from '@/lib/weekPrefs';
 import { type DailyTargets, type MealResult, PROVIDER_PRESETS } from '@snapbite/core';
-import { ChevronRight, Flame, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
+import { ChevronRight, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DateSelector } from './DateSelector.js';
 import { InstallGuide } from './InstallGuide.js';
-import { MacroLegend, MacroLine } from './MacroLine.js';
+import { MacroLine } from './MacroLine.js';
 import { MealThumb } from './MealThumb.js';
 import { ProgressRing } from './ProgressRing.js';
 import { SwipeableRow } from './SwipeableRow.js';
@@ -38,6 +38,9 @@ type ToastKind = 'success' | 'error' | 'info';
 
 /** The undo window after a swipe-delete; the removal is committed when it ends. */
 const UNDO_MS = 6000;
+
+/** The one pointer to the camera, used by both the progress and no-goal cards. */
+const CAMERA_CUE = 'Tap the camera to add one.';
 
 /** Short human labels for the provider id shown on meal cards. */
 const PROVIDER_LABEL: Record<string, string> = {
@@ -364,7 +367,6 @@ export function HomeScreen({
               onClick={() => setStreakOpen(true)}
               className="bg-secondary text-foreground text-caption inline-flex min-h-11 shrink-0 items-center gap-1 rounded-control px-3 font-medium"
             >
-              <Flame className="size-4 stroke-[1.75]" aria-hidden data-testid="streak-flame" />
               <span className="tabular">{streak}</span>
             </button>
           )}
@@ -399,10 +401,7 @@ export function HomeScreen({
       {!hideInstallGuide && <InstallGuide />}
 
       {viewTargets ? (
-        <section
-          aria-label="Today's progress"
-          className="flex flex-col gap-4 rounded-surface border border-border bg-card p-4"
-        >
+        <section aria-label="Today's progress" className="flex flex-col gap-4 rounded-flush">
           <div className="flex items-center gap-4">
             <ProgressRing
               consumed={consumed.energyKcal}
@@ -423,7 +422,7 @@ export function HomeScreen({
                       : 'On track'}
               </p>
               {!hasMeals ? (
-                <p className="text-muted-foreground text-caption">Tap the camera to add one.</p>
+                <p className="text-muted-foreground text-caption">{CAMERA_CUE}</p>
               ) : (
                 weekly && (
                   <p className="text-muted-foreground text-caption">
@@ -457,11 +456,7 @@ export function HomeScreen({
                           {unit}
                         </span>
                         {over && (
-                          <span
-                            data-slot="macro-over"
-                            className="ml-0.5 font-semibold"
-                            title="over target"
-                          >
+                          <span data-slot="macro-over" className="ml-0.5 font-semibold">
                             +<span className="sr-only"> over target</span>
                           </span>
                         )}
@@ -471,13 +466,13 @@ export function HomeScreen({
                       <dd
                         aria-hidden
                         data-slot="macro-bar"
-                        className="bg-muted ring-border/60 col-span-2 h-[3px] overflow-hidden rounded-control ring-1"
+                        className="bg-muted ring-border/60 col-span-2 h-[3px] overflow-hidden rounded-full ring-1"
                       >
                         <div
                           data-slot="macro-fill"
                           data-tone={tone}
                           className={cn(
-                            'h-full w-full origin-left rounded-control transition-transform duration-500 ease-[var(--ease-out-quint)] motion-reduce:transition-none',
+                            'h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out-quint)] motion-reduce:transition-none',
                             MACRO_FILL[tone],
                           )}
                           style={{
@@ -511,10 +506,13 @@ export function HomeScreen({
       ) : (
         <section className="flex items-center justify-between gap-3 rounded-surface border border-border bg-card p-4">
           <div className="min-w-0">
-            <p className="text-body font-medium">Set a goal to see your rings</p>
+            <p className="text-body font-medium">Set a goal to see today&rsquo;s progress</p>
             {meals && meals.length === 0 && (
+              <p className="text-muted-foreground text-caption">{CAMERA_CUE}</p>
+            )}
+            {meals && meals.length > 0 && (
               <p className="text-muted-foreground text-caption">
-                Nothing logged yet — tap the camera to add one.
+                Set a goal later — meals log without one.
               </p>
             )}
           </div>
@@ -593,7 +591,6 @@ export function HomeScreen({
               </Card>
             </SwipeableRow>
           ))}
-          <MacroLegend className="justify-center pt-1" />
         </div>
       )}
 
@@ -622,10 +619,7 @@ export function HomeScreen({
               Today or yesterday keeps the run alive — logging in the evening never breaks it.
             </li>
             <li>A whole day with no meals ends the streak.</li>
-            <li>
-              Miss a day and your next log within the week can revive it, once every 30 days.
-              Revived days count toward the streak, not toward your logged days.
-            </li>
+            <li>Miss a day and your next log within the week can revive it, once every 30 days.</li>
           </ul>
           <DialogFooter>
             <Button onClick={() => setStreakOpen(false)}>Got it</Button>

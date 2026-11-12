@@ -1,6 +1,5 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Beef, Droplet, Flame, type LucideIcon, Wheat } from 'lucide-react';
 
 export interface MealTotalsProps {
   energyKcal: number;
@@ -13,7 +12,6 @@ export interface MealTotalsProps {
 
 interface Cell {
   key: string;
-  icon: LucideIcon;
   value: string;
   unit: string;
   label: string;
@@ -23,9 +21,8 @@ interface Cell {
 
 /**
  * The summary strip under the editable foods: one header line and four equal
- * cells. Each cell stacks its icon, the value with a dimmed unit, and the macro
- * name underneath — so the names replace the old legend row instead of being
- * repeated beside it.
+ * cells. Each cell stacks the value with a dimmed unit and the macro name
+ * underneath, so every number is named in words.
  *
  * The four values are bottom-aligned in a fixed-height row, which keeps their
  * baselines together even though calories is set larger. Cells are `min-w-0`
@@ -36,15 +33,14 @@ export function MealTotals({ energyKcal, proteinG, carbsG, fatG, source }: MealT
   const cells: Cell[] = [
     {
       key: 'kcal',
-      icon: Flame,
       value: String(energyKcal),
       unit: 'kcal',
       label: 'calories',
       hero: true,
     },
-    { key: 'protein', icon: Beef, value: String(proteinG), unit: 'g', label: 'protein' },
-    { key: 'carbs', icon: Wheat, value: String(carbsG), unit: 'g', label: 'carbs' },
-    { key: 'fat', icon: Droplet, value: String(fatG), unit: 'g', label: 'fat' },
+    { key: 'protein', value: String(proteinG), unit: 'g', label: 'protein' },
+    { key: 'carbs', value: String(carbsG), unit: 'g', label: 'carbs' },
+    { key: 'fat', value: String(fatG), unit: 'g', label: 'fat' },
   ];
 
   return (
@@ -61,10 +57,7 @@ export function MealTotals({ energyKcal, proteinG, carbsG, fatG, source }: MealT
       <div data-testid="totals-grid" className="mt-2 grid grid-cols-4 gap-x-2">
         {cells.map((cell) => (
           <div key={cell.key} data-testid="total-cell" className="min-w-0">
-            <div aria-hidden="true" className="text-caption leading-none">
-              <cell.icon className="size-4 stroke-[1.75]" aria-hidden />
-            </div>
-            <div data-testid="total-value" className="mt-1 flex h-6 items-end whitespace-nowrap">
+            <div data-testid="total-value" className="flex h-6 items-end whitespace-nowrap">
               <span
                 className={cn(
                   'tabular leading-none',

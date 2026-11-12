@@ -114,7 +114,7 @@ describe('HomeScreen', () => {
     render(<HomeScreen {...props(backend)} />);
 
     const badge = await screen.findByRole('button', { name: '5-day logging streak' });
-    expect(within(badge).getByTestId('streak-flame')).toBeInTheDocument();
+    expect(badge.querySelector('svg')).toBeNull();
     expect(within(badge).getByText('5')).toBeInTheDocument();
     expect(screen.queryByText(/5-day streak/)).not.toBeInTheDocument();
   });
@@ -179,11 +179,19 @@ describe('HomeScreen', () => {
     const backend = stubBackend();
     render(<HomeScreen {...props(backend)} />);
 
-    expect(screen.getByText('Set a goal to see your rings')).toBeInTheDocument();
-    // Let the background meals fetch settle so no state update escapes the test.
-    await waitFor(() => expect(screen.getByText(/Nothing logged yet/)).toBeInTheDocument());
-    // The goal card carries the one empty message; there is no second paragraph.
-    expect(screen.getAllByText(/Nothing logged yet/)).toHaveLength(1);
+    expect(screen.getByText('Set a goal to see today’s progress')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Tap the camera to add one.')).toBeInTheDocument());
+  });
+
+  it('keeps logging available when a goal is not set', async () => {
+    const backend = stubBackend({
+      mealsByDate: vi.fn(async () => [meal({ id: 'a', label: 'Chicken rice' })]),
+    });
+    render(<HomeScreen {...props(backend)} />);
+
+    expect(
+      await screen.findByText('Set a goal later — meals log without one.'),
+    ).toBeInTheDocument();
   });
 
   it('shows exactly one empty message when targets exist', async () => {
@@ -283,7 +291,7 @@ describe('HomeScreen', () => {
     render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
 
     await waitFor(() => expect(screen.getByText('Nothing logged yet')).toBeInTheDocument());
-    expect(screen.queryByText('Set a goal to see your rings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Set a goal to see today’s progress')).not.toBeInTheDocument();
   });
 
   it('states a verdict and flags an over-target day', async () => {

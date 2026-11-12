@@ -202,7 +202,7 @@ function TrendSection({ points, range }: { points: ReportTrendPoint[]; range: Re
             title={`${point.label}: ${NUM.format(point.energyKcal)} kcal`}
           >
             <div
-              className={`w-full rounded-t-[2px] ${point.meals > 0 ? 'bg-primary' : 'bg-muted'}`}
+              className={`w-full rounded-none ${point.meals > 0 ? 'bg-primary' : 'bg-muted'}`}
               style={{ height: `${Math.max(2, (point.energyKcal / max) * 100)}%` }}
             />
           </div>
@@ -234,9 +234,9 @@ function AdherenceSection({ weeks }: { weeks: ReportWeek[] }) {
             <span className="text-muted-foreground text-caption">
               {shortDate(week.weekStartKey)}
             </span>
-            <div className="bg-muted h-2 overflow-hidden rounded-control">
+            <div className="bg-muted h-2 overflow-hidden rounded-full">
               <div
-                className="bg-primary h-full rounded-control"
+                className="bg-primary h-full rounded-full"
                 style={{ width: `${week.scorePct ?? 0}%` }}
               />
             </div>
@@ -275,7 +275,7 @@ function WeekdaySection({ weekdays }: { weekdays: ReportWeekday[] }) {
           <div key={day.weekday} className="flex min-w-0 flex-1 flex-col items-center gap-1">
             <div className="flex w-full flex-1 items-end">
               <div
-                className={`w-full rounded-t-[2px] ${day.loggedDays > 0 ? 'bg-primary/80' : 'bg-muted'}`}
+                className={`w-full rounded-none ${day.loggedDays > 0 ? 'bg-primary/80' : 'bg-muted'}`}
                 style={{
                   height: `${day.loggedDays > 0 ? Math.max(3, (day.avgKcal / max) * 100) : 3}%`,
                 }}
@@ -303,9 +303,9 @@ function TimeOfDaySection({ buckets }: { buckets: ReportTimeOfDay[] }) {
         {buckets.map((bucket) => (
           <div key={bucket.bucket} className="grid grid-cols-[7.5rem_1fr_2rem] items-center gap-2">
             <span className="text-caption">{bucket.label}</span>
-            <div className="bg-muted h-2 overflow-hidden rounded-control">
+            <div className="bg-muted h-2 overflow-hidden rounded-full">
               <div
-                className="bg-primary h-full rounded-control"
+                className="bg-primary h-full rounded-full"
                 style={{ width: `${bucket.sharePct}%` }}
               />
             </div>

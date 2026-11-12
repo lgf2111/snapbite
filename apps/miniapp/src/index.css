@@ -97,9 +97,10 @@
 
 /* Scroll-down cue: a small repeating drift. Applied with `motion-safe:` only. */
 @theme {
-  /* Two corner decisions: controls at 10px, surfaces at 16px. */
+  /* Three corner decisions: controls at 10px, surfaces at 16px, flush at 0. */
   --radius-control: 10px;
   --radius-surface: 16px;
+  --radius-flush: 0px;
 
   --animate-drift: drift 1.8s ease-in-out infinite;
   @keyframes drift {
@@ -153,17 +154,6 @@
   --text-caption: 0.8125rem;
   --text-caption--line-height: 1.35;
 
-  /* The stock scale snaps onto the two tokens, so a class that was not swept
-     still cannot invent a third value. Components name the role directly. */
-  --radius-xs: var(--radius-control);
-  --radius-sm: var(--radius-control);
-  --radius-md: var(--radius-control);
-  --radius-lg: var(--radius-surface);
-  --radius-xl: var(--radius-surface);
-  --radius-2xl: var(--radius-surface);
-  --radius-3xl: var(--radius-surface);
-  --radius-4xl: var(--radius-surface);
-
   /* Bottom bar height, shared by the bar and the scroll reserve. */
   --spacing-bar: 4.5rem;
 
@@ -205,7 +195,7 @@ body {
 }
 .range::-webkit-slider-runnable-track {
   height: 6px;
-  border-radius: var(--radius-control);
+  border-radius: 999px;
   background: linear-gradient(
     to right,
     var(--primary) 0%,
@@ -217,12 +207,12 @@ body {
 }
 .range::-moz-range-track {
   height: 6px;
-  border-radius: var(--radius-control);
+  border-radius: 999px;
   background: var(--muted);
 }
 .range::-moz-range-progress {
   height: 6px;
-  border-radius: var(--radius-control);
+  border-radius: 999px;
   background: var(--primary);
 }
 .range::-webkit-slider-thumb {

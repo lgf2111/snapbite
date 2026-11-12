@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import type { Favorite } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
 import { type ManualFoodInput, buildManualMeal } from '@snapbite/core';
-import { Beef, Droplet, Flame, type LucideIcon, Star, Trash2, Wheat, X } from 'lucide-react';
+import { Star, Trash2, X } from 'lucide-react';
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 
 type ToastKind = 'success' | 'error' | 'info';
@@ -166,11 +166,11 @@ export function ManualMealDialog({
     attemptSave();
   }
 
-  const macroFields: Array<{ key: keyof typeof form; label: string; icon: LucideIcon }> = [
-    { key: 'energyKcal', label: 'Calories', icon: Flame },
-    { key: 'proteinG', label: 'Protein (g)', icon: Beef },
-    { key: 'carbsG', label: 'Carbs (g)', icon: Wheat },
-    { key: 'fatG', label: 'Fat (g)', icon: Droplet },
+  const macroFields: Array<{ key: keyof typeof form; label: string }> = [
+    { key: 'energyKcal', label: 'Calories' },
+    { key: 'proteinG', label: 'Protein (g)' },
+    { key: 'carbsG', label: 'Carbs (g)' },
+    { key: 'fatG', label: 'Fat (g)' },
   ];
 
   return (
@@ -267,10 +267,7 @@ export function ManualMealDialog({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {macroFields.map((f) => (
                 <div key={f.key} className="flex min-w-0 flex-col gap-1.5">
-                  <Label htmlFor={`mm-${f.key}`}>
-                    <f.icon className="size-4 stroke-[1.75]" aria-hidden />
-                    {f.label}
-                  </Label>
+                  <Label htmlFor={`mm-${f.key}`}>{f.label}</Label>
                   <Input
                     id={`mm-${f.key}`}
                     ref={f.key === 'energyKcal' ? kcalRef : undefined}

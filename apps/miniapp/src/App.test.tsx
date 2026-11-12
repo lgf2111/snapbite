@@ -437,7 +437,7 @@ describe('boot: icon shortcuts and a shared photo', () => {
 
     const sheet = await screen.findByRole('dialog');
     expect(await within(sheet).findByText('Log this meal?')).toBeTruthy();
-    // The photo went through the normal analyse → review path, pre-attached.
+    // The photo went through the normal analyze → review path, pre-attached.
     expect(within(sheet).getByText('Grilled salmon')).toBeTruthy();
     expect(within(sheet).getByRole('button', { name: 'Save meal' })).toBeTruthy();
     expect(window.location.search).toBe('');

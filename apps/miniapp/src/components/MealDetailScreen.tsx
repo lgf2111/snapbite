@@ -25,19 +25,7 @@ import {
   resolveFoodNutrition,
   sourceLabel,
 } from '@snapbite/core';
-import {
-  Beef,
-  Droplet,
-  Flame,
-  type LucideIcon,
-  RotateCcw,
-  Share2,
-  Sparkles,
-  Star,
-  Trash2,
-  Wheat,
-  X,
-} from 'lucide-react';
+import { RotateCcw, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { MealTotals } from './MealTotals.js';
 import { SaveMealDialog } from './SaveMealDialog.js';
@@ -462,11 +450,11 @@ export function MealDetailScreen({
     loading: busy === 'saving',
   });
 
-  const macroFields: Array<{ key: MacroKey; icon: LucideIcon; suffix: string }> = [
-    { key: 'energyKcal', icon: Flame, suffix: 'kcal' },
-    { key: 'proteinG', icon: Beef, suffix: 'g' },
-    { key: 'carbsG', icon: Wheat, suffix: 'g' },
-    { key: 'fatG', icon: Droplet, suffix: 'g' },
+  const macroFields: Array<{ key: MacroKey; label: string; suffix: string }> = [
+    { key: 'energyKcal', label: 'Calories', suffix: 'kcal' },
+    { key: 'proteinG', label: 'Protein', suffix: 'g' },
+    { key: 'carbsG', label: 'Carbs', suffix: 'g' },
+    { key: 'fatG', label: 'Fat', suffix: 'g' },
   ];
 
   // Map draft-food indices to their resolved nutrition (kept foods only).
@@ -576,24 +564,28 @@ export function MealDetailScreen({
                       </p>
                     ) : (
                       <div className="flex flex-wrap items-center gap-2">
-                        {macroFields.map(({ key, icon: Icon, suffix }) => (
-                          <div
-                            key={key}
-                            className="text-caption flex items-center gap-1"
-                            title={key}
-                          >
-                            <Icon className="size-4 stroke-[1.75]" aria-hidden />
-                            <Input
-                              aria-label={`Food ${i + 1} ${key}`}
-                              type="number"
-                              min={0}
-                              value={nutrition[key]}
-                              onChange={(e) => setMacro(i, key, Number(e.target.value) || 0)}
-                              className="h-8 w-16 px-2"
-                            />
-                            <span className="text-muted-foreground">{suffix}</span>
-                          </div>
-                        ))}
+                        {macroFields.map(({ key, label, suffix }) => {
+                          const id = `food-${i}-${key}`;
+                          return (
+                            <label
+                              key={key}
+                              htmlFor={id}
+                              className="text-caption flex items-center gap-1 whitespace-nowrap"
+                            >
+                              <span className="text-muted-foreground">{label}</span>
+                              <Input
+                                id={id}
+                                aria-label={`Food ${i + 1} ${label.toLowerCase()}`}
+                                type="number"
+                                min={0}
+                                value={nutrition[key]}
+                                onChange={(e) => setMacro(i, key, Number(e.target.value) || 0)}
+                                className="h-8 w-16 px-2"
+                              />
+                              <span className="text-muted-foreground">{suffix}</span>
+                            </label>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
