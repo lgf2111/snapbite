@@ -243,9 +243,6 @@ export function ManualMealDialog({
                     </div>
                   ))}
                 </div>
-                <p className="text-muted-foreground text-xs">
-                  Tap a saved meal to fill it in below — tweak anything, then log.
-                </p>
               </div>
             )}
 

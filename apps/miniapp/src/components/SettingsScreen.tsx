@@ -365,9 +365,6 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     }
   }
 
-  // Reads reminder state from a settings payload into slot toggles + times, and
-  // opportunistically refreshes the stored timezone offset if the device moved
-  // (so travel/DST self-heals on app open without the user re-saving).
   function hydrateReminders(s: SettingsView) {
     const times = { ...DEFAULT_REMINDER_TIMES };
     const on: Record<string, boolean> = { breakfast: false, lunch: false, dinner: false };
@@ -644,9 +641,6 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             <CalendarRange className="text-primary-text size-5" />
             <span className="font-medium">Weekly view</span>
           </div>
-          <p className="text-muted-foreground text-xs">
-            How the Home “Weekly” toggle groups your days.
-          </p>
 
           <div className="flex flex-col gap-1.5">
             <Label>Week is</Label>
@@ -795,9 +789,8 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
               <Collapsible open={fbEnabled && primaryConnected}>
                 <div className="flex flex-col gap-3 pt-1">
                   <p className="text-muted-foreground text-xs">
-                    If your main provider hits a rate limit or is overloaded, SnapBite retries the
-                    photo with this provider automatically. OpenAI (gpt-4o-mini) is recommended —
-                    it's the most accurate at food recognition.
+                    OpenAI (gpt-4o-mini) is recommended — it's the most accurate at food
+                    recognition.
                   </p>
 
                   <ProviderPicker idPrefix="fb" value={fbCfg} onChange={setFbCfg} />
@@ -938,10 +931,6 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Send feedback</DialogTitle>
-            <DialogDescription>
-              Tell us what went wrong or what you'd like improved. This goes straight to the
-              maintainer.
-            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
             <Textarea

@@ -309,7 +309,6 @@ export function HomeScreen({
   function handleDelete(meal: RecentMeal) {
     setHiddenIds((prev) => new Set(prev).add(meal.id));
     const toastId = toast('Meal deleted', {
-      description: 'Undo brings the row back.',
       duration: UNDO_MS,
       action: { label: 'Undo', onClick: () => undoDelete(meal.id) },
       onDismiss: () => {
@@ -513,11 +512,11 @@ export function HomeScreen({
         <section className="flex items-center justify-between gap-3 rounded-surface border border-border bg-card p-4">
           <div className="min-w-0">
             <p className="text-body font-medium">Set a goal to see your rings</p>
-            <p className="text-muted-foreground text-caption">
-              {meals && meals.length === 0
-                ? 'Nothing logged yet — tap the camera to add one.'
-                : 'Meals are logged either way.'}
-            </p>
+            {meals && meals.length === 0 && (
+              <p className="text-muted-foreground text-caption">
+                Nothing logged yet — tap the camera to add one.
+              </p>
+            )}
           </div>
           <Button size="sm" onClick={onSetGoal}>
             Set goal
@@ -538,7 +537,6 @@ export function HomeScreen({
           </div>
           <div className="min-w-0">
             <p className="text-body font-medium">Reports</p>
-            <p className="text-muted-foreground text-caption">Trend · Adherence · Report card</p>
           </div>
         </div>
         <ChevronRight className="text-muted-foreground size-4 shrink-0" />
