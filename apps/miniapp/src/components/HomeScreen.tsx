@@ -15,7 +15,7 @@ import {
   weekRange,
 } from '@/lib/weekPrefs';
 import { type DailyTargets, type MealResult, PROVIDER_PRESETS } from '@snapbite/core';
-import { ChevronRight, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
+import { ChevronRight, Flame, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DateSelector } from './DateSelector.js';
@@ -365,7 +365,7 @@ export function HomeScreen({
               onClick={() => setStreakOpen(true)}
               className="bg-secondary text-foreground text-caption inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full px-3 font-medium"
             >
-              <span aria-hidden>🔥</span>
+              <Flame className="size-4 stroke-[1.75]" aria-hidden data-testid="streak-flame" />
               <span className="tabular">{streak}</span>
             </button>
           )}
