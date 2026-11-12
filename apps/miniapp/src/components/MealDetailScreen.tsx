@@ -28,6 +28,7 @@ import {
 import { RotateCcw, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { MacroLegend, MacroLine } from './MacroLine.js';
+import { SaveMealDialog } from './SaveMealDialog.js';
 import { SharePreviewDialog } from './SharePreviewDialog.js';
 import { ReviseWithAiDialog } from './UpdateWithAi.js';
 
@@ -657,38 +658,14 @@ export function MealDetailScreen({
             </DialogContent>
           </Dialog>
 
-          <Dialog open={renameOpen} onOpenChange={(o) => (savingFav ? null : setRenameOpen(o))}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Save this meal</DialogTitle>
-                <DialogDescription>
-                  Name it so you can find and log it again later.
-                </DialogDescription>
-              </DialogHeader>
-              <Input
-                autoFocus
-                value={favLabel}
-                disabled={savingFav}
-                placeholder="e.g. Chicken rice bowl"
-                onChange={(e) => setFavLabel(e.target.value)}
-              />
-              <DialogFooter>
-                <Button
-                  variant="secondary"
-                  disabled={savingFav}
-                  onClick={() => setRenameOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  disabled={savingFav || favLabel.trim().length === 0}
-                  onClick={() => void confirmSaveFavorite()}
-                >
-                  {savingFav ? 'Saving…' : 'Save'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <SaveMealDialog
+            open={renameOpen}
+            name={favLabel}
+            saving={savingFav}
+            onNameChange={setFavLabel}
+            onOpenChange={setRenameOpen}
+            onSave={() => void confirmSaveFavorite()}
+          />
 
           {cardInput && (
             <SharePreviewDialog

@@ -32,14 +32,19 @@ function DialogContent({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & { hideClose?: boolean }) {
   // Every dialog can hold a text field, and iOS puts the keyboard over them.
-  useKeyboardInset();
+  const keyboardInset = useKeyboardInset();
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          'bg-card fixed top-[calc((100svh-var(--keyboard-inset,0px))/2)] left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 grid-cols-[minmax(0,1fr)] gap-4 max-h-[calc(100svh-var(--keyboard-inset,0px)-2rem)] overflow-y-auto overscroll-contain rounded-xl border p-5 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+          'bg-card fixed left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 grid-cols-[minmax(0,1fr)] gap-4 max-h-[calc(100svh-var(--keyboard-inset,0px)-2rem)] overflow-y-auto overscroll-contain rounded-xl border p-5 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+          // With the keyboard up, sit directly above it (top edge on screen)
+          // instead of centring in the half-dark space that is left.
+          keyboardInset > 0
+            ? 'top-auto bottom-[calc(var(--keyboard-inset,0px)+1rem)] translate-y-0'
+            : 'top-1/2 -translate-y-1/2',
           className,
         )}
         {...props}
