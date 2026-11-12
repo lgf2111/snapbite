@@ -27,7 +27,7 @@ import {
 } from '@snapbite/core';
 import { RotateCcw, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { MacroLegend, MacroLine } from './MacroLine.js';
+import { MealTotals } from './MealTotals.js';
 import { SaveMealDialog } from './SaveMealDialog.js';
 import { SharePreviewDialog } from './SharePreviewDialog.js';
 import { ReviseWithAiDialog } from './UpdateWithAi.js';
@@ -588,18 +588,13 @@ export function MealDetailScreen({
                 );
               })}
 
-              <div className="flex items-center justify-between pt-1 font-semibold">
-                <span>Total</span>
-                <MacroLine
-                  energyKcal={resolved.total.energyKcal}
-                  proteinG={resolved.total.proteinG}
-                  carbsG={resolved.total.carbsG}
-                  fatG={resolved.total.fatG}
-                  fiberG={resolved.total.fiberG}
-                  sourceLabel={sourceLabel(resolved.total.source)}
-                />
-              </div>
-              <MacroLegend className="pt-1" />
+              <MealTotals
+                energyKcal={resolved.total.energyKcal}
+                proteinG={resolved.total.proteinG}
+                carbsG={resolved.total.carbsG}
+                fatG={resolved.total.fatG}
+                source={sourceLabel(resolved.total.source)}
+              />
             </CardContent>
           </Card>
 
