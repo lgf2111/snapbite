@@ -82,6 +82,22 @@ describe('HomeScreen', () => {
     expect(backend.mealsByDate).toHaveBeenCalledWith('2026-09-16');
   });
 
+  it('keeps the meal card square and flat so the swipe reveal has one surface', async () => {
+    const backend = stubBackend({
+      mealsByDate: vi.fn(async () => [meal({ id: 'a', label: 'Chicken rice' })]),
+    });
+    render(<HomeScreen {...props(backend)} />);
+
+    const label = await screen.findByText('Chicken rice');
+    const card = label.closest<HTMLElement>('[data-slot="card"]');
+    expect(card).not.toBeNull();
+    // The row root owns the radius and the red. A second radius, border, or
+    // shadow here is what made the card and the action look detached.
+    expect(card?.className).toContain('rounded-none');
+    expect(card?.className).toContain('border-0');
+    expect(card?.className).toContain('shadow-none');
+  });
+
   it('shows an empty-day state when there are no meals', async () => {
     // With targets, the verdict slot carries the empty state.
     const backend = stubBackend();
