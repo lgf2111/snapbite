@@ -13,7 +13,7 @@ import type { MealDetail } from '@/lib/api';
 import { type Backend, type RecentMeal, shortMealTitle } from '@/lib/backend';
 import { getCached, setCached } from '@/lib/cache';
 import { shareOrSaveImage } from '@/lib/share';
-import { renderMealShareCard } from '@/lib/shareCard';
+import { type MealShareCardInput, renderMealShareCard } from '@/lib/shareCard';
 import { hapticImpact } from '@/lib/telegram';
 import { useBackButton, useMainButton } from '@/lib/useTelegramButtons';
 import { cn } from '@/lib/utils';
@@ -28,6 +28,7 @@ import {
 import { RotateCcw, Share2, Sparkles, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { MacroLegend, MacroLine } from './MacroLine.js';
+import { SharePreviewDialog } from './SharePreviewDialog.js';
 import { ReviseWithAiDialog } from './UpdateWithAi.js';
 
 type ToastKind = 'success' | 'error' | 'info';
@@ -160,9 +161,8 @@ export function MealDetailScreen({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
-  const [cardBusy, setCardBusy] = useState(false); // generating the preview
   const [sharing, setSharing] = useState(false); // sharing from the preview
-  const [cardPreview, setCardPreview] = useState<{ blob: Blob; url: string } | null>(null);
+  const [cardOpen, setCardOpen] = useState(false);
   const [savingFav, setSavingFav] = useState(false);
   /** The favorite id when this meal is already saved (filled star); null otherwise. */
   const [savedFavId, setSavedFavId] = useState<string | null>(null);
@@ -216,13 +216,6 @@ export function MealDetailScreen({
     };
   }, [backend, detail]);
 
-  // Release the preview object URL if we unmount while it's still open.
-  useEffect(() => {
-    return () => {
-      if (cardPreview) URL.revokeObjectURL(cardPreview.url);
-    };
-  }, [cardPreview]);
-
   // Dirty when the draft (incl. pending removals) differs from the loaded meal.
   const dirty = useMemo(() => JSON.stringify(foods) !== baseline, [foods, baseline]);
 
@@ -238,6 +231,22 @@ export function MealDetailScreen({
     }));
     return { foods: mealFoods, total: aggregate(mealFoods.map((f) => f.nutrition)) };
   }, [kept]);
+
+  /** The card previews the current draft, so an edit shows before it is saved. */
+  const cardInput = useMemo<MealShareCardInput | null>(() => {
+    if (!detail) return null;
+    return {
+      photoUrl: hasPhoto(detail) ? backend.photoUrl(mealId) : null,
+      title: shortMealTitle(
+        detail.title,
+        kept.map((f) => f.name),
+      ),
+      calories: resolved.total.energyKcal,
+      proteinG: resolved.total.proteinG,
+      carbsG: resolved.total.carbsG,
+      fatG: resolved.total.fatG,
+    };
+  }, [backend, detail, kept, mealId, resolved]);
 
   function updateFood(i: number, patch: Partial<DraftFood>) {
     setFoods((prev) => prev.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
@@ -330,22 +339,6 @@ export function MealDetailScreen({
     }
   }
 
-  /** Builds the share-card image from the current (possibly edited) meal. */
-  async function buildCardBlob(): Promise<Blob> {
-    const title = shortMealTitle(
-      detail?.title,
-      kept.map((f) => f.name),
-    );
-    return renderMealShareCard({
-      photoUrl: hasPhoto(detail) ? backend.photoUrl(mealId) : null,
-      title,
-      calories: resolved.total.energyKcal,
-      proteinG: resolved.total.proteinG,
-      carbsG: resolved.total.carbsG,
-      fatG: resolved.total.fatG,
-    });
-  }
-
   /** The default favorite name for the current meal. */
   function defaultFavLabel(): string {
     return shortMealTitle(
@@ -406,36 +399,23 @@ export function MealDetailScreen({
     }
   }
 
-  /** Generates the card and opens a preview so the user can see it first. */
-  async function openCardPreview() {
-    if (cardBusy) return;
-    setCardBusy(true);
-    try {
-      const blob = await buildCardBlob();
-      const url = URL.createObjectURL(blob);
-      setCardPreview({ blob, url });
-    } catch (e) {
-      onToast?.('error', e instanceof Error ? e.message : 'Could not create image');
-    } finally {
-      setCardBusy(false);
-    }
+  /** Opens the preview. The PNG is only rendered when the user taps Share. */
+  function openCardPreview() {
+    setCardOpen(true);
   }
 
-  /** Closes the preview and releases the object URL. */
   function closeCardPreview() {
-    setCardPreview((prev) => {
-      if (prev) URL.revokeObjectURL(prev.url);
-      return null;
-    });
+    setCardOpen(false);
   }
 
-  /** Shares the previewed card via the native sheet (or downloads as fallback). */
+  /** Renders the previewed card and hands the PNG to the share sheet. */
   async function shareFromPreview() {
-    if (!cardPreview || sharing) return;
+    if (!cardInput || sharing) return;
     setSharing(true);
     try {
+      const blob = await renderMealShareCard(cardInput);
       const result = await shareOrSaveImage(
-        cardPreview.blob,
+        blob,
         'snapbite-meal.png',
         'My meal, logged with SnapBite',
       );
@@ -456,7 +436,7 @@ export function MealDetailScreen({
 
   useBackButton(true, () => {
     if (renameOpen) setRenameOpen(false);
-    else if (cardPreview) closeCardPreview();
+    else if (cardOpen) closeCardPreview();
     else if (confirmDelete) setConfirmDelete(false);
     else if (confirmDiscard) setConfirmDiscard(false);
     else discardAndBack();
@@ -521,14 +501,9 @@ export function MealDetailScreen({
               />
               {savedFavId !== null ? 'Saved' : 'Save meal'}
             </Button>
-            <Button
-              variant="secondary"
-              className="flex-1 gap-2"
-              disabled={cardBusy}
-              onClick={() => void openCardPreview()}
-            >
+            <Button variant="secondary" className="flex-1 gap-2" onClick={openCardPreview}>
               <Share2 className="size-4" />
-              {cardBusy ? 'Preparing…' : 'Share'}
+              Share
             </Button>
           </div>
 
@@ -715,39 +690,17 @@ export function MealDetailScreen({
             </DialogContent>
           </Dialog>
 
-          <Dialog
-            open={cardPreview !== null}
-            onOpenChange={(open) => {
-              if (!open) closeCardPreview();
-            }}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Share this meal</DialogTitle>
-                <DialogDescription>Preview your meal card, then share it.</DialogDescription>
-              </DialogHeader>
-              {cardPreview && (
-                <img
-                  src={cardPreview.url}
-                  alt="Meal card preview"
-                  className="mx-auto max-h-[60vh] w-auto rounded-xl border"
-                />
-              )}
-              <DialogFooter>
-                <Button variant="secondary" onClick={closeCardPreview} disabled={sharing}>
-                  Cancel
-                </Button>
-                <Button
-                  className="gap-2"
-                  onClick={() => void shareFromPreview()}
-                  disabled={sharing}
-                >
-                  <Share2 className="size-4" />
-                  {sharing ? 'Sharing…' : 'Share'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          {cardInput && (
+            <SharePreviewDialog
+              open={cardOpen}
+              onOpenChange={(open) => {
+                if (!open) closeCardPreview();
+              }}
+              card={cardInput}
+              sharing={sharing}
+              onShare={() => void shareFromPreview()}
+            />
+          )}
 
           <Dialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
             <DialogContent>

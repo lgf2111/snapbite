@@ -2,11 +2,11 @@
  * Renders a shareable meal card to a PNG blob using the built-in Canvas 2D API
  * — no image/canvas libraries (keeps the bundle light per project principles).
  *
- * The design is SnapBite's own: a deep Telegram-blue backdrop (matching the app
- * and logo), a full-bleed meal photo that fades smoothly into the background, a
- * bold title, a hero calorie readout, three translucent macro pills with
- * brand-colored dots, and a drawn SnapBite mark + wordmark so it's branded even
- * without loading the logo file.
+ * The card mirrors the in-app preview (`ShareCard`): 4:5, the photo fills the
+ * top 60%, and a fixed rhythm below it carries the title, calories, three equal
+ * macro columns and one caption line. Nothing but the wordmark sits over the
+ * photo. Colours are read from the app's CSS tokens, so the shared image matches
+ * the sheet the user previewed in light or dark mode.
  */
 
 export interface MealShareCardInput {
@@ -20,27 +20,54 @@ export interface MealShareCardInput {
   fatG: number;
 }
 
-// Canvas dimensions (portrait 9:16, Instagram-story friendly).
+// 4:5, the portrait crop social apps show without letterboxing.
 const W = 1080;
-const H = 1920;
+const H = 1350;
+/** The photo owns the top 60%; content owns the rest. */
+const PHOTO_H = Math.round(H * 0.6);
 
-// SnapBite palette — derived from the logo (deep blue) + the app's dark theme.
-const COLOR = {
-  brand: '#1f4fd0', // logo blue
-  brandBright: '#3aa0ff', // app primary / accents
-  bgTop: '#0f1830', // deep navy (behind photo fade)
-  bgBottom: '#0a1120', // near-black navy (bottom)
-  ink: '#ffffff',
-  sub: '#aebbd4', // muted blue-grey text
-  pill: 'rgba(255,255,255,0.06)',
-  pillBorder: 'rgba(255,255,255,0.10)',
-  protein: '#fb7185',
-  carbs: '#fbbf24',
-  fat: '#a78bfa',
-  kcal: '#ff7a59',
-} as const;
+/**
+ * The preview card is 384 px wide on a 430 px screen, so the export is 2.81×
+ * that width. These sizes are the preview's rhythm scaled up: 12/8/16/8 becomes
+ * 34/23/45/23, and every text size keeps the same optical size on a phone.
+ */
+const PAD = 45;
+const GAP_AFTER_PHOTO = 34;
+const GAP_TITLE_KCAL = 23;
+const GAP_KCAL_MACROS = 45;
+const GAP_MACROS_FOOTER = 23;
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+const DISPLAY_FONT = 'ui-serif, "New York", Georgia, "Times New Roman", serif';
+const BRAND = '#1f4fd0';
+
+interface CardTheme {
+  card: string;
+  foreground: string;
+  muted: string;
+  secondary: string;
+  border: string;
+}
+
+/** A themed colour, falling back when there is no CSSOM (tests, exotic hosts). */
+function themeColor(name: string, fallback: string): string {
+  if (typeof document === 'undefined' || typeof getComputedStyle !== 'function') return fallback;
+  try {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function readTheme(): CardTheme {
+  return {
+    card: themeColor('--card', '#edf2fb'),
+    foreground: themeColor('--foreground', '#0f172a'),
+    muted: themeColor('--muted-foreground', '#5a6780'),
+    secondary: themeColor('--secondary', '#e3eaf7'),
+    border: themeColor('--border', '#b6c7e3'),
+  };
+}
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -120,9 +147,9 @@ function drawImageCover(
 /**
  * Cleans an AI-written meal title for display: drops leading filler like
  * "Identified as " / "This is " / "A photo of " and capitalizes the first
- * letter. Falls back to "Meal" when empty.
+ * letter. Falls back to "Meal" when empty. Shared by the preview and the PNG.
  */
-function cleanTitle(raw: string | undefined): string {
+export function cleanTitle(raw: string | undefined): string {
   let t = (raw ?? '').trim();
   // Strip common AI lead-ins, e.g. "Identified as ...", "Identified ...",
   // "Detected ...", "This is ...", "A photo of ...", "Looks like ...".
@@ -146,91 +173,10 @@ function truncateToWidth(ctx: CanvasRenderingContext2D, text: string, maxWidth: 
   return `${s.trimEnd()}…`;
 }
 
-/**
- * Word-wraps text into at most `maxLines` lines at the current font. Long
- * single words are allowed to overflow rather than break mid-word; if the text
- * needs more than `maxLines`, the last line is ellipsized.
- */
-function wrapToLines(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-  maxLines: number,
-): string[] {
-  const words = text.trim().split(/\s+/);
-  const lines: string[] = [];
-  let line = '';
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i] ?? '';
-    const candidate = line ? `${line} ${word}` : word;
-    if (ctx.measureText(candidate).width <= maxWidth || !line) {
-      line = candidate;
-    } else {
-      lines.push(line);
-      line = word;
-      // Reached the final allowed line: fill it with the remaining words and
-      // ellipsize to fit, so nothing overflows past maxLines.
-      if (lines.length === maxLines - 1) {
-        const rest = [word, ...words.slice(i + 1)].join(' ');
-        lines.push(truncateToWidth(ctx, rest, maxWidth));
-        return lines;
-      }
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
-/** A macro pill: translucent rounded card, colored dot, label, and value. */
-function drawMacroPill(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  dotColor: string,
-  label: string,
-  value: string,
-): void {
-  ctx.fillStyle = COLOR.pill;
-  roundRect(ctx, x, y, w, h, 30);
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = COLOR.pillBorder;
-  roundRect(ctx, x, y, w, h, 30);
-  ctx.stroke();
-
-  const cx = x + w / 2;
-
-  // Top row: colored dot + label, centered together as a group.
-  ctx.font = `600 30px ${FONT}`;
-  const labelW = ctx.measureText(label).width;
-  const dotR = 11;
-  const dotGap = 16;
-  const groupW = dotR * 2 + dotGap + labelW;
-  const groupLeft = cx - groupW / 2;
-  const rowY = y + 58;
-  ctx.fillStyle = dotColor;
-  ctx.beginPath();
-  ctx.arc(groupLeft + dotR, rowY, dotR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = COLOR.sub;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, groupLeft + dotR * 2 + dotGap, rowY);
-
-  // Big value, centered.
-  ctx.fillStyle = COLOR.ink;
-  ctx.font = `800 62px ${FONT}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(value, cx, y + h - 44);
-}
-
 /** Draws the SnapBite mark (fork inside a ring/plate) at (cx,cy) with radius r. */
 function drawBrandMark(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
   // Blue disc.
-  ctx.fillStyle = COLOR.brand;
+  ctx.fillStyle = BRAND;
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
@@ -264,6 +210,54 @@ function drawBrandMark(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
   }
 }
 
+/** A small wordmark pill over the top-left of the photo. */
+function drawWordmarkPill(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | null): void {
+  const x = 40;
+  const y = 40;
+  const h = 76;
+  const padX = 18;
+  const r = 26;
+  const gap = 12;
+
+  ctx.font = `700 30px ${FONT}`;
+  const textW = ctx.measureText('SnapBite').width;
+  const w = padX + r * 2 + gap + textW + padX;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.38)';
+  roundRect(ctx, x, y, w, h, h / 2);
+  ctx.fill();
+
+  drawLogo(ctx, logo, x + padX + r, y + h / 2, r);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `700 30px ${FONT}`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SnapBite', x + padX + r * 2 + gap, y + h / 2 + 1);
+}
+
+/** The no-photo panel: a plain secondary surface with the wordmark, centred. */
+function drawEmptyPhoto(
+  ctx: CanvasRenderingContext2D,
+  logo: HTMLImageElement | null,
+  theme: CardTheme,
+): void {
+  ctx.fillStyle = theme.secondary;
+  ctx.fillRect(0, 0, W, PHOTO_H);
+
+  const r = 52;
+  const gap = 18;
+  ctx.font = `700 44px ${FONT}`;
+  const textW = ctx.measureText('SnapBite').width;
+  const totalW = r * 2 + gap + textW;
+  const logoCx = W / 2 - totalW / 2 + r;
+
+  drawLogo(ctx, logo, logoCx, PHOTO_H / 2, r);
+  ctx.fillStyle = theme.foreground;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SnapBite', logoCx + r + gap, PHOTO_H / 2 + 1);
+}
+
 export async function renderMealShareCard(input: MealShareCardInput): Promise<Blob> {
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -271,190 +265,79 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D not supported');
 
+  const theme = readTheme();
   const logo = await loadLogo();
 
-  // --- Background: deep navy gradient --------------------------------------
-  // Hold a constant bgTop through the upper ~65% (where the photo dissolves)
-  // so the dissolve's end color matches the page bg exactly — no seam — then
-  // ease to a slightly darker bottom.
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, COLOR.bgTop);
-  bg.addColorStop(0.65, COLOR.bgTop);
-  bg.addColorStop(1, COLOR.bgBottom);
-  ctx.fillStyle = bg;
+  // --- Card surface ---------------------------------------------------------
+  ctx.fillStyle = theme.card;
   ctx.fillRect(0, 0, W, H);
 
-  // --- Photo (full-bleed top) that dissolves into the background -----------
-  // The photo is drawn a bit TALLER than the visible area, then dissolved to
-  // transparent over a long span so it blends continuously into the underlying
-  // background gradient — no hard photo edge and no solid-color seam.
-  const photoH = 1020; // where the photo has fully dissolved into the bg
-  const photoDraw = photoH + 60; // draw slightly past so the fade has image to work on
+  // --- Photo: top 60%, cover-cropped, no meal text over it ------------------
+  let hasPhoto = false;
   if (input.photoUrl) {
     try {
       const img = await loadImage(input.photoUrl);
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, W, photoDraw);
-      ctx.clip();
-      drawImageCover(ctx, img, 0, 0, W, photoDraw);
-      ctx.restore();
+      drawImageCover(ctx, img, 0, 0, W, PHOTO_H);
+      hasPhoto = true;
     } catch {
-      drawPlaceholderPhoto(ctx, photoDraw, logo);
+      drawEmptyPhoto(ctx, logo, theme);
     }
   } else {
-    drawPlaceholderPhoto(ctx, photoDraw, logo);
+    drawEmptyPhoto(ctx, logo, theme);
+  }
+  if (hasPhoto) drawWordmarkPill(ctx, logo);
+
+  // --- Title: one line, ellipsis -------------------------------------------
+  const titleTop = PHOTO_H + GAP_AFTER_PHOTO;
+  const titleLineH = 45 * 1.2;
+  ctx.fillStyle = theme.foreground;
+  ctx.font = `600 45px ${FONT}`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(truncateToWidth(ctx, cleanTitle(input.title), W - PAD * 2), PAD, titleTop);
+
+  // --- Calories: display-serif number, caption unit on the same line --------
+  const kcalTop = titleTop + titleLineH + GAP_TITLE_KCAL;
+  const kcalText = String(Math.round(input.calories));
+  ctx.fillStyle = theme.foreground;
+  ctx.font = `400 90px ${DISPLAY_FONT}`;
+  ctx.fillText(kcalText, PAD, kcalTop);
+  const kcalW = ctx.measureText(kcalText).width;
+  ctx.fillStyle = theme.muted;
+  ctx.font = `400 37px ${FONT}`;
+  // Sit the unit on the number's baseline (the number's ascent is ~0.8em).
+  ctx.fillText('kcal', PAD + kcalW + 12, kcalTop + 42);
+
+  // --- Macros: three equal columns, label and value centred in each ---------
+  const macrosTop = kcalTop + 92 + GAP_KCAL_MACROS;
+  const colW = (W - PAD * 2) / 3;
+  const macros: Array<[string, number]> = [
+    ['Protein', input.proteinG],
+    ['Carbs', input.carbsG],
+    ['Fat', input.fatG],
+  ];
+  for (const [i, [label, grams]] of macros.entries()) {
+    const cx = PAD + colW * i + colW / 2;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = theme.muted;
+    ctx.font = `400 37px ${FONT}`;
+    ctx.fillText(label, cx, macrosTop);
+    ctx.fillStyle = theme.foreground;
+    ctx.font = `600 40px ${FONT}`;
+    ctx.fillText(`${Math.round(grams)}g`, cx, macrosTop + 61);
   }
 
-  // Dissolve the photo into the background with a SINGLE smooth gradient (no
-  // stepping — stepping produced visible horizontal banding). We fade to the
-  // solid background color at the photo's bottom; because the page background
-  // is essentially this same navy there, the transition is seamless.
-  const fadeTop = photoH - 620;
-  const dissolve = ctx.createLinearGradient(0, fadeTop, 0, photoDraw);
-  dissolve.addColorStop(0, 'rgba(15,24,48,0)');
-  dissolve.addColorStop(0.6, 'rgba(13,20,40,0.55)');
-  dissolve.addColorStop(1, COLOR.bgTop);
-  ctx.fillStyle = dissolve;
-  ctx.fillRect(0, fadeTop, W, photoDraw - fadeTop);
-  // Cover any sliver below the photo down to where content begins with the
-  // solid bg color, so there's no seam between the fade and the page bg.
-  ctx.fillStyle = COLOR.bgTop;
-  ctx.fillRect(0, photoDraw, W, 40);
-
-  // A slim top scrim so the wordmark stays legible over bright photos.
-  const topScrim = ctx.createLinearGradient(0, 0, 0, 240);
-  topScrim.addColorStop(0, 'rgba(0,0,0,0.38)');
-  topScrim.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = topScrim;
-  ctx.fillRect(0, 0, W, 240);
-
-  // --- Brand lockup (top-left): real logo + wordmark -----------------------
-  drawLogo(ctx, logo, 78, 88, 44);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `800 44px ${FONT}`;
+  // --- Footer caption -------------------------------------------------------
+  const footerTop = macrosTop + 109 + GAP_MACROS_FOOTER;
   ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('SnapBite', 138, 90);
+  ctx.fillStyle = theme.muted;
+  ctx.font = `400 37px ${FONT}`;
+  ctx.fillText('Snap a photo · log your meal · SnapBite', PAD, footerTop);
 
-  const pad = 72;
-  const contentW = W - pad * 2;
-
-  // --- Title: show it in full, wrapping up to 2 lines and shrinking to fit --
-  // Prefer showing the whole name. Try 68px on up to 2 lines; if it still
-  // doesn't fit, step the size down; ellipsize only in the extreme case.
-  ctx.fillStyle = COLOR.ink;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  const titleTop = photoH + 44;
-  const rawTitle = cleanTitle(input.title);
-  const maxTitleLines = 2;
-  let titleSize = 68;
-  const minTitleSize = 48;
-  let titleLines: string[] = [];
-  for (;;) {
-    ctx.font = `800 ${titleSize}px ${FONT}`;
-    titleLines = wrapToLines(ctx, rawTitle, contentW, maxTitleLines);
-    const fits = titleLines.every((l) => ctx.measureText(l).width <= contentW);
-    const wholeShown = titleLines.join(' ').replace(/…$/, '').length >= rawTitle.length - 1;
-    if ((fits && wholeShown) || titleSize <= minTitleSize) break;
-    titleSize -= 2;
-  }
-  const titleLineH = titleSize * 1.16;
-  ctx.font = `800 ${titleSize}px ${FONT}`;
-  titleLines.forEach((line, i) => {
-    ctx.fillText(line, pad, titleTop + titleSize + i * titleLineH);
-  });
-  const titleBottom = titleTop + titleSize + (titleLines.length - 1) * titleLineH;
-
-  // The whole calories → pills → footer block is bottom-anchored, so the title
-  // (1 or 2 lines) can grow at the top without ever pushing content into the
-  // footer. `titleBottom` is only used to keep a minimum gap.
-  void titleBottom;
-  const kcal = Math.round(input.calories);
-  const gap = 26;
-  const pillW = (contentW - gap * 2) / 3;
-  const pillH = 190;
-  const footerY = H - 56;
-  const pillY = footerY - 64 - pillH;
-
-  // --- Hero calories (sits just above the pills) ---------------------------
-  const numBaseline = pillY - 70; // baseline of the big number
-  const chipR = 44;
-  const chipCx = pad + chipR;
-  const headerY = numBaseline - 138 - 46; // header row centered above the number
-
-  // Row 1 — flame chip + "CALORIES".
-  ctx.fillStyle = 'rgba(255,122,89,0.16)';
-  ctx.beginPath();
-  ctx.arc(chipCx, headerY, chipR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.font = `48px ${FONT}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  const flameMetrics = ctx.measureText('🔥');
-  const flameH =
-    (flameMetrics.actualBoundingBoxAscent || 34) + (flameMetrics.actualBoundingBoxDescent || 6);
-  const flameBaseline = headerY + flameH / 2 - (flameMetrics.actualBoundingBoxDescent || 6);
-  ctx.fillText('🔥', chipCx, flameBaseline);
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = COLOR.sub;
-  ctx.font = `700 34px ${FONT}`;
-  ctx.fillText('CALORIES', chipCx + chipR + 28, headerY);
-
-  // Row 2 — big number + unit.
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = COLOR.ink;
-  const numFont = `800 138px ${FONT}`;
-  ctx.font = numFont;
-  const numText = String(kcal);
-  ctx.fillText(numText, pad, numBaseline);
-  ctx.font = numFont;
-  const numW = ctx.measureText(numText).width;
-  ctx.fillStyle = COLOR.kcal;
-  ctx.font = `700 50px ${FONT}`;
-  ctx.fillText('kcal', pad + numW + 18, numBaseline);
-
-  // --- Macro pills row (bottom-anchored) -----------------------------------
-  drawMacroPill(
-    ctx,
-    pad,
-    pillY,
-    pillW,
-    pillH,
-    COLOR.protein,
-    'Protein',
-    `${Math.round(input.proteinG)}g`,
-  );
-  drawMacroPill(
-    ctx,
-    pad + pillW + gap,
-    pillY,
-    pillW,
-    pillH,
-    COLOR.carbs,
-    'Carbs',
-    `${Math.round(input.carbsG)}g`,
-  );
-  drawMacroPill(
-    ctx,
-    pad + (pillW + gap) * 2,
-    pillY,
-    pillW,
-    pillH,
-    COLOR.fat,
-    'Fat',
-    `${Math.round(input.fatG)}g`,
-  );
-
-  // --- Footer --------------------------------------------------------------
-  ctx.fillStyle = COLOR.sub;
-  ctx.font = `600 30px ${FONT}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText('Snap a photo · log your meal · SnapBite', W / 2, footerY);
+  // Hairline edge, so the card still reads as a card on a white background.
+  ctx.strokeStyle = theme.border;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, W - 2, H - 2);
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
@@ -462,18 +345,4 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
       'image/png',
     );
   });
-}
-
-/** Branded header used when there's no photo: blue gradient + the logo. */
-function drawPlaceholderPhoto(
-  ctx: CanvasRenderingContext2D,
-  h: number,
-  logo: HTMLImageElement | null,
-): void {
-  const grad = ctx.createLinearGradient(0, 0, W, h);
-  grad.addColorStop(0, COLOR.brand);
-  grad.addColorStop(1, COLOR.brandBright);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, h);
-  drawLogo(ctx, logo, W / 2, h / 2 - 30, 150);
 }
