@@ -149,8 +149,8 @@ export interface Backend {
   revokeDeviceToken(id: string): Promise<void>;
   /** Revokes every token; resolves to how many were live. */
   revokeAllDeviceTokens(): Promise<number>;
-  /** Photo URL for a meal (worker mode with a telegram file); null otherwise. */
-  photoUrl(id: string): string | null;
+  /** Photo URL for a meal; `width` asks for a list thumbnail. Null in local mode. */
+  photoUrl(id: string, opts?: { width?: number }): string | null;
   /**
    * Sends user feedback to the maintainer. Worker mode stores + DMs the owner;
    * local mode is a no-op (resolves) so the UI can still show a "thanks" toast.
@@ -198,17 +198,17 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
       },
       async recent() {
         const { meals } = await api.listMeals();
-        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id)));
+        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id, { width: 240 })));
       },
       async mealsByDate(date) {
         const { meals } = await api.listMeals(date);
-        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id)));
+        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id, { width: 240 })));
       },
       async mealsInRange(startKey, endKey) {
         // The server filters to the inclusive [startKey, endKey] local-day range,
         // so the payload is just the week's meals (not the whole history).
         const { meals } = await api.mealsInRange(startKey, endKey);
-        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id)));
+        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id, { width: 240 })));
       },
       mealDates() {
         return api.mealDates();
@@ -304,8 +304,8 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
       async revokeAllDeviceTokens() {
         return (await api.revokeAllDeviceTokens()).revoked;
       },
-      photoUrl(id) {
-        return api.photoUrl(id);
+      photoUrl(id, opts) {
+        return api.photoUrl(id, opts);
       },
       async saveReminders(enabled, times) {
         await api.saveReminders(enabled, times);

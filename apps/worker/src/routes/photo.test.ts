@@ -5,6 +5,7 @@ import { createApp } from '../app.js';
 import { createMealsDb, setMealPhoto } from '../db/meals.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
 import { photoKey } from '../storage/photos.js';
+import { jpegDimensions, photoJpeg, toBase64 } from '../test/photos.js';
 
 const BOT_TOKEN = '123456:LOCAL-DEV-BOT-TOKEN';
 
@@ -30,25 +31,26 @@ async function initFor(tgId: number): Promise<string> {
   return signInitData({ user, auth_date: authDate }, BOT_TOKEN);
 }
 
+const MEAL = {
+  foods: [
+    {
+      food: { name: 'rice', estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
+      nutrition: { energyKcal: 100, proteinG: 1, carbsG: 1, fatG: 1, source: 'table' },
+    },
+  ],
+  total: { energyKcal: 100, proteinG: 1, carbsG: 1, fatG: 1, source: 'table' },
+  confidence: 0.9,
+  needsConfirmation: false,
+};
+
 async function saveTextMeal(tgId: number): Promise<string> {
   const app = createApp();
-  const meal = {
-    foods: [
-      {
-        food: { name: 'rice', estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
-        nutrition: { energyKcal: 100, proteinG: 1, carbsG: 1, fatG: 1, source: 'table' },
-      },
-    ],
-    total: { energyKcal: 100, proteinG: 1, carbsG: 1, fatG: 1, source: 'table' },
-    confidence: 0.9,
-    needsConfirmation: false,
-  };
   const res = await app.request(
     '/api/meals',
     {
       method: 'POST',
       headers: { [INIT_DATA_HEADER]: await initFor(tgId), 'content-type': 'application/json' },
-      body: JSON.stringify({ meal }),
+      body: JSON.stringify({ meal: MEAL }),
     },
     env,
   );
@@ -146,7 +148,11 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
   }
 
   /** A meal with a stored photo, owned by whoever `cookie` is. */
-  async function mealWithPhoto(app: ReturnType<typeof createApp>, cookie: string) {
+  async function mealWithPhoto(
+    app: ReturnType<typeof createApp>,
+    cookie: string,
+    bytes: Uint8Array = BYTES,
+  ) {
     const res = await app.request(
       '/api/meals',
       {
@@ -170,7 +176,7 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
     );
     const id = ((await res.json()) as { id: string }).id;
     const key = photoKey(id);
-    await env.PHOTOS.put(key, BYTES, { httpMetadata: { contentType: 'image/jpeg' } });
+    await env.PHOTOS.put(key, bytes, { httpMetadata: { contentType: 'image/jpeg' } });
     const owner = (await (await app.request('/api/me', { headers: { cookie } }, env)).json()) as {
       userId: string;
     };
@@ -187,6 +193,27 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('image/jpeg');
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(BYTES);
+  });
+
+  it('serves a ≤240 px JPEG for ?w=240, while the detail URL stays the original', async () => {
+    const app = createApp();
+    const cookie = await signIn(app, 'photo-thumb@example.com');
+    const original = photoJpeg(1600, 1200);
+    const id = await mealWithPhoto(app, cookie, original);
+
+    const thumb = await app.request(`/api/meal-photo/${id}?w=240`, { headers: { cookie } }, env);
+    expect(thumb.status).toBe(200);
+    expect(thumb.headers.get('content-type')).toBe('image/jpeg');
+    expect(thumb.headers.get('cache-control')).toBe('private, max-age=86400');
+    const thumbBytes = new Uint8Array(await thumb.arrayBuffer());
+    const dims = jpegDimensions(thumbBytes);
+    expect(Math.max(dims.width, dims.height)).toBe(240);
+    expect(thumbBytes.length).toBeLessThan(original.length);
+
+    // No `?w=` means the stored original, byte for byte: the detail screen is
+    // never silently downscaled.
+    const full = await app.request(`/api/meal-photo/${id}`, { headers: { cookie } }, env);
+    expect(new Uint8Array(await full.arrayBuffer())).toEqual(original);
   });
 
   it('lists a stored-photo meal as hasPhoto (no Telegram file id), and a manual one as not', async () => {
@@ -256,5 +283,95 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
     );
     expect(bogus.status).toBe(401);
     expect(await count()).toBe(before);
+  });
+});
+
+describe('POST /api/meals photo upload limits', () => {
+  it('rejects a 3 MB base64 photo before decoding it, leaving no meal behind', async () => {
+    const tgId = 9101;
+    const app = createApp();
+    const headers = {
+      [INIT_DATA_HEADER]: await initFor(tgId),
+      'content-type': 'application/json',
+    };
+
+    const res = await app.request(
+      '/api/meals',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          meal: MEAL,
+          photo: { base64: 'A'.repeat(3 * 1024 * 1024), mimeType: 'image/jpeg' },
+        }),
+      },
+      env,
+    );
+    expect(res.status).toBe(413);
+    expect(((await res.json()) as { detail: string }).detail).toMatch(/too large/i);
+
+    const list = (await (await app.request('/api/meals', { headers }, env)).json()) as {
+      meals: unknown[];
+    };
+    expect(list.meals).toEqual([]);
+  });
+
+  it('shrinks a large photo to ≤400 KB and stores it as JPEG', async () => {
+    const tgId = 9102;
+    const app = createApp();
+    const initData = await initFor(tgId);
+    const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
+
+    // ~1.2 MB of 2000×1500 photo-like pixels: above the 400 KB budget and above
+    // the 1600 px edge, so both the downscale and the quality steps run.
+    const original = photoJpeg(2000, 1500, { noise: 60, quality: 82 });
+    expect(original.length).toBeGreaterThan(400 * 1024);
+    expect(toBase64(original).length).toBeLessThan(2 * 1024 * 1024);
+
+    const saved = await app.request(
+      '/api/meals',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          meal: MEAL,
+          photo: { base64: toBase64(original), mimeType: 'image/jpeg' },
+        }),
+      },
+      env,
+    );
+    expect(saved.status).toBe(201);
+    const { id } = (await saved.json()) as { id: string };
+
+    const photo = await app.request(
+      `/api/meal-photo/${id}?initData=${encodeURIComponent(initData)}`,
+      {},
+      env,
+    );
+    expect(photo.status).toBe(200);
+    expect(photo.headers.get('content-type')).toBe('image/jpeg');
+    const stored = new Uint8Array(await photo.arrayBuffer());
+    expect(stored.length).toBeLessThanOrEqual(400 * 1024);
+    expect(stored.length).toBeLessThan(original.length);
+    const dims = jpegDimensions(stored);
+    expect(Math.max(dims.width, dims.height)).toBeLessThanOrEqual(1600);
+  });
+
+  it('rejects a body over 10 MB from its Content-Length without parsing it', async () => {
+    const app = createApp();
+    const res = await app.request(
+      new Request('http://local/api/meals', {
+        method: 'POST',
+        headers: {
+          [INIT_DATA_HEADER]: await initFor(9103),
+          'content-type': 'application/json',
+          'content-length': String(11 * 1024 * 1024),
+        },
+        body: '{}',
+      }),
+      {},
+      env,
+    );
+    expect(res.status).toBe(413);
   });
 });

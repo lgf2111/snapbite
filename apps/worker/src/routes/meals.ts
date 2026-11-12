@@ -33,6 +33,7 @@ import { recordMealSave } from '../db/metrics.js';
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';
+import { base64ToBytes, resizeImage, shrinkImage } from '../storage/images.js';
 import { photoKey, r2Store } from '../storage/photos.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
 import type { BotClientFactory } from './webhook.js';
@@ -42,6 +43,17 @@ export type { ProviderChoice, ProviderFactory } from '../billing/provider.js';
 const defaultBotClientFactory: BotClientFactory = (token) => new TelegramBotClient(token);
 
 export const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+/** Hard cap on the JSON request body, checked before anything is parsed. */
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
+/**
+ * Client photos must already be compressed (the app targets 1600 px / 400 KB).
+ * 2 MB of base64 is ~1.5 MB of bytes: generous for a re-send, small enough that
+ * a client cannot hand the Worker an unbounded decode job.
+ */
+const MAX_PHOTO_BASE64_BYTES = 2 * 1024 * 1024;
+/** Largest thumbnail edge `?w=` will produce; the stored original tops out at 1600. */
+const MAX_THUMB_EDGE = 1600;
 
 /**
  * Best-effort extraction of a human message from a provider's error body. Both
@@ -153,9 +165,25 @@ export function mealsRoutes(
 
   // POST /api/meals — persist a (possibly edited) MealResult.
   app.post('/', async (c) => {
+    // Content-Length is checked before the body is read; the length of the text
+    // is checked again for chunked requests, both before JSON.parse runs.
+    const declared = Number.parseInt(c.req.header('content-length') ?? '', 10);
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+      return c.json({ error: 'Payload too large', detail: 'Request body is too large.' }, 413);
+    }
+    let raw: string;
+    try {
+      raw = await c.req.text();
+    } catch {
+      return c.json({ error: 'Bad request', detail: 'Invalid body' }, 400);
+    }
+    if (raw.length > MAX_BODY_BYTES) {
+      return c.json({ error: 'Payload too large', detail: 'Request body is too large.' }, 413);
+    }
+
     let body: unknown;
     try {
-      body = await c.req.json();
+      body = JSON.parse(raw);
     } catch {
       return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
     }
@@ -171,6 +199,26 @@ export function mealsRoutes(
 
     const telegramFileId = (body as { telegramFileId?: unknown })?.telegramFileId;
     const photo = (body as { photo?: { base64?: unknown; mimeType?: unknown } })?.photo;
+    const photoInput =
+      photo &&
+      typeof photo.base64 === 'string' &&
+      photo.base64.length > 0 &&
+      typeof photo.mimeType === 'string' &&
+      ALLOWED_MIME.has(photo.mimeType)
+        ? { base64: photo.base64, mimeType: photo.mimeType }
+        : null;
+
+    if (photoInput && photoInput.base64.length > MAX_PHOTO_BASE64_BYTES) {
+      return c.json(
+        { error: 'Payload too large', detail: 'Photo is too large. Choose a smaller image.' },
+        413,
+      );
+    }
+
+    // Share the Shortcut path's shrink, and do it before the meal row exists so
+    // an oversized or undecodable photo can never leave a half-created meal.
+    const shrunk = photoInput ? await shrinkImage(photoInput.base64, photoInput.mimeType) : null;
+
     const db = createMealsDb(c.env.DB);
     const userId = c.get('userId');
     const isFirstMeal = (await countMealsSince(db, userId, 0)) === 0;
@@ -180,21 +228,15 @@ export function mealsRoutes(
       ...(typeof telegramFileId === 'string' ? { telegramFileId } : {}),
     });
 
-    // Optional photo captured in the app: store the bytes so the meal renders
-    // an image. Best effort — a storage failure must not lose the meal.
-    if (
-      photo &&
-      typeof photo.base64 === 'string' &&
-      typeof photo.mimeType === 'string' &&
-      ALLOWED_MIME.has(photo.mimeType)
-    ) {
+    // Optional photo captured in the app: store the shrunk bytes so the meal
+    // renders an image. Best effort — a storage failure must not lose the meal.
+    if (shrunk) {
       const store = r2Store(c.env.PHOTOS);
       if (store) {
         try {
           const key = photoKey(id);
-          const bytes = Uint8Array.from(atob(photo.base64), (ch) => ch.charCodeAt(0));
-          await store.put(key, bytes, photo.mimeType);
-          await setMealPhoto(db, id, userId, key, photo.mimeType);
+          await store.put(key, base64ToBytes(shrunk.base64), shrunk.mimeType);
+          await setMealPhoto(db, id, userId, key, shrunk.mimeType);
         } catch (err) {
           console.error('[meals] photo store failed', err);
         }
@@ -487,14 +529,27 @@ export function mealPhotoRoutes(botClientFactory: BotClientFactory = defaultBotC
       'access-control-allow-origin': '*',
     } as const;
 
+    // `?w=` asks for a thumbnail: a JPEG with at most `w` px on the long edge.
+    // No parameter means the stored original, untouched (the detail screen).
+    // The hard ceiling keeps a caller from asking for an upscaled image.
+    const requested = Number.parseInt(c.req.query('w') ?? '', 10);
+    const maxEdge =
+      Number.isFinite(requested) && requested > 0 ? Math.min(requested, MAX_THUMB_EDGE) : null;
+    const respond = (bytes: Uint8Array | ArrayBuffer, mime: string) => {
+      const resized = maxEdge
+        ? resizeImage(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), mime, maxEdge)
+        : null;
+      return new Response(resized?.bytes ?? bytes, {
+        headers: { 'content-type': resized?.mimeType ?? mime, ...cacheHeaders },
+      });
+    };
+
     // 1) Bytes we own (Shortcut / PWA uploads).
     const store = r2Store(c.env.PHOTOS);
     if (store && detail.photoKey) {
       const stored = await store.get(detail.photoKey);
       if (stored) {
-        return new Response(stored.bytes, {
-          headers: { 'content-type': stored.mime ?? 'image/jpeg', ...cacheHeaders },
-        });
+        return respond(stored.bytes, stored.mime ?? 'image/jpeg');
       }
     }
 
@@ -507,9 +562,7 @@ export function mealPhotoRoutes(botClientFactory: BotClientFactory = defaultBotC
     if (!file) return c.text('Not found', 404);
 
     const bytes = Uint8Array.from(atob(file.base64), (ch) => ch.charCodeAt(0));
-    return new Response(bytes, {
-      headers: { 'content-type': file.mimeType, ...cacheHeaders },
-    });
+    return respond(bytes, file.mimeType);
   });
 
   return app;

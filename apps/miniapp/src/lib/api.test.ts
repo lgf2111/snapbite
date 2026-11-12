@@ -68,6 +68,19 @@ describe('ApiClient', () => {
     expect(JSON.parse(init.body as string)).toMatchObject({ instruction: 'add a coke' });
   });
 
+  it('builds a thumbnail photo URL with w= and keeps initData in the query', () => {
+    const client = new ApiClient('https://api.example.com', () => 'INIT DATA&1');
+    const thumb = new URL(client.photoUrl('meal 1', { width: 240 }));
+    expect(thumb.pathname).toBe('/api/meal-photo/meal%201');
+    expect(thumb.searchParams.get('w')).toBe('240');
+    expect(thumb.searchParams.get('initData')).toBe('INIT DATA&1');
+
+    // The detail screen asks for no width: the Worker returns the original.
+    const full = new URL(client.photoUrl('meal-2'));
+    expect(full.searchParams.has('w')).toBe(false);
+    expect(full.searchParams.get('initData')).toBe('INIT DATA&1');
+  });
+
   it('saves a profile via PUT /api/settings/profile', async () => {
     const profile = {
       sex: 'male' as const,

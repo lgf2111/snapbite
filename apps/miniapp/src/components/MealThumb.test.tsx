@@ -1,14 +1,15 @@
 import type { Backend, RecentMeal } from '@/lib/backend';
 import { clearCache } from '@/lib/cache';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HomeScreen } from './HomeScreen.js';
-import { MealThumb } from './MealThumb.js';
+import { MealThumb, THUMB_RETRY_DELAY_MS } from './MealThumb.js';
 
 afterEach(() => {
   cleanup();
   clearCache();
   localStorage.clear();
+  vi.useRealTimers();
 });
 
 const URL_A = '/api/meal-photo/m1';
@@ -36,17 +37,35 @@ describe('MealThumb', () => {
     expect(ph.getAttribute('aria-hidden')).toBe('true');
     expect(ph.className).toContain('bg-secondary');
     // The slot keeps its size, so the row does not jump.
-    for (const c of ['size-16', 'shrink-0', 'rounded-md']) {
+    for (const c of ['size-14', 'shrink-0', 'rounded-md']) {
       expect(photoClasses).toContain(c);
       expect(ph.className.split(/\s+/)).toContain(c);
     }
   });
 
-  it('does not retry: the failed url stays a placeholder across re-renders', () => {
-    const { container, rerender } = render(<MealThumb src={URL_A} />);
+  it('retries once after a short delay, then latches the placeholder', () => {
+    vi.useFakeTimers();
+    const { container } = render(<MealThumb src={URL_A} />);
+
     fireEvent.error(container.querySelector('img') as HTMLImageElement);
-    rerender(<MealThumb src={URL_A} />);
-    rerender(<MealThumb src={URL_A} />);
+    // While the retry waits, the slot shows the placeholder (no broken glyph).
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByTestId('meal-thumb-placeholder')).toBeTruthy();
+
+    act(() => vi.advanceTimersByTime(THUMB_RETRY_DELAY_MS));
+    const retry = container.querySelector('img') as HTMLImageElement;
+    expect(retry).not.toBeNull();
+    // A different URL makes the browser issue a fresh request instead of
+    // handing back the failed one from cache.
+    expect(retry.getAttribute('src')).toBe(`${URL_A}?retry=1`);
+    expect(screen.queryByTestId('meal-thumb-placeholder')).toBeNull();
+
+    fireEvent.error(retry);
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByTestId('meal-thumb-placeholder')).toBeTruthy();
+
+    // One retry only: no loop, however long the row stays on screen.
+    act(() => vi.advanceTimersByTime(THUMB_RETRY_DELAY_MS * 5));
     expect(container.querySelector('img')).toBeNull();
     expect(screen.getByTestId('meal-thumb-placeholder')).toBeTruthy();
   });
@@ -131,14 +150,49 @@ describe('a meal card on Home', () => {
     // Same slot, so rows keep one height: the photo, the manual placeholder, and a
     // failed photo's placeholder all share the same size classes.
     const slot = (el: Element) =>
-      ['size-16', 'shrink-0', 'rounded-md'].filter((c) => el.classList.contains(c));
-    expect(slot(img)).toEqual(['size-16', 'shrink-0', 'rounded-md']);
-    expect(slot(ph)).toEqual(['size-16', 'shrink-0', 'rounded-md']);
+      ['size-14', 'shrink-0', 'rounded-md'].filter((c) => el.classList.contains(c));
+    expect(slot(img)).toEqual(['size-14', 'shrink-0', 'rounded-md']);
+    expect(slot(ph)).toEqual(['size-14', 'shrink-0', 'rounded-md']);
     fireEvent.error(img);
     expect(screen.getAllByTestId('meal-thumb-placeholder')).toHaveLength(2);
     for (const p of screen.getAllByTestId('meal-thumb-placeholder')) {
-      expect(slot(p)).toEqual(['size-16', 'shrink-0', 'rounded-md']);
+      expect(slot(p)).toEqual(['size-14', 'shrink-0', 'rounded-md']);
     }
+  });
+
+  it('renders the row text before the photo has resolved', async () => {
+    const backend = {
+      mode: 'local' as const,
+      mealsByDate: vi.fn(async () => [meal('slow', { previewUrl: '/api/meal-photo/slow?w=240' })]),
+      mealsInRange: vi.fn(async () => []),
+      mealDates: vi.fn(async () => ({ dates: [], streak: null })),
+      remove: vi.fn(async () => {}),
+      photoUrl: () => null,
+    } as unknown as Backend;
+
+    const { container } = render(
+      <HomeScreen
+        backend={backend}
+        targets={null}
+        date="2026-09-16"
+        onDateChange={vi.fn()}
+        view="daily"
+        onViewChange={vi.fn()}
+        refreshSignal={0}
+        onOpenMeal={vi.fn()}
+        onOpenReports={vi.fn()}
+        onSetGoal={vi.fn()}
+      />,
+    );
+
+    // No `load` event is ever fired in jsdom: the row is fully readable while
+    // its photo is still in flight, and the 56 px slot is already reserved.
+    expect(await screen.findByText('Meal slow')).toBeTruthy();
+    const img = container.querySelector('img[src^="/api/meal-photo/slow"]') as HTMLImageElement;
+    expect(img).not.toBeNull();
+    expect(img.getAttribute('loading')).toBe('lazy');
+    expect(img.getAttribute('decoding')).toBe('async');
+    expect(screen.queryByTestId('meal-thumb-placeholder')).toBeNull();
   });
 
   it('shows the photo when it loads and the placeholder when it does not', async () => {
