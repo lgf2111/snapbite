@@ -72,13 +72,28 @@ function DialogFooter({ className, ...props }: React.ComponentProps<'div'>) {
     <div
       data-slot="dialog-footer"
       className={cn(
-        // Stays at the bottom of the scrolling panel: with the keyboard up the
-        // panel is short, and the primary action must not scroll out of reach.
-        'bg-card sticky bottom-0 z-10 -mx-5 -mb-5 flex flex-col-reverse gap-2 px-5 pb-5 sm:flex-row sm:justify-end',
+        // In flow, never sticky: a pinned footer sits on top of the sheet's
+        // content when the keyboard shortens it, and it can cover the field
+        // (or its focus ring) directly above it. `flex-col-reverse` keeps the
+        // primary action (last in the DOM) on top; text-field dialogs use
+        // DialogActions instead.
+        'bg-card flex flex-col-reverse gap-2 sm:flex-row sm:justify-end',
         className,
       )}
       {...props}
     />
+  );
+}
+
+/**
+ * The standard action stack for a dialog with a field: primary 48px on top,
+ * secondary as a text button underneath (a 44px target), 8px apart. The 16px
+ * above the block comes from the dialog's `gap-4` (or a footer's `pt-4`), so
+ * the field's focus ring always has room. Never make this block sticky.
+ */
+function DialogActions({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div data-slot="dialog-actions" className={cn('flex flex-col gap-2', className)} {...props} />
   );
 }
 
@@ -107,6 +122,7 @@ function DialogDescription({
 
 export {
   Dialog,
+  DialogActions,
   DialogClose,
   DialogContent,
   DialogDescription,

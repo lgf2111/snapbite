@@ -49,22 +49,26 @@ describe('SaveMealDialog', () => {
 
     // The field is 44px tall, and its group sits in a form with a 16px gap
     // before the action stack — not in the old sticky footer that painted over
-    // the input's ring when the keyboard shortened the sheet.
+    // the input's ring when the keyboard shortened the sheet. The ring is inset
+    // as well, so it cannot leave the field even if a neighbour is close.
     expect(input.className).toContain('h-11');
+    expect(input.className).toContain('ring-inset');
     const form = input.closest('form') as HTMLFormElement;
     expect(form.className).toContain('gap-4');
     expect(input.closest('[data-slot=dialog-footer]')).toBeNull();
 
     const actions = screen.getByRole('button', { name: 'Save' }).parentElement as HTMLElement;
+    expect(actions.dataset.slot).toBe('dialog-actions');
     expect(actions.className).toContain('flex-col');
     expect(actions.className).not.toContain('sticky');
     expect(actions.className).not.toContain('-mt');
+    expect(screen.getByRole('button', { name: 'Save' }).className).toContain('h-12');
 
     // jsdom does no layout, so this is the geometry those classes encode at
-    // 430×932: field bottom, 16px gap, Save top. The 3px focus ring ends 13px
-    // above the button instead of crossing its top edge.
+    // 430×932: field bottom, 16px gap, Save top. The inset ring stays inside
+    // the field, so the whole 16px is clear instead of the old 13px.
     const fieldBottom = 44;
-    expect(fieldBottom + 16 - (fieldBottom + 3)).toBe(13);
+    expect(fieldBottom + 16 - fieldBottom).toBe(16);
     const sheet = document.querySelector('[data-slot=dialog-content]') as HTMLElement;
     expect(sheet.className).toContain('max-w-sm');
     expect(sheet.className).toContain('w-[calc(100%-2rem)]');

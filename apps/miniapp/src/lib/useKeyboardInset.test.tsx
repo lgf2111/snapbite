@@ -168,12 +168,14 @@ describe('the sheets that use it', () => {
     expect(inset()).toBe('');
   });
 
-  it('the footer stays pinned inside the scrolling panel, so the primary action is reachable', async () => {
+  it('keeps the footer in flow, so it cannot paint over the field above it', async () => {
     const { DialogFooter } = await import('@/components/ui/dialog');
     render(<DialogFooter data-testid="f">Send</DialogFooter>);
     const cls = (document.querySelector('[data-slot=dialog-footer]') as HTMLElement).className;
-    expect(cls).toContain('sticky');
-    expect(cls).toContain('bottom-0');
+    expect(cls).not.toContain('sticky');
+    expect(cls).not.toContain('absolute');
+    expect(cls).not.toContain('fixed');
+    expect(cls).not.toMatch(/-m[tbyxl]?-/);
   });
 
   it('the setup layer publishes it too', () => {
