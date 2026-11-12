@@ -158,7 +158,7 @@
   --radius-xs: var(--radius-control);
   --radius-sm: var(--radius-control);
   --radius-md: var(--radius-control);
-  --radius-lg: var(--radius-control);
+  --radius-lg: var(--radius-surface);
   --radius-xl: var(--radius-surface);
   --radius-2xl: var(--radius-surface);
   --radius-3xl: var(--radius-surface);
