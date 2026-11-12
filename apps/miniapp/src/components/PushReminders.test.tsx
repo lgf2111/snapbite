@@ -117,4 +117,35 @@ describe('Reminders on this phone', () => {
     await waitFor(() => expect(lib.pushState.mock.calls.length).toBeGreaterThan(1));
     expect(toggle().getAttribute('aria-checked')).toBe('false');
   });
+
+  it('surfaces one line when a live phone has stopped accepting reminders', async () => {
+    lib.state = 'subscribed';
+    lib.pushState.mockImplementation(async () => lib.state);
+    const since = '2026-11-11T11:55:00.000Z';
+    render(<PushReminders push={{ live: 1, lastOkAt: since, since, failing: true }} />);
+
+    const line = await screen.findByTestId('push-delivery-warning');
+    expect(line.textContent).toBe(
+      `Reminders are on but your phone has not accepted one since ${new Date(since).toLocaleDateString()}.`,
+    );
+    // A line in the card, not a modal.
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('shows no delivery warning while the phone is accepting pushes', async () => {
+    lib.state = 'subscribed';
+    lib.pushState.mockImplementation(async () => lib.state);
+    render(
+      <PushReminders
+        push={{
+          live: 1,
+          lastOkAt: '2026-11-12T08:00:00.000Z',
+          since: '2026-11-12T08:00:00.000Z',
+          failing: false,
+        }}
+      />,
+    );
+    await screen.findByTestId('push-state');
+    expect(screen.queryByTestId('push-delivery-warning')).toBeNull();
+  });
 });

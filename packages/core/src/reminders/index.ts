@@ -4,7 +4,9 @@
 // tests. Keep this list to what apps actually consume.
 export {
   type DueCheckConfig,
+  type ReminderAttempt,
   DEFAULT_REMINDER_TIMES,
+  MAX_REMINDER_ATTEMPTS,
   REMINDER_STEP_MINUTES,
   dueReminderSlots,
   reminderMessage,

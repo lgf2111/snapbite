@@ -12,6 +12,7 @@ import {
   snapToReminderStep,
 } from '@snapbite/core';
 import { Hono } from 'hono';
+import { createPushDb, listSubscriptions } from '../db/push.js';
 import {
   type AdaptiveConfig,
   type Preferences,
@@ -51,6 +52,25 @@ function cleanBaseUrl(v: unknown): string | null {
   if (typeof v !== 'string') return null;
   const s = v.trim().replace(/\/+$/, '');
   return /^https:\/\/.+/i.test(s) ? s : null;
+}
+
+/**
+ * Push health for the reminders card: how many devices are subscribed, when one
+ * last accepted a push, and when the oldest subscription started (the date to
+ * show when none has ever accepted one).
+ */
+async function pushHealth(
+  db: D1Database,
+  userId: string,
+): Promise<{ live: number; lastOkAt: string | null; subscribedSince: string | null }> {
+  const subs = await listSubscriptions(createPushDb(db), userId);
+  let lastOkAt: string | null = null;
+  let subscribedSince: string | null = null;
+  for (const s of subs) {
+    if (s.lastOkAt && (lastOkAt == null || s.lastOkAt > lastOkAt)) lastOkAt = s.lastOkAt;
+    if (subscribedSince == null || s.createdAt < subscribedSince) subscribedSince = s.createdAt;
+  }
+  return { live: subs.length, lastOkAt, subscribedSince };
 }
 
 /**
@@ -127,6 +147,16 @@ export function settingsRoutes() {
     }
 
     const fallbackHasKey = Boolean(fb?.keyCiphertext && fb?.keyIv);
+    const reminders = prefs.reminders ?? null;
+    const push = await pushHealth(c.env.DB, c.get('userId'));
+    // A delivered reminder after the failure clears this: last_ok_at moves past
+    // it. Only a live subscription that keeps refusing is worth surfacing.
+    const pushFailing = Boolean(
+      reminders?.enabled &&
+        push.live > 0 &&
+        reminders.lastFailureAt != null &&
+        (push.lastOkAt == null || reminders.lastFailureAt > Date.parse(push.lastOkAt)),
+    );
     return c.json({
       aiProvider: row?.aiProvider ?? DEFAULT_PROVIDER_ID,
       aiModel: row?.aiModel ?? null,
@@ -146,7 +176,14 @@ export function settingsRoutes() {
       fallbackBaseUrl: fb?.baseUrl ?? null,
       fallbackSupportsDetail: fb?.supportsDetail ?? false,
       // Opt-in meal reminders (see §15).
-      reminders: prefs.reminders ?? null,
+      reminders,
+      // Whether this account's phone has actually been accepting reminders.
+      push: {
+        live: push.live,
+        lastOkAt: push.lastOkAt,
+        since: push.lastOkAt ?? push.subscribedSince,
+        failing: pushFailing,
+      },
       // Opt-in adaptive calorie targets + the latest weight check-in.
       adaptive: prefs.adaptive ?? null,
       // Opt-in weekly recap digest.
@@ -192,6 +229,10 @@ export function settingsRoutes() {
       times: Object.keys(times).length > 0 ? times : (existing?.times ?? DEFAULT_REMINDER_TIMES),
       tzOffsetMinutes,
       ...(existing?.lastSent ? { lastSent: existing.lastSent } : {}),
+      // Keep the retry state and the last give-up marker: saving a time must
+      // not reset a slot's attempts or hide a delivery warning.
+      ...(existing?.attempts ? { attempts: existing.attempts } : {}),
+      ...(existing?.lastFailureAt != null ? { lastFailureAt: existing.lastFailureAt } : {}),
     };
     await mergePreferences(db, c.get('userId'), { reminders });
     return c.json({ ok: true, reminders });

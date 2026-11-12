@@ -1,4 +1,4 @@
-import type { OnboardingState } from '@snapbite/core';
+import type { OnboardingState, ReminderAttempt } from '@snapbite/core';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { type SettingsRow, settings, users } from './schema.js';
@@ -60,6 +60,13 @@ export interface ReminderConfig {
   tzOffsetMinutes: number;
   /** slot label -> local YYYY-MM-DD last delivered (dedup guard). */
   lastSent?: Record<string, string>;
+  /**
+   * slot label -> failed attempts for the current local day. A slot is retried
+   * on later cron ticks until MAX_REMINDER_ATTEMPTS, then given up for the day.
+   */
+  attempts?: Record<string, ReminderAttempt>;
+  /** Epoch ms of the last reminder that exhausted its retries without delivery. */
+  lastFailureAt?: number;
 }
 
 /** The parsed shape of the `preferences_json` column. */

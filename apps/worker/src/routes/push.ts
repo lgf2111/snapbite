@@ -118,7 +118,13 @@ export function pushRoutes() {
       },
       c.env,
     );
-    return c.json({ ok: summary.delivered > 0, ...summary });
+    return c.json({
+      ok: summary.delivered > 0,
+      delivered: summary.delivered,
+      failed: summary.failed,
+      removed: summary.removed,
+      live: summary.live,
+    });
   });
 
   return app;

@@ -295,6 +295,23 @@ describe('sendPush', () => {
     expect(isGone(res)).toBe(false);
   });
 
+  it('keeps a short prefix of the refusal body so the cron can log it', async () => {
+    const { env, sub } = await setup();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('VapidPkHashMismatch: the VAPID key does not match', { status: 403 }),
+    );
+    const res = await sendPush(sub, 'x', env);
+    expect(res).toEqual({
+      ok: false,
+      status: 403,
+      bodyPrefix: 'VapidPkHashMismatch: the VAPID key does not match',
+    });
+
+    // Long bodies are truncated; the log must stay small.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('x'.repeat(500), { status: 400 }));
+    expect((await sendPush(sub, 'x', env)).bodyPrefix).toHaveLength(200);
+  });
+
   it('never throws: network error, bad keys, missing VAPID keys', async () => {
     const { env, sub } = await setup();
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('offline'));

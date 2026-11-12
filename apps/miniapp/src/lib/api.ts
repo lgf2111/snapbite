@@ -125,6 +125,8 @@ export interface SettingsView {
   fallbackSupportsDetail?: boolean;
   /** Opt-in meal reminders (null when never configured). */
   reminders?: ReminderView | null;
+  /** Push subscription health for the reminders card. */
+  push?: PushStatusView | null;
   /** Opt-in adaptive calorie targets (null when never configured). */
   adaptive?: AdaptiveView | null;
   /** The user's most recent weight check-in (kg), or null. */
@@ -136,6 +138,20 @@ export interface ReminderView {
   enabled: boolean;
   times: Record<string, string>;
   tzOffsetMinutes: number;
+  /** Epoch ms of the last reminder that gave up without being delivered. */
+  lastFailureAt?: number;
+}
+
+/** Push subscription health as returned by GET /api/settings. */
+export interface PushStatusView {
+  /** Live subscriptions (devices) on file. */
+  live: number;
+  /** ISO time a device last accepted a push, or null. */
+  lastOkAt: string | null;
+  /** Date to show in "not accepted since": last success, else first subscription. */
+  since: string | null;
+  /** A reminder exhausted its retries after the last successful push. */
+  failing: boolean;
 }
 
 /** Opt-in adaptive-targets config, as returned/sent by the API. */

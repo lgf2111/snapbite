@@ -2,6 +2,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import type { PushStatusView } from '../lib/api.js';
 import { type PushState, disablePush, enablePush, pushState, sendTestPush } from '../lib/push.js';
 import { Button } from './ui/button.js';
 
@@ -21,7 +22,7 @@ const STATE_COPY: Record<PushState, string> = {
  * with an honest line for whatever state it is in. Lives inside the Meal
  * reminders card; the times and slots there are what it delivers.
  */
-export function PushReminders() {
+export function PushReminders({ push }: { push?: PushStatusView | null }) {
   const [state, setState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -64,6 +65,8 @@ export function PushReminders() {
   }
 
   const canToggle = state === 'default' || state === 'granted' || state === 'subscribed';
+  const since = push?.failing && push.since ? new Date(push.since) : null;
+  const sinceLabel = since && Number.isFinite(since.getTime()) ? since.toLocaleDateString() : null;
 
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border p-3">
@@ -87,6 +90,12 @@ export function PushReminders() {
       {state && (
         <p className="text-caption" data-testid="push-state">
           {STATE_COPY[state]}
+        </p>
+      )}
+
+      {sinceLabel && (
+        <p className="text-destructive text-caption" data-testid="push-delivery-warning">
+          Reminders are on but your phone has not accepted one since {sinceLabel}.
         </p>
       )}
 

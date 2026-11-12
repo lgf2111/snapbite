@@ -194,6 +194,8 @@ export interface PushResult {
   ok: boolean;
   /** HTTP status from the push service; 0 when we never got that far. */
   status: number;
+  /** First 200 characters of the response when the service refused, for logs. */
+  bodyPrefix?: string;
 }
 
 /** The push service says this subscription no longer exists. */
@@ -246,9 +248,12 @@ export async function sendPush(
       },
       body,
     });
-    // Drain so the connection is released; the body is not needed.
-    await res.arrayBuffer().catch(() => undefined);
-    return { ok: res.status >= 200 && res.status < 300, status: res.status };
+    const ok = res.status >= 200 && res.status < 300;
+    // Drain so the connection is released. A refusal body can name the reason
+    // (a bad VAPID token, a payload too large), so keep a short prefix for the
+    // reminder error log — never the whole response.
+    const bodyPrefix = (await res.text().catch(() => '')).slice(0, 200);
+    return bodyPrefix ? { ok, status: res.status, bodyPrefix } : { ok, status: res.status };
   } catch {
     return { ok: false, status: 0 };
   }

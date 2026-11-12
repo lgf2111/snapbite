@@ -548,7 +548,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             Once per slot, in your device&rsquo;s timezone. Times snap to the nearest{' '}
             {REMINDER_STEP_MINUTES} minutes.
           </p>
-          {!isLocal && <PushReminders />}
+          {!isLocal && <PushReminders push={settings?.push} />}
           <div className="flex flex-col gap-2 pt-1">
             {(['breakfast', 'lunch', 'dinner'] as const).map((label) => (
               <div key={label} className="flex items-center justify-between gap-3">
