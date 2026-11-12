@@ -149,15 +149,20 @@ describe('the sheets that use it', () => {
         </DialogContent>
       </Dialog>,
     );
+    const panel = document.querySelector('[data-slot=dialog-content]') as HTMLElement;
+    expect(panel.className).toContain('top-1/2');
+
     vv.set(500);
     flush();
     expect(inset()).toBe('300px');
 
-    // The panel is sized from the variable, not translated.
-    const panel = document.querySelector('[data-slot=dialog-content]') as HTMLElement;
+    // The panel is sized from the variable and, with the keyboard up, sits
+    // directly above it instead of centring in what is left.
     expect(panel.className).toContain('max-h-[calc(100svh-var(--keyboard-inset,0px)-2rem)]');
-    expect(panel.className).toContain('top-[calc((100svh-var(--keyboard-inset,0px))/2)]');
+    expect(panel.className).toContain('bottom-[calc(var(--keyboard-inset,0px)+1rem)]');
+    expect(panel.className).toContain('top-auto');
     expect(panel.className).toContain('overflow-y-auto');
+    expect(panel.className).not.toContain('top-1/2');
 
     view.unmount();
     expect(inset()).toBe('');

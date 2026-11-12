@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 const VAR = '--keyboard-inset';
 
@@ -19,19 +19,27 @@ export function keyboardInset(vv: Pick<VisualViewport, 'height' | 'offsetTop'>):
  */
 let users = 0;
 let stop: (() => void) | null = null;
+let current = 0;
+let last = '';
+const listeners = new Set<(inset: number) => void>();
 
 function start(): () => void {
   const vv = window.visualViewport;
   if (!vv) return () => {};
 
   let frame = 0;
-  let last = '';
   const write = () => {
     frame = 0;
-    const next = `${keyboardInset(vv)}px`;
-    if (next === last) return;
-    last = next;
-    document.documentElement.style.setProperty(VAR, next);
+    const next = keyboardInset(vv);
+    const css = `${next}px`;
+    if (css !== last) {
+      last = css;
+      document.documentElement.style.setProperty(VAR, css);
+    }
+    if (next !== current) {
+      current = next;
+      for (const notify of listeners) notify(next);
+    }
   };
   // visualViewport fires resize and scroll in bursts; one write per frame is enough.
   const schedule = () => {
@@ -53,19 +61,31 @@ function start(): () => void {
 
 /**
  * Publishes the keyboard's height as `--keyboard-inset` on <html> while the
- * calling component is mounted. Sheets size themselves from it in CSS:
+ * calling component is mounted, and returns it in pixels. Sheets size themselves
+ * from the variable and lift above the keyboard from the returned value:
  * `max-height: calc(100svh - var(--keyboard-inset, 0px) - 2rem)`.
  */
-export function useKeyboardInset(): void {
+export function useKeyboardInset(): number {
+  // Start from the shared value so a second sheet does not flash mid-screen.
+  const [inset, setInset] = useState(current);
+
   useEffect(() => {
+    listeners.add(setInset);
+    // A second sheet opening while the keyboard is already up must know at once.
+    setInset(current);
     if (users === 0) stop = start();
     users += 1;
     return () => {
+      listeners.delete(setInset);
       users -= 1;
       if (users === 0) {
         stop?.();
         stop = null;
+        current = 0;
+        last = '';
       }
     };
   }, []);
+
+  return inset;
 }
