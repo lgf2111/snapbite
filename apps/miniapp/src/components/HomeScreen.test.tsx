@@ -1,7 +1,7 @@
 import type { Backend, RecentMeal } from '@/lib/backend';
-import { clearCache } from '@/lib/cache';
+import { cacheKey, clearCache, setCached } from '@/lib/cache';
 import type { DailyTargets, MealResult } from '@snapbite/core';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +17,7 @@ afterEach(() => {
   clearCache();
   localStorage.clear();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 function meal(over: Partial<RecentMeal> = {}): RecentMeal {
@@ -472,6 +473,94 @@ describe('HomeScreen', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
     expect(await screen.findByText('Milk candy')).toBeInTheDocument();
     expect(backend.remove).not.toHaveBeenCalled();
+  });
+
+  it('shows the empty-state card, not skeletons, for a cached empty day', () => {
+    setCached(cacheKey.mealsByDate('2026-09-16'), []);
+    const backend = stubBackend();
+    render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    expect(screen.getByText('Nothing logged yet')).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0);
+  });
+
+  it('deletes a cached row in place: one row left, no skeletons, totals in the same commit', async () => {
+    vi.useFakeTimers();
+    const two = [
+      meal({ id: 'a', label: 'Chicken rice', energyKcal: 600 }),
+      meal({ id: 'b', label: 'Laksa', energyKcal: 390 }),
+    ];
+    setCached(cacheKey.mealsByDate('2026-09-16'), two);
+    const backend = stubBackend({ mealsByDate: vi.fn(async () => two) });
+    render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    // A cached day paints both rows immediately, with no skeleton placeholders.
+    expect(screen.getByText('Chicken rice')).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0);
+    // 2000 - 990 = 1010 kcal left.
+    const numeral = () => document.querySelector('[data-slot="ring-numeral"]')?.textContent;
+    expect(numeral()).toBe('1010');
+
+    const card = screen.getAllByTestId('swipe-card')[0] as HTMLElement;
+    fireEvent.mouseDown(card, { clientX: 400, clientY: 300 });
+    fireEvent.mouseMove(document, { clientX: 300, clientY: 300 });
+    fireEvent.mouseUp(document, { clientX: 300, clientY: 300 });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    // The row leaves after its collapse; nothing placeholder takes its place.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(screen.queryByText('Chicken rice')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('swipe-card')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0);
+    // Totals move in that same render: 2000 - 390 = 1610.
+    expect(numeral()).toBe('1610');
+
+    // The server call at the end of Undo must not refetch the day or reload it.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6100);
+    });
+    expect(backend.remove).toHaveBeenCalledWith('a');
+    expect(backend.mealsByDate).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId('swipe-card')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0);
+    expect(numeral()).toBe('1610');
+  });
+
+  it('restores the row and reports the failure when the delete call fails', async () => {
+    vi.useFakeTimers();
+    const only = [meal({ id: 'a', label: 'Chicken rice' })];
+    setCached(cacheKey.mealsByDate('2026-09-16'), only);
+    const onToast = vi.fn();
+    const backend = stubBackend({
+      mealsByDate: vi.fn(async () => only),
+      remove: vi.fn(async () => {
+        throw new Error('Server is down');
+      }),
+    });
+    render(<HomeScreen {...props(backend, { targets: TARGETS, onToast })} />);
+    expect(screen.getByText('Chicken rice')).toBeInTheDocument();
+
+    const card = screen.getByTestId('swipe-card');
+    fireEvent.mouseDown(card, { clientX: 400, clientY: 300 });
+    fireEvent.mouseMove(document, { clientX: 300, clientY: 300 });
+    fireEvent.mouseUp(document, { clientX: 300, clientY: 300 });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(screen.queryByText('Chicken rice')).not.toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6100);
+    });
+    expect(backend.remove).toHaveBeenCalledWith('a');
+    expect(onToast).toHaveBeenCalledWith('error', 'Server is down');
+    // The row comes back in its original place; totals follow it.
+    expect(screen.getByText('Chicken rice')).toBeInTheDocument();
+    expect(document.querySelector('[data-slot="ring-numeral"]')?.textContent).toBe('1500');
   });
 
   it('edits a meal with AI inline from Home (no navigation)', async () => {

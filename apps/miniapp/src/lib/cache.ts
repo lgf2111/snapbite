@@ -101,6 +101,34 @@ export function invalidate(prefix: string): void {
   }
 }
 
+/**
+ * Drops one item by id from every cached list under `prefix` (e.g. a deleted
+ * meal from the day and range lists) without discarding the other cached
+ * reads. A remount then renders the list already short, with no skeleton.
+ */
+export function removeCachedItem(prefix: string, id: string): void {
+  const keys = new Set<string>();
+  for (const k of MEM.keys()) {
+    if (k.startsWith(prefix)) keys.add(k);
+  }
+  try {
+    const full = storageKey(prefix);
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(full)) keys.add(k.slice(STORE_PREFIX.length));
+    }
+  } catch {
+    // storage unavailable — memory cache still works
+  }
+  for (const key of keys) {
+    const entry = read(key);
+    if (!entry || !Array.isArray(entry.value)) continue;
+    const value = entry.value as Array<{ id?: unknown }>;
+    const next = value.filter((item) => item?.id !== id);
+    if (next.length !== value.length) write(key, next);
+  }
+}
+
 /** Clears the entire client cache (e.g. on account deletion). */
 export function clearCache(): void {
   MEM.clear();
