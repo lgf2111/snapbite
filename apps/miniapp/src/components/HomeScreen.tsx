@@ -555,7 +555,7 @@ export function HomeScreen({
         <div className="flex flex-col gap-2">
           {meals.map((m) => (
             <SwipeableRow key={m.id} animateIn={newIds.has(m.id)} onDelete={() => handleDelete(m)}>
-              <Card className="overflow-hidden">
+              <Card className="overflow-hidden rounded-none border-0 shadow-none">
                 <CardContent className="flex items-center gap-3 p-3">
                   <MealThumb src={m.previewUrl} />
                   <button
