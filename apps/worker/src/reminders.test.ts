@@ -3,10 +3,13 @@ import { signInitData } from '@snapbite/core';
 import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from './app.js';
+import { recentErrors } from './db/errors.js';
 import { createPushDb, upsertSubscription } from './db/push.js';
 import { pushSubscriptions } from './db/schema.js';
+import { createSettingsDb, getSettings, parsePreferences } from './db/settings.js';
 import { createDb, upsertUser } from './db/users.js';
 import { INIT_DATA_HEADER } from './middleware/auth.js';
+import { encryptPayload } from './push/send.js';
 import { TEST_PUSH, pushReminder, runReminders } from './reminders.js';
 import { browserSubscription, vapidEnv } from './test/pushFixtures.js';
 
@@ -160,7 +163,7 @@ describe('runReminders: web push first, Telegram as the fallback', () => {
   }
 
   /** Records every outgoing request; answers pushes with `pushStatus`. */
-  function network(pushStatus: number | (() => number)) {
+  function network(pushStatus: number | (() => number), pushBody = '') {
     const pushes: string[] = [];
     const dms: Array<{ chatId: number; text: string }> = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -177,7 +180,7 @@ describe('runReminders: web push first, Telegram as the fallback', () => {
       }
       if (url.includes('push.apple.com') || url.includes('googleapis.com')) {
         pushes.push(url);
-        return new Response(null, {
+        return new Response(pushBody || null, {
           status: typeof pushStatus === 'function' ? pushStatus() : pushStatus,
         });
       }
@@ -191,6 +194,10 @@ describe('runReminders: web push first, Telegram as the fallback', () => {
       .select()
       .from(pushSubscriptions)
       .where(eq(pushSubscriptions.endpoint, endpoint));
+
+  const reminderPrefs = async (userId: string) =>
+    parsePreferences((await getSettings(createSettingsDb(env.DB), userId))?.preferencesJson)
+      .reminders ?? null;
 
   afterEach(() => vi.restoreAllMocks());
 
@@ -206,6 +213,10 @@ describe('runReminders: web push first, Telegram as the fallback', () => {
     expect(pushes).toContain(sub.endpoint);
     expect(dms.find((d) => d.chatId === 6101)).toBeUndefined();
     expect((await remaining(sub.endpoint))[0]?.lastOkAt).toBeTruthy();
+    const prefs = await reminderPrefs(userId);
+    expect(prefs?.lastSent?.breakfast).toBe('2026-06-01');
+    expect(prefs?.attempts?.breakfast).toBeUndefined();
+    expect(prefs?.lastFailureAt).toBeUndefined();
   });
 
   it('pushes to every device the user has', async () => {
@@ -343,5 +354,103 @@ describe('runReminders: web push first, Telegram as the fallback', () => {
     const first = pushes.length;
     await runReminders({ ...env, ...vapid }, SLOT + 40 * DAY);
     expect(pushes.length).toBe(first);
+  });
+
+  it('a failed push leaves lastSent unchanged and retries on the next tick', async () => {
+    const vapid = await vapidEnv();
+    const userId = await userWithReminder(6201);
+    const sub = await subscribe(userId);
+    const { pushes, dms } = network(503, 'VapidPkHashMismatch');
+    const mine = () => pushes.filter((url) => url === sub.endpoint);
+
+    await runReminders({ ...env, ...vapid }, SLOT);
+    expect(mine()).toHaveLength(1);
+    let prefs = await reminderPrefs(userId);
+    // The slot is NOT burned: no lastSent stamp, one recorded failure.
+    expect(prefs?.lastSent?.breakfast).toBeUndefined();
+    expect(prefs?.attempts?.breakfast).toEqual({ date: '2026-06-01', tries: 1 });
+    // Push failed while the subscription is still live, so Telegram stayed quiet.
+    expect(dms.find((d) => d.chatId === 6201)).toBeUndefined();
+    expect((await remaining(sub.endpoint))[0]?.failCount).toBe(1);
+
+    // 08:20 is past the 15-minute window, but the failed slot is retried.
+    await runReminders({ ...env, ...vapid }, SLOT + 15 * 60_000);
+    expect(mine()).toHaveLength(2);
+    prefs = await reminderPrefs(userId);
+    expect(prefs?.lastSent?.breakfast).toBeUndefined();
+    expect(prefs?.attempts?.breakfast).toEqual({ date: '2026-06-01', tries: 2 });
+  });
+
+  it('stops after three failed ticks, logs the provider status, and tells Settings', async () => {
+    const vapid = await vapidEnv();
+    const tgId = 6202;
+    const userId = await userWithReminder(tgId);
+    const sub = await subscribe(userId);
+    const { pushes } = network(503, 'VapidPkHashMismatch: key does not match');
+    const mine = () => pushes.filter((url) => url === sub.endpoint);
+
+    await runReminders({ ...env, ...vapid }, SLOT);
+    await runReminders({ ...env, ...vapid }, SLOT + 15 * 60_000);
+    await runReminders({ ...env, ...vapid }, SLOT + 30 * 60_000);
+    expect(mine()).toHaveLength(3);
+
+    const prefs = await reminderPrefs(userId);
+    expect(prefs?.lastSent?.breakfast).toBeUndefined();
+    expect(prefs?.attempts?.breakfast).toEqual({ date: '2026-06-01', tries: 3 });
+    expect(prefs?.lastFailureAt).toBe(SLOT + 30 * 60_000);
+
+    const errors = await recentErrors(env.DB, 20);
+    const row = errors.find(
+      (e) =>
+        e.source === 'reminders' && e.telegramUserId === tgId && e.message.includes('breakfast'),
+    );
+    expect(row).toBeTruthy();
+    expect(row?.status).toBe(503);
+    expect(row?.detail).toContain('VapidPkHashMismatch');
+    expect(row?.detail).toContain('"telegramFallback":true');
+
+    // The fourth tick is silent: the day's slot has been given up.
+    await runReminders({ ...env, ...vapid }, SLOT + 45 * 60_000);
+    expect(mine()).toHaveLength(3);
+
+    // Settings can now say the live phone has stopped accepting pushes.
+    const settings = (await (
+      await createApp().request('/api/settings', { headers: await headers(tgId) }, env)
+    ).json()) as {
+      push?: { live: number; failing: boolean; since: string | null };
+    };
+    expect(settings.push?.live).toBe(1);
+    expect(settings.push?.failing).toBe(true);
+    expect(settings.push?.since).toBeTruthy();
+    expect((await remaining(sub.endpoint))[0]?.lastOkAt).toBeNull();
+
+    // The next day's reminder lands: last_ok_at moves past the failure and the
+    // warning goes away, so the line means what it says.
+    vi.restoreAllMocks();
+    network(201);
+    await runReminders({ ...env, ...vapid }, SLOT + DAY);
+    const after = (await (
+      await createApp().request('/api/settings', { headers: await headers(tgId) }, env)
+    ).json()) as { push?: { failing: boolean } };
+    expect((await remaining(sub.endpoint))[0]?.lastOkAt).toBeTruthy();
+    expect(after.push?.failing).toBe(false);
+  });
+});
+
+describe('push payload size', () => {
+  it('keeps the serialised reminder under 4 KB, even after encryption', async () => {
+    const sub = await browserSubscription();
+    for (const label of ['breakfast', 'lunch', 'dinner', 'tea break']) {
+      const body = JSON.stringify({
+        ...pushReminder(label),
+        url: '/',
+        tag: `reminder-${label}`,
+      });
+      const bytes = new TextEncoder().encode(body);
+      expect(bytes.byteLength).toBeLessThan(4096);
+      // Apple caps the encrypted request body, not just the JSON.
+      const encrypted = await encryptPayload(bytes, sub.keys.p256dh, sub.keys.auth);
+      expect(encrypted.byteLength).toBeLessThanOrEqual(4096);
+    }
   });
 });

@@ -81,22 +81,42 @@ export function localParts(
   };
 }
 
+/** A failed delivery attempt for one slot on one local day. */
+export interface ReminderAttempt {
+  /** Local YYYY-MM-DD the attempts belong to. */
+  date: string;
+  /** Failed attempts made so far on that day. */
+  tries: number;
+}
+
+/**
+ * How many cron ticks a slot may fail before the day's slot is given up. The
+ * cron runs every 15 minutes, so this is a ~45-minute retry window, not an
+ * afternoon of retries against a dead endpoint.
+ */
+export const MAX_REMINDER_ATTEMPTS = 3;
+
 /** Reminder config shape the due-check needs (mirrors the Worker's ReminderConfig). */
 export interface DueCheckConfig {
   enabled: boolean;
   times: Record<string, string>;
   tzOffsetMinutes: number;
   lastSent?: Record<string, string>;
+  /** Failures per slot for the current local day (retry state). */
+  attempts?: Record<string, ReminderAttempt>;
 }
 
 /**
  * Given the config, the current UTC time, and how wide the cron tick is, returns
- * the slot labels that are DUE now and haven't been sent yet today (local).
+ * the slot labels that are DUE now. A slot is due when:
  *
- * A slot is due when the user's current local minute-of-day is within
- * `[slotMinute, slotMinute + windowMinutes)` and `lastSent[label]` isn't today's
- * local date. `windowMinutes` should be >= the cron interval so a slot isn't
- * missed between ticks (e.g. 15 for an every-15-min cron).
+ *  - it has not been delivered today (`lastSent`), and
+ *  - it has failed fewer than {@link MAX_REMINDER_ATTEMPTS} times today, and
+ *  - either the current local minute is inside its window, or it already failed
+ *    today and is being retried on a later tick.
+ *
+ * The last rule is what lets a transient push failure recover: the slot stays
+ * eligible after its nominal window until it succeeds or exhausts the attempts.
  */
 export function dueReminderSlots(
   config: DueCheckConfig,
@@ -111,9 +131,15 @@ export function dueReminderSlots(
     if (slotMin == null) continue;
     const already = config.lastSent?.[label] === dateKey;
     if (already) continue;
-    if (minutesOfDay >= slotMin && minutesOfDay < slotMin + windowMinutes) {
-      due.push(label);
-    }
+    const attempt = config.attempts?.[label];
+    const tries = attempt?.date === dateKey ? attempt.tries : 0;
+    if (tries >= MAX_REMINDER_ATTEMPTS) continue;
+    const inWindow = minutesOfDay >= slotMin && minutesOfDay < slotMin + windowMinutes;
+    // A slot that already failed today gets retried on later ticks instead of
+    // waiting for a window that has already closed.
+    const retrying = tries > 0 && minutesOfDay >= slotMin;
+    if (!inWindow && !retrying) continue;
+    due.push(label);
   }
   return due;
 }

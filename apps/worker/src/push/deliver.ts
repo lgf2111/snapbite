@@ -8,6 +8,12 @@ import {
 import type { Env } from '../env.js';
 import { isGone, sendPush } from './send.js';
 
+export interface PushFailure {
+  status: number;
+  /** First 200 characters the push service returned, when it returned a body. */
+  bodyPrefix: string | null;
+}
+
 export interface DeliverySummary {
   /** Subscriptions the push service accepted. */
   delivered: number;
@@ -17,6 +23,8 @@ export interface DeliverySummary {
   removed: number;
   /** Subscriptions still on file for the user afterwards. */
   live: number;
+  /** Every refusal this send, for the caller's error log. */
+  failures: PushFailure[];
 }
 
 /**
@@ -32,7 +40,13 @@ export async function pushToUser(
   env: Env,
 ): Promise<DeliverySummary> {
   const subs = await listSubscriptions(db, userId);
-  const summary: DeliverySummary = { delivered: 0, failed: 0, removed: 0, live: subs.length };
+  const summary: DeliverySummary = {
+    delivered: 0,
+    failed: 0,
+    removed: 0,
+    live: subs.length,
+    failures: [],
+  };
 
   for (const sub of subs) {
     const result = await sendPush(sub, payload, env);
@@ -43,8 +57,10 @@ export async function pushToUser(
       await deleteSubscription(db, sub.id);
       summary.removed += 1;
       summary.live -= 1;
+      summary.failures.push({ status: result.status, bodyPrefix: result.bodyPrefix ?? null });
     } else {
       summary.failed += 1;
+      summary.failures.push({ status: result.status, bodyPrefix: result.bodyPrefix ?? null });
       if (await recordPushFailure(db, sub.id)) {
         summary.removed += 1;
         summary.live -= 1;

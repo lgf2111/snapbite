@@ -1,4 +1,9 @@
-import { dueReminderSlots, reminderMessage } from '@snapbite/core';
+import {
+  MAX_REMINDER_ATTEMPTS,
+  type ReminderAttempt,
+  dueReminderSlots,
+  reminderMessage,
+} from '@snapbite/core';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { logError } from './db/errors.js';
@@ -6,7 +11,7 @@ import { createPushDb } from './db/push.js';
 import { settings, users } from './db/schema.js';
 import { type ReminderConfig, parsePreferences } from './db/settings.js';
 import type { Env } from './env.js';
-import { pushToUser } from './push/deliver.js';
+import { type PushFailure, pushToUser } from './push/deliver.js';
 import { TelegramBotClient } from './telegram/botClient.js';
 
 /**
@@ -52,17 +57,26 @@ async function loadEnabledReminders(db: D1Database): Promise<UserReminder[]> {
   return out;
 }
 
-/** Persists an updated `lastSent` map back into preferences_json (merge). */
-async function markSent(
+/** Persists reminder delivery bookkeeping back into preferences_json (merge). */
+async function saveReminderState(
   db: D1Database,
   userId: string,
   preferencesJson: string | null,
-  lastSent: Record<string, string>,
+  state: {
+    lastSent: Record<string, string>;
+    attempts: Record<string, ReminderAttempt>;
+    lastFailureAt?: number;
+  },
 ): Promise<void> {
   const prefs = parsePreferences(preferencesJson);
   const next = {
     ...prefs,
-    reminders: { ...(prefs.reminders as ReminderConfig), lastSent },
+    reminders: {
+      ...(prefs.reminders as ReminderConfig),
+      lastSent: state.lastSent,
+      attempts: state.attempts,
+      ...(state.lastFailureAt != null ? { lastFailureAt: state.lastFailureAt } : {}),
+    },
     updatedAt: Date.now(),
   };
   const orm = drizzle(db, { schema: { settings, users } });
@@ -121,41 +135,103 @@ export async function runReminders(env: Env, nowMs: number = Date.now()): Promis
       if (due.length === 0) continue;
 
       const lastSent = { ...(u.reminders.lastSent ?? {}) };
-      // Compute the user's local date once for the dedup stamp.
+      // Compute the user's local date once for the dedup stamp and retry state.
       const localMs = nowMs - u.reminders.tzOffsetMinutes * 60_000;
       const d = new Date(localMs);
       const dateKey = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+      // Keep only today's failures; yesterday's counters reset by date anyway.
+      const attempts: Record<string, ReminderAttempt> = {};
+      for (const [label, attempt] of Object.entries(u.reminders.attempts ?? {})) {
+        if (attempt.date === dateKey) attempts[label] = attempt;
+      }
+      let lastFailureAt = u.reminders.lastFailureAt;
+      let changed = false;
 
-      let didSomething = false;
       for (const label of due) {
+        const tries = attempts[label]?.tries ?? 0;
+        if (tries >= MAX_REMINDER_ATTEMPTS) continue;
+
         let delivered = false;
         let live = 0;
-        if (pushConfigured) {
-          const result = await pushToUser(
-            pushDb,
-            u.userId,
-            {
-              ...pushReminder(label),
-              url: '/',
-              tag: `reminder-${label}`,
-            },
-            env,
-          );
-          delivered = result.delivered > 0;
-          live = result.live;
+        let failures: PushFailure[] = [];
+        let telegramAttempted = false;
+        let failureDetail: string | null = null;
+
+        try {
+          if (pushConfigured) {
+            const result = await pushToUser(
+              pushDb,
+              u.userId,
+              {
+                ...pushReminder(label),
+                url: '/',
+                tag: `reminder-${label}`,
+              },
+              env,
+            );
+            delivered = result.delivered > 0;
+            live = result.live;
+            failures = result.failures;
+          }
+          // Telegram only when there is no live subscription to push to.
+          if (live === 0 && bot && u.telegramUserId != null) {
+            telegramAttempted = true;
+            const dm = await bot.sendMessage(u.telegramUserId, {
+              text: reminderMessage(label),
+            });
+            delivered = dm.messageId != null;
+          }
+        } catch (err) {
+          failureDetail = err instanceof Error ? err.message : String(err);
         }
-        // Telegram only when there is no live subscription to push to.
-        if (live === 0 && bot && u.telegramUserId != null) {
-          await bot.sendMessage(u.telegramUserId, { text: reminderMessage(label) });
-          delivered = true;
+
+        if (delivered) {
+          // Stamp only what was actually delivered: a transient push failure
+          // must leave the slot eligible for the next cron tick.
+          lastSent[label] = dateKey;
+          delete attempts[label];
+          sent += 1;
+          changed = true;
+          continue;
         }
-        if (delivered) sent += 1;
-        // Stamp it either way: the window is one cron tick wide, so retrying
-        // would only double up on devices that did get it.
-        lastSent[label] = dateKey;
-        didSomething = true;
+
+        const nextTries = tries + 1;
+        attempts[label] = { date: dateKey, tries: nextTries };
+        changed = true;
+
+        if (nextTries >= MAX_REMINDER_ATTEMPTS) {
+          // Give up for the day, but leave a trace: status + a short response
+          // prefix, and whether a Telegram fallback even existed.
+          lastFailureAt = nowMs;
+          const pushFailure = failures[0];
+          await logError(env.DB, {
+            telegramUserId: u.telegramUserId,
+            source: 'reminders',
+            kind: 'delivery',
+            status: pushFailure?.status ?? 0,
+            message: `Reminder "${label}" not delivered after ${MAX_REMINDER_ATTEMPTS} attempts`,
+            detail: JSON.stringify({
+              label,
+              date: dateKey,
+              attempts: nextTries,
+              pushConfigured,
+              pushStatus: pushFailure?.status ?? null,
+              pushBody: pushFailure?.bodyPrefix ?? null,
+              pushFailureCount: failures.length,
+              telegramFallback: Boolean(bot && u.telegramUserId != null),
+              telegramAttempted,
+              error: failureDetail,
+            }),
+          });
+        }
       }
-      if (didSomething) await markSent(env.DB, u.userId, u.preferencesJson, lastSent);
+      if (changed) {
+        await saveReminderState(env.DB, u.userId, u.preferencesJson, {
+          lastSent,
+          attempts,
+          lastFailureAt,
+        });
+      }
     } catch (err) {
       await logError(env.DB, {
         telegramUserId: u.telegramUserId,

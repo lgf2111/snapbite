@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_REMINDER_ATTEMPTS,
   REMINDER_STEP_MINUTES,
   dueReminderSlots,
   localParts,
@@ -76,6 +77,37 @@ describe('dueReminderSlots', () => {
     const now = Date.UTC(2026, 0, 1, 8, 5);
     const cfg = { ...base, lastSent: { breakfast: '2026-01-01' } };
     expect(dueReminderSlots(cfg, now, 15)).toEqual([]);
+  });
+
+  it('retries a failed slot on a later tick, after its window has closed', () => {
+    // 08:00 failed once, and the cron tick at 08:45 is outside the 15-min window.
+    const now = Date.UTC(2026, 0, 1, 8, 45);
+    const cfg = {
+      ...base,
+      attempts: { breakfast: { date: '2026-01-01', tries: 1 } },
+    };
+    expect(dueReminderSlots(cfg, now, 15)).toEqual(['breakfast']);
+  });
+
+  it('stops retrying after MAX_REMINDER_ATTEMPTS failed ticks', () => {
+    const now = Date.UTC(2026, 0, 1, 9, 0);
+    const cfg = {
+      ...base,
+      attempts: { breakfast: { date: '2026-01-01', tries: MAX_REMINDER_ATTEMPTS } },
+    };
+    expect(dueReminderSlots(cfg, now, 15)).toEqual([]);
+  });
+
+  it('does not retry a failed slot before its time, or on a different day', () => {
+    const before = Date.UTC(2026, 0, 1, 7, 50);
+    const cfg = {
+      ...base,
+      attempts: { breakfast: { date: '2026-01-01', tries: 1 } },
+    };
+    expect(dueReminderSlots(cfg, before, 15)).toEqual([]);
+    // Yesterday's failure does not make today's slot due early.
+    const nextDay = Date.UTC(2026, 0, 2, 7, 50);
+    expect(dueReminderSlots(cfg, nextDay, 15)).toEqual([]);
   });
 
   it('returns nothing when disabled', () => {
