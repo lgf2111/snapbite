@@ -2,9 +2,10 @@ import type { Backend } from '@/lib/backend';
 import { notifyLogged } from '@/lib/mealNotice';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CaptureSheet, MAX_BATCH } from './CaptureSheet.js';
+import { CaptureSheet, MAX_BATCH, PICKER_PROBE_MS } from './CaptureSheet.js';
 import { Toaster } from './ui/sonner.js';
 
 vi.mock('../lib/compress.js', () => ({
@@ -77,6 +78,71 @@ const RESULT = {
   needsConfirmation: false,
 };
 
+/** A pointer event from a finger, which the fan defers to touchend. */
+const fanPointer = (type: string, x: number, y: number) =>
+  new PointerEvent(type, {
+    bubbles: true,
+    pointerId: 1,
+    pointerType: 'touch',
+    isPrimary: true,
+    clientX: x,
+    clientY: y,
+  });
+
+/**
+ * Puts the trigger where the fan tests expect it (64px at 215, 600) and returns
+ * the point `deg` degrees around the fan's baseline. There is no nav here, so
+ * the baseline is `top + 20 - barGap(8) - 1` = 611.
+ */
+const fanPoint = (trigger: HTMLElement, deg: number) => {
+  vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(
+    DOMRect.fromRect({ x: 183, y: 600, width: 64, height: 64 }),
+  );
+  const rad = (deg * Math.PI) / 180;
+  return { x: 215 + 100 * Math.cos(rad), y: 611 - 100 * Math.sin(rad) };
+};
+
+/**
+ * A sheet whose menu state is real, so the fan's picker backstop can open it.
+ * The button lives outside the sheet, as it does under the tab bar.
+ */
+function setupFan() {
+  const backend = {
+    mode: 'local' as const,
+    listFavorites: vi.fn(async () => []),
+    analyze: vi.fn(async () => RESULT),
+    logWithPhoto: vi.fn(async () => {}),
+  } as unknown as Backend;
+
+  function Host() {
+    const [open, setOpen] = useState(false);
+    const trigger = useRef<HTMLButtonElement>(null);
+    return (
+      <>
+        <button ref={trigger} type="button">
+          camera trigger
+        </button>
+        <CaptureSheet
+          backend={backend}
+          open={open}
+          onOpenChange={setOpen}
+          triggerRef={trigger}
+          onLogged={vi.fn()}
+          onManualLogged={vi.fn()}
+          onToast={vi.fn()}
+        />
+      </>
+    );
+  }
+
+  const { container } = render(<Host />);
+  const trigger = container.querySelector('button') as HTMLButtonElement;
+  const inputs = [...container.querySelectorAll<HTMLInputElement>('input[type=file]')];
+  const camera = inputs.find((i) => i.hasAttribute('capture')) as HTMLInputElement;
+  const library = inputs.find((i) => !i.hasAttribute('capture')) as HTMLInputElement;
+  return { trigger, camera, library };
+}
+
 const photo = (name: string) => new File([name], name, { type: 'image/jpeg' });
 const pick = (input: HTMLInputElement, ...files: File[]) =>
   fireEvent.change(input, { target: { files } });
@@ -148,6 +214,87 @@ describe('the file pickers', () => {
 
       expect(cameraClick).toHaveBeenCalledTimes(1);
       expect(libraryClick).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a touch release opens the picker from touchend, once, not again from pointerup', () => {
+    vi.useFakeTimers();
+    try {
+      const { library, trigger } = setup(false);
+      const libraryClick = vi.spyOn(library, 'click');
+      const { x, y } = fanPoint(trigger, 110);
+
+      act(() => {
+        trigger.dispatchEvent(fanPointer('pointerdown', 215, 630));
+        vi.advanceTimersByTime(200);
+      });
+      act(() => {
+        trigger.dispatchEvent(fanPointer('pointermove', x, y));
+        trigger.dispatchEvent(fanPointer('pointerup', x, y));
+      });
+      // iOS sends pointerup first, but it is not the gesture that opens a picker.
+      expect(libraryClick).not.toHaveBeenCalled();
+
+      act(() => {
+        trigger.dispatchEvent(new Event('touchend', { bubbles: true }));
+      });
+      expect(libraryClick).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('when the fan cannot open a picker', () => {
+  /** Holds, slides to `deg`, and lifts a finger. */
+  function slideTo(trigger: HTMLElement, deg: number) {
+    const { x, y } = fanPoint(trigger, deg);
+    act(() => {
+      trigger.dispatchEvent(fanPointer('pointerdown', 215, 630));
+      vi.advanceTimersByTime(200);
+    });
+    act(() => {
+      trigger.dispatchEvent(fanPointer('pointermove', x, y));
+      trigger.dispatchEvent(fanPointer('pointerup', x, y));
+      trigger.dispatchEvent(new Event('touchend', { bubbles: true }));
+    });
+  }
+
+  it('reopens the cards with that action highlighted when no picker signal arrives', () => {
+    vi.useFakeTimers();
+    try {
+      const { library, trigger } = setupFan();
+      const libraryClick = vi.spyOn(library, 'click');
+      slideTo(trigger, 110); // Upload image
+      expect(libraryClick).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('capture-menu')).toBeNull();
+
+      // No blur, no hidden page, no files: the platform refused the open.
+      act(() => {
+        vi.advanceTimersByTime(PICKER_PROBE_MS);
+      });
+
+      const menu = screen.getByTestId('capture-menu');
+      const upload = within(menu).getByRole('button', { name: /upload image/i });
+      expect(upload).toHaveAttribute('data-highlighted', 'true');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stays closed when the picker does signal that it opened', () => {
+    vi.useFakeTimers();
+    try {
+      const { trigger } = setupFan();
+      slideTo(trigger, 110);
+
+      act(() => {
+        window.dispatchEvent(new Event('blur'));
+        vi.advanceTimersByTime(PICKER_PROBE_MS);
+      });
+      expect(screen.queryByTestId('capture-menu')).toBeNull();
     } finally {
       vi.useRealTimers();
     }

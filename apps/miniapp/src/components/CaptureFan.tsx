@@ -62,12 +62,24 @@ interface Props {
 }
 
 /**
+ * How long a touch release waits for its `touchend`. The event follows
+ * `pointerup` immediately on every browser that sends both; this is only a
+ * safety net so a missing one cannot leave the fan on screen.
+ */
+const TOUCH_END_GRACE_MS = 500;
+
+/**
  * Press and hold the camera button, slide to a wedge, release to run it.
  *
  * The listeners are native pointer listeners on the button, and the highlight
  * is written straight to the DOM from the pointer-move handler, so sliding a
  * thumb around causes no React render. React renders twice per gesture: when
  * the fan opens and when it closes.
+ *
+ * A touch release runs its action from `touchend`, not `pointerup`: iOS only
+ * opens a file picker from a touch event, even though `pointerup` arrives
+ * first. Mouse and pen releases stay on `pointerup`. One flag per gesture
+ * makes sure the action runs once, whichever path gets there.
  *
  * It is a shortcut, never the only route: the tap-for-cards menu does the same
  * four things with labels.
@@ -112,20 +124,40 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     let centre = { x: 0, y: 0 };
     let held = false;
     let timer = 0;
+    /**
+     * A touch release waits for `touchend`: iOS opens a picker from a touch
+     * event, not from `pointerup`, even though `pointerup` arrives first.
+     */
+    let awaitTouchEnd = false;
+    let touchTimer = 0;
+    /** One action per gesture, whichever release path runs it. */
+    let picked = false;
     /** The click that follows a hold or a drag must not also toggle the card menu. */
     let swallowClick = false;
 
     const closeFan = () => {
       window.clearTimeout(timer);
+      window.clearTimeout(touchTimer);
+      awaitTouchEnd = false;
       start = null;
       held = false;
       current.current = null;
       setOrigin(null);
     };
 
+    /** Runs the highlighted action, at most once for this gesture. */
+    const runChosen = () => {
+      if (picked || !held || current.current == null) return;
+      picked = true;
+      pick.current(FAN_ACTIONS[current.current] as CaptureAction);
+    };
+
     const onDown = (e: PointerEvent) => {
       if (!e.isPrimary || e.button !== 0) return;
       swallowClick = false;
+      picked = false;
+      awaitTouchEnd = false;
+      window.clearTimeout(touchTimer);
       start = { x: e.clientX, y: e.clientY };
       held = false;
       current.current = null;
@@ -159,18 +191,40 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       }
     };
 
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
       if (!start) return;
-      const chosen = held ? current.current : null;
-      const wasHeld = held;
-      // Released over a wedge: run it first, inside this event and before any
-      // state changes, so a file picker is opened straight from the user gesture.
-      if (wasHeld && chosen != null) pick.current(FAN_ACTIONS[chosen] as CaptureAction);
+      if (e.pointerType === 'touch') {
+        // The picker must open from `touchend` on iOS. Keep the gesture (and
+        // the highlight) alive until then; the fallback only covers a browser
+        // that somehow never sends it.
+        awaitTouchEnd = true;
+        window.clearTimeout(touchTimer);
+        touchTimer = window.setTimeout(() => {
+          runChosen();
+          closeFan();
+        }, TOUCH_END_GRACE_MS);
+        return;
+      }
+      runChosen();
+      closeFan();
+    };
+
+    const onTouchEnd = () => {
+      if (!start) return;
+      awaitTouchEnd = false;
+      runChosen();
       closeFan();
     };
 
     const onCancel = () => {
       if (start) closeFan();
+    };
+
+    const onLostCapture = (e: PointerEvent) => {
+      // Releasing a touch also releases its capture, and that fires before
+      // `touchend`. It is not a cancel while the touch release is pending.
+      if (awaitTouchEnd) return;
+      onCancel();
     };
 
     const onClick = (e: MouseEvent) => {
@@ -186,17 +240,20 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     button.addEventListener('pointerdown', onDown);
     button.addEventListener('pointermove', onMove);
     button.addEventListener('pointerup', onUp);
+    button.addEventListener('touchend', onTouchEnd);
     button.addEventListener('pointercancel', onCancel);
-    button.addEventListener('lostpointercapture', onCancel);
+    button.addEventListener('lostpointercapture', onLostCapture);
     button.addEventListener('click', onClick);
     button.addEventListener('contextmenu', onContextMenu);
     return () => {
       window.clearTimeout(timer);
+      window.clearTimeout(touchTimer);
       button.removeEventListener('pointerdown', onDown);
       button.removeEventListener('pointermove', onMove);
       button.removeEventListener('pointerup', onUp);
+      button.removeEventListener('touchend', onTouchEnd);
       button.removeEventListener('pointercancel', onCancel);
-      button.removeEventListener('lostpointercapture', onCancel);
+      button.removeEventListener('lostpointercapture', onLostCapture);
       button.removeEventListener('click', onClick);
       button.removeEventListener('contextmenu', onContextMenu);
       closeFan();

@@ -56,6 +56,20 @@ const hold = () =>
   act(() => {
     vi.advanceTimersByTime(200);
   });
+/**
+ * A finger lifting: pointerup always, then touchend (the event iOS accepts for
+ * opening a picker). Both belong to one gesture.
+ */
+const release = (x: number, y: number) =>
+  act(() => {
+    button().dispatchEvent(pointer('pointerup', x, y));
+    button().dispatchEvent(new Event('touchend', { bubbles: true }));
+  });
+/** A touch that never sends pointerup: only the touch release arrives. */
+const touchRelease = () =>
+  act(() => {
+    button().dispatchEvent(new Event('touchend', { bubbles: true }));
+  });
 /** A point `r` px from the button's centre at `deg` (90 = straight up). */
 const from = (deg: number, r = 100) => [
   CX + r * Math.cos((deg * Math.PI) / 180),
@@ -114,7 +128,7 @@ describe('hold and slide on the camera button', () => {
     act(() => {
       vi.advanceTimersByTime(60);
     });
-    fire(button(), pointer('pointerup', CX, CY));
+    release(CX, CY);
     fireEvent.click(button());
 
     expect(fan()).toBeNull();
@@ -133,7 +147,7 @@ describe('hold and slide on the camera button', () => {
 
     // Releasing with nothing chosen: no action, and the click that follows the
     // release must not open the cards either.
-    fire(button(), pointer('pointerup', CX, CY));
+    release(CX, CY);
     fireEvent.click(button());
     expect(fan()).toBeNull();
     expect(onPick).not.toHaveBeenCalled();
@@ -149,11 +163,38 @@ describe('hold and slide on the camera button', () => {
     expect(active()).toEqual(['false', 'false', 'false', 'true']);
     expect(label()).toBe('Take photo');
 
-    // No timers advanced: the action fires inside the pointerup.
-    fire(button(), pointer('pointerup', x, y));
+    // No timers advanced: the action fires inside the release.
+    release(x, y);
     expect(onPick).toHaveBeenCalledTimes(1);
     expect(onPick).toHaveBeenCalledWith('photo');
     expect(fan()).toBeNull();
+  });
+
+  it('opens the picker from touchend, the touch event iOS trusts', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    const [x, y] = from(110) as [number, number];
+    fire(button(), pointer('pointermove', x, y));
+
+    // Only the touch release arrives: it must be enough on its own.
+    touchRelease();
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick).toHaveBeenCalledWith('upload');
+    expect(fan()).toBeNull();
+  });
+
+  it('runs one action when pointerup and touchend report the same release', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    const [x, y] = from(20) as [number, number];
+    fire(button(), pointer('pointermove', x, y));
+
+    // iOS sends pointerup first; the fan defers the action to touchend.
+    fire(button(), pointer('pointerup', x, y));
+    expect(onPick).not.toHaveBeenCalled();
+    touchRelease();
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick).toHaveBeenCalledWith('photo');
   });
 
   it.each([
@@ -172,7 +213,7 @@ describe('hold and slide on the camera button', () => {
     expect(active()[idx]).toBe('true');
     expect(label()).toBe(title);
 
-    fire(button(), pointer('pointerup', x, y));
+    release(x, y);
     expect(onPick).toHaveBeenCalledWith(action);
   });
 
@@ -200,7 +241,7 @@ describe('hold and slide on the camera button', () => {
     hold();
 
     expect(fan()).toBeNull();
-    fire(button(), pointer('pointerup', CX + 14, CY));
+    release(CX + 14, CY);
     fireEvent.click(button());
     // A drag is neither a hold nor a tap.
     expect(onPick).not.toHaveBeenCalled();
@@ -217,7 +258,7 @@ describe('hold and slide on the camera button', () => {
   it('releasing in the dead zone, over the button, does nothing', () => {
     fire(button(), pointer('pointerdown', CX, CY));
     hold();
-    fire(button(), pointer('pointerup', CX + 8, CY - 8));
+    release(CX + 8, CY - 8);
 
     expect(onPick).not.toHaveBeenCalled();
     expect(fan()).toBeNull();
@@ -234,7 +275,7 @@ describe('hold and slide on the camera button', () => {
     expect(active()).toEqual(['false', 'false', 'false', 'false']);
     expect(label()).toBe('Slide to choose');
 
-    fire(button(), pointer('pointerup', CX + 5, CY - 5));
+    release(CX + 5, CY - 5);
     expect(onPick).not.toHaveBeenCalled();
   });
 
@@ -243,7 +284,7 @@ describe('hold and slide on the camera button', () => {
     hold();
     fire(button(), pointer('pointermove', CX, CY + 80));
     expect(active()).toEqual(['false', 'false', 'false', 'false']);
-    fire(button(), pointer('pointerup', CX, CY + 80));
+    release(CX, CY + 80);
     expect(onPick).not.toHaveBeenCalled();
   });
 
@@ -285,7 +326,7 @@ describe('hold and slide on the camera button', () => {
 
     const [x, y] = from(110) as [number, number];
     fire(button(), pointer('pointermove', x, y));
-    fire(button(), pointer('pointerup', x, y));
+    release(x, y);
     expect(onPick).toHaveBeenCalledWith('upload');
   });
 
