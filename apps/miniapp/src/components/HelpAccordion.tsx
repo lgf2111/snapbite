@@ -1,4 +1,4 @@
-import { Lightbulb } from 'lucide-react';
+import { ChevronDown, Lightbulb } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 
 interface HelpItem {
@@ -24,15 +24,13 @@ export function HelpAccordion({
   const [open, setOpen] = useState<number | null>(null);
 
   return (
-    <div className="rounded-surface border border-border/60">
+    <div className="rounded-control border border-border">
       <div className="flex items-center gap-2 px-4 pt-3 pb-1">
-        <Lightbulb className="size-4 stroke-[1.75]" aria-hidden />
-        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          {label}
-        </span>
+        <Lightbulb className="size-4" aria-hidden />
+        <span className="text-muted-foreground text-caption font-medium">{label}</span>
       </div>
 
-      <ul className="divide-y divide-border/50">
+      <ul className="divide-y divide-border">
         {items.map((item, i) => {
           const id = `${baseId}-${i}`;
           const isOpen = open === i;
@@ -43,21 +41,21 @@ export function HelpAccordion({
                 aria-expanded={isOpen}
                 aria-controls={id}
                 onClick={() => setOpen(isOpen ? null : i)}
-                className="flex min-h-11 w-full items-center justify-between gap-3 px-4 py-3 text-left transition-[background-color,transform] duration-[120ms] active:scale-[0.99] active:bg-accent/60 motion-reduce:transition-none motion-reduce:active:scale-100"
+                className="active:bg-accent flex min-h-11 w-full items-center justify-between gap-3 px-4 py-3 text-left transition-[background-color,transform] duration-[120ms] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
-                <span className="flex flex-col">
-                  <span className="text-sm font-medium">{item.title}</span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-body font-medium">{item.title}</span>
                   {item.summary && !isOpen && (
-                    <span className="text-muted-foreground mt-0.5 text-xs">{item.summary}</span>
+                    <span className="text-muted-foreground text-caption mt-0.5">
+                      {item.summary}
+                    </span>
                   )}
                 </span>
-                <span
+                <ChevronDown
                   aria-hidden
-                  className="text-muted-foreground shrink-0 text-xs transition-transform duration-200 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
+                  className="text-foreground size-4 shrink-0 transition-transform duration-200 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
                   style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}
-                >
-                  ▾
-                </span>
+                />
               </button>
               <div id={id} hidden={!isOpen} className="px-4 pb-4">
                 {item.children}
@@ -82,11 +80,11 @@ export function Step({
 }) {
   return (
     <li className="flex gap-3">
-      <span className="bg-primary/15 text-primary-text mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-control text-xs font-semibold">
+      <span className="bg-secondary text-foreground text-caption mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-control font-medium">
         {n}
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <p className="text-sm font-medium">{title}</p>
+        <p className="text-body font-medium">{title}</p>
         {children}
       </div>
     </li>
@@ -113,7 +111,7 @@ export function HelpFigure({
 
   return (
     <figure className="m-0 flex flex-col gap-1.5">
-      <div className="overflow-hidden rounded-control border border-border/60 bg-black/20">
+      <div className="bg-muted overflow-hidden rounded-control border border-border">
         {missing ? (
           fallback
         ) : (
@@ -131,7 +129,7 @@ export function HelpFigure({
           />
         )}
       </div>
-      <figcaption className="text-muted-foreground text-[11px]">{caption}</figcaption>
+      <figcaption className="text-muted-foreground text-caption">{caption}</figcaption>
     </figure>
   );
 }

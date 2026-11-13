@@ -109,7 +109,7 @@ describe('OnboardingScreen resume', () => {
     const onSkip = vi.fn();
     renderScreen({ startAtKeyStep: true, onSkip });
 
-    fireEvent.click(screen.getByRole('button', { name: /track meals manually/i }));
+    fireEvent.click(screen.getByRole('button', { name: /track meals by hand/i }));
 
     await waitFor(() => expect(onSkip).toHaveBeenCalled());
     expect(localStorage.getItem('snapbite.onboarding.resume')).toBeNull();
@@ -224,10 +224,20 @@ describe('OnboardingScreen motion', () => {
     act(() => {
       vi.advanceTimersByTime(450);
     });
-    const buttons = screen.getAllByRole('button', { name: /skip for now/i });
-    expect(buttons).toHaveLength(2);
-    for (const b of buttons) fireEvent.click(b);
+    expect(screen.getByRole('button', { name: 'Skip for now' })).toBeTruthy();
+    const startLogging = screen.getByRole('button', { name: 'Skip and start logging' });
+    fireEvent.click(startLogging);
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
     expect(onSkip).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps Save key enabled when the field is empty and focuses it instead', () => {
+    renderScreen({ startAtKeyStep: true });
+    const save = screen.getByRole('button', { name: 'Save key and finish' });
+    expect(save.hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(save);
+    expect(document.activeElement).toBe(screen.getByLabelText('API key'));
   });
 
   it('switches snapping off while a field has focus, and back on after', () => {
@@ -496,7 +506,7 @@ describe('OnboardingScreen for an account that is already signed in', () => {
         onSkip={onSkip}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /skip for now/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip and start logging' }));
     expect(onSkip).toHaveBeenCalled();
   });
 });
