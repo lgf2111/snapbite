@@ -26,7 +26,8 @@ import { toast } from 'sonner';
 export function exportErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.status === 401) return 'Sign in again, then try the export once more.';
-    return err.message || `The export failed (${err.status}).`;
+    // The status goes to the console, never on screen.
+    return err.message || 'The export failed. Try again in a moment.';
   }
   return err instanceof Error ? err.message : 'Could not export your data.';
 }

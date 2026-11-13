@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:test';
-import type { AdvancedReport } from '@snapbite/core';
+import type { AdvancedReport, MealResult } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { grantTrial, markSupporter } from '../billing/accounts.js';
@@ -68,6 +68,27 @@ async function getReport(
   return { status: res.status, body: (await res.json()) as AdvancedReport & { detail?: string } };
 }
 
+async function cacheCount(userId: string): Promise<number> {
+  const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM analytics_cache WHERE user_id = ?')
+    .bind(userId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+function sampleMeal(): MealResult {
+  return {
+    foods: [
+      {
+        food: { name: 'Apple', estimatedWeightG: 100, quantity: 1, confidence: 0.9 },
+        nutrition: { energyKcal: 52, proteinG: 0.3, carbsG: 14, fatG: 0.2, source: 'table' },
+      },
+    ],
+    total: { energyKcal: 52, proteinG: 0.3, carbsG: 14, fatG: 0.2, source: 'table' },
+    confidence: 0.9,
+    needsConfirmation: false,
+  };
+}
+
 describe('GET /api/analytics', () => {
   it('refuses an anonymous account', async () => {
     const { status, body } = await getReport();
@@ -132,6 +153,52 @@ describe('GET /api/analytics', () => {
     // No profile => no targets, so adherence has no percentage.
     expect(body.card.scorePct).toBeNull();
     expect(body.projection).toBeNull();
+  });
+
+  it('serves the second report from the per-day cache', async () => {
+    const user = await verifiedUser();
+    await markSupporter(env.DB, user.email);
+
+    const todayStart = Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+    await seedMeal(user.userId, todayStart + 12 * HOUR, 500, 30, 'Chicken', 200);
+
+    const first = await getReport(user.cookie);
+    expect(first.status).toBe(200);
+    expect(first.body.totals.meals).toBe(1);
+    expect(await cacheCount(user.userId)).toBe(1);
+
+    // A recomputation would now see no meals. The cached report must survive.
+    await env.DB.prepare('DELETE FROM meals WHERE user_id = ?').bind(user.userId).run();
+    const second = await getReport(user.cookie);
+
+    expect(second.status).toBe(200);
+    expect(second.body.totals).toEqual(first.body.totals);
+    expect(second.body.series).toEqual(first.body.series);
+  });
+
+  it('drops the cache when a meal is written', async () => {
+    const user = await verifiedUser();
+    await markSupporter(env.DB, user.email);
+
+    const todayStart = Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+    await seedMeal(user.userId, todayStart + 12 * HOUR, 500, 30, 'Chicken', 200);
+    await getReport(user.cookie);
+    expect(await cacheCount(user.userId)).toBe(1);
+
+    const res = await createApp().request(
+      '/api/meals',
+      {
+        method: 'POST',
+        headers: { cookie: user.cookie, 'content-type': 'application/json' },
+        body: JSON.stringify(sampleMeal()),
+      },
+      env,
+    );
+    expect(res.status).toBe(201);
+    expect(await cacheCount(user.userId)).toBe(0);
+
+    const { body } = await getReport(user.cookie);
+    expect(body.totals.meals).toBe(2);
   });
 
   it('wires the saved profile into adherence targets', async () => {

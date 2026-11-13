@@ -177,6 +177,9 @@ describe('exportErrorMessage', () => {
   it('says to sign in again on a 401 and passes the server message through otherwise', () => {
     expect(exportErrorMessage(new ApiError(401, 'x'))).toMatch(/sign in again/i);
     expect(exportErrorMessage(new ApiError(500, 'boom'))).toBe('boom');
+    expect(exportErrorMessage(new ApiError(503, ''))).toBe(
+      'The export failed. Try again in a moment.',
+    );
     expect(exportErrorMessage(new Error('offline'))).toBe('offline');
   });
 });

@@ -250,6 +250,28 @@ export const metrics = sqliteTable(
 );
 
 /**
+ * One cached advanced report per (user, range). Reports are pure functions of
+ * the user's meals and local day, so a repeat open within the same local day can
+ * serve this row instead of recomputing. Meal writes delete the user's rows.
+ */
+export const analyticsCache = sqliteTable(
+  'analytics_cache',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** '90d' | '12m'. */
+    range: text('range').notNull(),
+    /** Epoch ms the report was computed; compared to local midnight. */
+    computedAt: integer('computed_at').notNull(),
+    payloadJson: text('payload_json').notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.range] }),
+  }),
+);
+
+/**
  * Idempotent record that a user was active in a given ISO week ('YYYY-Www'),
  * so weekly-active-user counts don't need to scan meals. Inserted with INSERT
  * OR IGNORE, so repeat activity in the same week is a no-op.
@@ -325,6 +347,7 @@ export const deviceTokens = sqliteTable(
 export type DeviceTokenRow = typeof deviceTokens.$inferSelect;
 
 export type MetricsRow = typeof metrics.$inferSelect;
+export type AnalyticsCacheRow = typeof analyticsCache.$inferSelect;
 export type UserActivityRow = typeof userActivity.$inferSelect;
 
 /** Web push subscriptions: one per device that turned reminders on (see push/send.ts). */

@@ -1,4 +1,4 @@
-import { ApiError } from '@/lib/api';
+import { ApiError, LOAD_FAILED_MESSAGE } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
 import {
   type AdvancedReport,
@@ -76,6 +76,16 @@ describe('ReportsScreen', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /see credits and supporter/i }));
     expect(onSeeCredits).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a retry sentence instead of a status code', async () => {
+    const backend = stubBackend(async () => {
+      throw new ApiError(503, LOAD_FAILED_MESSAGE);
+    });
+    renderScreen(backend);
+
+    expect(await screen.findByText(LOAD_FAILED_MESSAGE)).toBeInTheDocument();
+    expect(screen.queryByText(/HTTP 503/)).not.toBeInTheDocument();
   });
 
   it('renders the report card and every section for a ready report', async () => {
