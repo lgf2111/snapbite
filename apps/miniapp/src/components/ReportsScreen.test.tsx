@@ -73,6 +73,9 @@ describe('ReportsScreen', () => {
 
     expect(await screen.findByText('Reports are part of the supporter tag')).toBeInTheDocument();
     expect(screen.getByText(/any credit pack once/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Check again after buying a pack' }),
+    ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /see credits and supporter/i }));
     expect(onSeeCredits).toHaveBeenCalledTimes(1);
@@ -98,7 +101,9 @@ describe('ReportsScreen', () => {
     expect(screen.getByText('Weekday pattern')).toBeInTheDocument();
     expect(screen.getByText('Time of day')).toBeInTheDocument();
     expect(screen.getByText('Dishes')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Daily calorie trend' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: 'Daily calorie trend, 2 logged days' }),
+    ).toBeInTheDocument();
     // Chicken appears twice, Rice once: both are listed with their share.
     expect(screen.getByText('Chicken')).toBeInTheDocument();
     expect(screen.getByText('2 meals · 67%')).toBeInTheDocument();
@@ -117,7 +122,7 @@ describe('ReportsScreen', () => {
 
     await waitFor(() => expect(analytics).toHaveBeenLastCalledWith('12m'));
     expect(await screen.findByText('Monthly kcal · last 12 months')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Monthly calorie trend' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /^Monthly calorie trend/ })).toBeInTheDocument();
   });
 
   it('answers an empty log honestly', async () => {
