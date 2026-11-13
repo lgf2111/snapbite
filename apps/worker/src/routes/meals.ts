@@ -33,7 +33,7 @@ import { recordMealSave } from '../db/metrics.js';
 import { createSettingsDb, getSettings, parsePreferences } from '../db/settings.js';
 import { createDb, upsertUser } from '../db/users.js';
 import type { AppBindings } from '../env.js';
-import { base64ToBytes, resizeImage, shrinkImage } from '../storage/images.js';
+import { base64ToBytes, resizeImage } from '../storage/images.js';
 import { photoKey, r2Store } from '../storage/photos.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
 import type { BotClientFactory } from './webhook.js';
@@ -221,9 +221,11 @@ export function mealsRoutes(
       );
     }
 
-    // Share the Shortcut path's shrink, and do it before the meal row exists so
-    // an oversized or undecodable photo can never leave a half-created meal.
-    const shrunk = photoInput ? await shrinkImage(photoInput.base64, photoInput.mimeType) : null;
+    // No server-side re-encode: the Mini App always compresses in the browser
+    // (apps/miniapp/src/lib/compress.ts) before calling this route, and
+    // CaptureSheet aborts the upload if compression fails. A second Photon
+    // decode would only spend Worker CPU on already-small bytes. The size check
+    // above bounds a client that bypasses the app.
 
     const db = createMealsDb(c.env.DB);
     const userId = c.get('userId');
@@ -234,15 +236,15 @@ export function mealsRoutes(
       ...(typeof telegramFileId === 'string' ? { telegramFileId } : {}),
     });
 
-    // Optional photo captured in the app: store the shrunk bytes so the meal
-    // renders an image. Best effort — a storage failure must not lose the meal.
-    if (shrunk) {
+    // Optional photo captured in the app: store the compressed bytes as sent.
+    // Best effort — a storage failure must not lose the meal.
+    if (photoInput) {
       const store = r2Store(c.env.PHOTOS);
       if (store) {
         try {
           const key = photoKey(id);
-          await store.put(key, base64ToBytes(shrunk.base64), shrunk.mimeType);
-          await setMealPhoto(db, id, userId, key, shrunk.mimeType);
+          await store.put(key, base64ToBytes(photoInput.base64), photoInput.mimeType);
+          await setMealPhoto(db, id, userId, key, photoInput.mimeType);
         } catch (err) {
           console.error('[meals] photo store failed', err);
         }

@@ -1,8 +1,10 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import {
+  beginErrorLog,
   createErrorsDb,
   describeError,
+  finishErrorLog,
   logError,
   pruneErrorsOlderThan,
   recentErrors,
@@ -39,6 +41,44 @@ describe('logError / recentErrors', () => {
     const found = rows.find((r) => r.source === 'api' && r.message.startsWith('x'));
     expect(found?.message.length).toBeLessThanOrEqual(2000);
     expect((found?.detail ?? '').length).toBeLessThanOrEqual(2000);
+  });
+});
+
+describe('beginErrorLog / finishErrorLog', () => {
+  it('writes the start row, then rewrites the same row with the outcome', async () => {
+    const id = await beginErrorLog(env.DB, {
+      telegramUserId: 556,
+      source: 'shortcut',
+      kind: 'ai_started',
+      message: 'analysis started',
+      detail: '{"bytes_in":123}',
+    });
+    expect(id).toBeTruthy();
+
+    const before = (await recentErrors(env.DB, 100)).find((r) => r.id === id);
+    expect(before?.kind).toBe('ai_started');
+    expect(before?.status).toBeNull();
+    expect(before?.detail).toBe('{"bytes_in":123}');
+
+    await finishErrorLog(env.DB, id as string, {
+      kind: 'completed',
+      status: 200,
+      message: 'meal saved',
+      detail: '{"ms_ai":1}',
+    });
+
+    const rows = (await recentErrors(env.DB, 100)).filter((r) => r.id === id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe('completed');
+    expect(rows[0]?.status).toBe(200);
+    expect(rows[0]?.message).toBe('meal saved');
+    expect(rows[0]?.detail).toBe('{"ms_ai":1}');
+  });
+
+  it('never throws when the row does not exist', async () => {
+    await expect(
+      finishErrorLog(env.DB, crypto.randomUUID(), { kind: 'completed', message: 'gone' }),
+    ).resolves.toBeUndefined();
   });
 });
 
