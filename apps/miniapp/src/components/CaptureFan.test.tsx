@@ -29,7 +29,7 @@ function Harness({ onPick }: { onPick: (a: string) => void }) {
   );
 }
 
-const button = () => screen.getByRole('button', { name: /add a meal — tap for options/i });
+const button = () => screen.getByRole('button', { name: /add a meal\. tap for options/i });
 const fan = () => screen.queryByTestId('capture-fan');
 const wedges = () => [
   ...document.querySelectorAll<SVGPathElement>('[data-testid=capture-fan] path[data-active]'),
@@ -116,7 +116,7 @@ afterEach(() => {
 describe('hold and slide on the camera button', () => {
   it('describes both gestures to assistive tech and is set up for them', () => {
     expect(button().getAttribute('aria-label')).toBe(
-      'Add a meal — tap for options, hold and slide to choose',
+      'Add a meal. Tap for options, or hold and slide to choose.',
     );
     expect(button().className).toContain('touch-none');
     expect(button().className).toContain('select-none');
