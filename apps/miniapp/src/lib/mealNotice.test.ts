@@ -22,10 +22,10 @@ afterEach(() => {
 describe('notifyLogged', () => {
   it('posts the notification when permission has already been granted', async () => {
     setup('granted');
-    expect(await notifyLogged('Meal logged', '612 kcal — Grilled salmon, rice')).toBe(true);
+    expect(await notifyLogged('Meal logged', '612 kcal · Grilled salmon, rice')).toBe(true);
     expect(showNotification).toHaveBeenCalledWith(
       'Meal logged',
-      expect.objectContaining({ body: '612 kcal — Grilled salmon, rice', tag: 'meal-logged' }),
+      expect.objectContaining({ body: '612 kcal · Grilled salmon, rice', tag: 'meal-logged' }),
     );
   });
 
@@ -56,12 +56,12 @@ describe('mealNoticeBody', () => {
   it('is kcal, a dash, and the meal name', () => {
     expect(
       mealNoticeBody({ title: ' Grilled salmon, rice ', foods: [], total: { energyKcal: 611.6 } }),
-    ).toBe('612 kcal — Grilled salmon, rice');
+    ).toBe('612 kcal · Grilled salmon, rice');
     expect(
       mealNoticeBody({
         foods: [food('rice'), food('egg'), food('tea')],
         total: { energyKcal: 300 },
       }),
-    ).toBe('300 kcal — rice, egg');
+    ).toBe('300 kcal · rice, egg');
   });
 });

@@ -241,7 +241,7 @@ export interface BillingSummary {
 }
 
 /** What a person sees when the request failed and the server sent no detail. */
-export const LOAD_FAILED_MESSAGE = "Couldn't load that — tap to retry.";
+export const LOAD_FAILED_MESSAGE = "Couldn't load that. Tap to retry.";
 
 /**
  * Thin client for the SnapBite Worker API. Attaches the signed Telegram initData

@@ -550,7 +550,7 @@ describe('launch intents and the after-save notification', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save meal' }));
     await waitFor(() => expect(backend.logWithPhoto).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(notifyLogged).toHaveBeenCalledWith('Meal logged', '500 kcal — Meal'),
+      expect(notifyLogged).toHaveBeenCalledWith('Meal logged', '500 kcal · Meal'),
     );
   });
 });

@@ -1,6 +1,6 @@
 /**
  * The confirmation a finished capture ends with on Android, the counterpart of the iOS
- * Shortcut's notification: "Meal logged / 612 kcal — Grilled salmon, rice".
+ * Shortcut's notification: "Meal logged / 612 kcal · Grilled salmon, rice".
  *
  * It only ever uses permission that has ALREADY been granted (by turning on reminders).
  * It never asks: a permission prompt out of nowhere, right after saving a meal, is how
@@ -25,7 +25,7 @@ export async function notifyLogged(title: string, body: string): Promise<boolean
   }
 }
 
-/** `612 kcal — Grilled salmon, rice` */
+/** `612 kcal · Grilled salmon, rice` */
 export function mealNoticeBody(meal: {
   title?: string | null;
   foods: Array<{ food: { name: string } }>;
@@ -38,5 +38,5 @@ export function mealNoticeBody(meal: {
       .map((f) => f.food.name)
       .join(', ') ||
     'Meal';
-  return `${Math.round(meal.total.energyKcal)} kcal — ${label}`;
+  return `${Math.round(meal.total.energyKcal)} kcal · ${label}`;
 }
