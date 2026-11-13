@@ -22,19 +22,27 @@ const FAVORITE = {
   },
 };
 
-function setup() {
+function setup(over: Record<string, unknown> = {}) {
   const backend = {
     mode: 'local' as const,
     listFavorites: vi.fn(async () => [FAVORITE]),
     logManual: vi.fn(async () => {}),
     removeFavorite: vi.fn(async () => {}),
+    ...over,
   } as unknown as Backend;
   const onOpenChange = vi.fn();
   const onLogged = vi.fn();
+  const onToast = vi.fn();
   render(
-    <ManualMealDialog backend={backend} open onOpenChange={onOpenChange} onLogged={onLogged} />,
+    <ManualMealDialog
+      backend={backend}
+      open
+      onOpenChange={onOpenChange}
+      onLogged={onLogged}
+      onToast={onToast}
+    />,
   );
-  return { backend, onOpenChange, onLogged };
+  return { backend, onOpenChange, onLogged, onToast };
 }
 
 /** Render and wait for the saved-meal list, which is fetched on open. */
@@ -87,7 +95,7 @@ describe('the sheet is a header / body / footer flex column', () => {
     expect(header.className).toContain('shrink-0');
     expect(within(header).getByText('Add a meal')).toBeTruthy();
     // The one-line explanation belongs to the fixed header, not the body.
-    expect(within(header).getByText(/no photo or AI key needed/)).toBeTruthy();
+    expect(within(header).getByText(/no photo or AI key needed/i)).toBeTruthy();
     expect(within(header).getByRole('button', { name: 'Close' })).toBeTruthy();
     expect(within(body).queryByText(/no photo or AI key needed/)).toBeNull();
 
@@ -141,7 +149,7 @@ describe('the sheet is a header / body / footer flex column', () => {
     expect(footer.contains(screen.getByRole('button', { name: 'Log meal' }))).toBe(true);
     expect(footer.contains(screen.getByRole('button', { name: 'Cancel' }))).toBe(true);
 
-    // A 48px primary slab over a 44px text Cancel: one weight of action, not
+    // One filled 44px primary over a 44px text link: one weight of action, not
     // two equal slabs. The footer's pt-4 is the 16px above the buttons.
     expect(footer.className).toContain('flex-col');
     expect(footer.className).toContain('pt-4');
@@ -150,28 +158,27 @@ describe('the sheet is a header / body / footer flex column', () => {
     expect(actions.className).toContain('gap-2');
     const cancel = screen.getByRole('button', { name: 'Cancel' });
     const primary = screen.getByRole('button', { name: 'Log meal' });
-    expect(cancel.className).toContain('h-11');
+    expect(cancel.className).toContain('min-h-11');
     expect(cancel.className).toContain('w-full');
-    expect(cancel.className).toContain('text-muted-foreground');
+    expect(cancel.className).toContain('text-primary-text');
     expect(cancel.className).not.toContain('bg-secondary');
-    expect(primary.className).toContain('h-12');
+    expect(primary.className).toContain('h-11');
     expect(primary.className).toContain('w-full');
     expect(primary.className).toContain('bg-primary');
   });
 
-  it('stacks the macro fields on a phone and pairs them from sm up', async () => {
+  it('puts every field on one column', async () => {
     await renderDialog();
-    const grid = field('mm-energyKcal').closest('div.grid') as HTMLElement;
+    const form = document.getElementById('manual-meal-form') as HTMLFormElement;
 
-    expect(grid.className).toContain('grid-cols-1');
-    expect(grid.className).toContain('sm:grid-cols-2');
-    expect(grid.className).toContain('gap-4');
-    expect([...grid.querySelectorAll('input')].map((input) => input.id)).toEqual([
-      'mm-energyKcal',
-      'mm-proteinG',
-      'mm-carbsG',
-      'mm-fatG',
-    ]);
+    // Four macro fields, one under the other: a 165px cell at 375pt cannot
+    // hold a four-digit calorie value beside a second column.
+    expect(form.querySelector('.grid')).toBeNull();
+    for (const id of ['mm-energyKcal', 'mm-proteinG', 'mm-carbsG', 'mm-fatG']) {
+      const wrapper = field(id).parentElement?.parentElement as HTMLElement;
+      expect(wrapper.className).toContain('flex-col');
+      expect(wrapper.className).toContain('gap-1.5');
+    }
   });
 
   it('leaves 16px between fields and makes every input 44px tall', async () => {
@@ -224,8 +231,8 @@ describe('the footer cannot cover a field', () => {
     const sheetTop = 16;
     const sheetHeight = 932 - 336 - 16 - sheetTop; // 564
     const headerHeight = 94;
-    // 1px border + 16px pt + 48px primary + 8px gap + 44px Cancel + 16px pb.
-    const footerHeight = 133;
+    // 1px border + 16px pt + 44px primary + 8px gap + 44px Cancel + 16px pb.
+    const footerHeight = 128;
     const headerTop = sheetTop + border; // 17
     const bodyTop = headerTop + headerHeight; // 111
     const bodyHeight = sheetHeight - 2 * border - headerHeight - footerHeight; // 335
@@ -320,35 +327,58 @@ describe('the meal-name field does not look like a contact', () => {
   });
 });
 
-describe('Log meal is gated on the name and calories', () => {
+describe('Log meal validates on press, never by being disabled', () => {
   const log = () => screen.getByRole('button', { name: 'Log meal' }) as HTMLButtonElement;
 
-  it('stays disabled until both are valid', async () => {
-    await renderDialog();
-    const name = field('mm-food');
-    const kcal = field('mm-energyKcal');
+  it('stays enabled and marks the empty name and calories on press', async () => {
+    const { backend } = await renderDialog();
 
-    expect(log().disabled).toBe(true);
-
-    fireEvent.change(name, { target: { value: 'Chicken rice' } });
-    expect(log().disabled).toBe(true);
-
-    // A meal with no calories is not loggable; 0 is not a valid amount.
-    fireEvent.change(kcal, { target: { value: '0' } });
-    expect(log().disabled).toBe(true);
-
-    fireEvent.change(kcal, { target: { value: '420' } });
     expect(log().disabled).toBe(false);
+    fireEvent.click(log());
 
-    fireEvent.change(name, { target: { value: '   ' } });
-    expect(log().disabled).toBe(true);
+    expect(backend.logManual).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(field('mm-food'));
+    expect(screen.getByText('Name the meal.')).toBeInTheDocument();
+    expect(screen.getByText('Enter the calories.')).toBeInTheDocument();
+    expect(field('mm-food')).toHaveAttribute('aria-invalid', 'true');
+    expect(field('mm-food')).toHaveAttribute('aria-describedby', 'mm-food-error');
+    expect(field('mm-energyKcal')).toHaveAttribute('aria-invalid', 'true');
+    expect(field('mm-energyKcal')).toHaveAttribute('aria-describedby', 'mm-energyKcal-error');
+  });
 
-    fireEvent.change(name, { target: { value: 'Chicken rice' } });
-    fireEvent.change(kcal, { target: { value: '-1' } });
-    expect(log().disabled).toBe(true);
+  it('clears a field error on the next change to that field only', async () => {
+    await renderDialog();
+    fireEvent.click(log());
 
-    fireEvent.change(kcal, { target: { value: '' } });
-    expect(log().disabled).toBe(true);
+    fireEvent.change(field('mm-food'), { target: { value: 'Chicken rice' } });
+
+    expect(screen.queryByText('Name the meal.')).toBeNull();
+    expect(field('mm-food')).toHaveAttribute('aria-invalid', 'false');
+    expect(screen.getByText('Enter the calories.')).toBeInTheDocument();
+  });
+
+  it('rejects 0, negative and unparseable amounts with the field copy', async () => {
+    const { backend } = await renderDialog();
+    fireEvent.change(field('mm-food'), { target: { value: 'Chicken rice' } });
+
+    fireEvent.change(field('mm-energyKcal'), { target: { value: '0' } });
+    fireEvent.click(log());
+    expect(screen.getByText('Enter the calories.')).toBeInTheDocument();
+
+    fireEvent.change(field('mm-energyKcal'), { target: { value: '-1' } });
+    fireEvent.click(log());
+    expect(screen.getByText('Enter a number, 0 or more.')).toBeInTheDocument();
+
+    fireEvent.change(field('mm-energyKcal'), { target: { value: 'abc' } });
+    fireEvent.click(log());
+    expect(screen.getByText('Enter a number, 0 or more.')).toBeInTheDocument();
+
+    fireEvent.change(field('mm-energyKcal'), { target: { value: '420' } });
+    fireEvent.change(field('mm-proteinG'), { target: { value: '-2' } });
+    fireEvent.click(log());
+    expect(document.activeElement).toBe(field('mm-proteinG'));
+    expect(screen.getByText('Enter a number, 0 or more.')).toBeInTheDocument();
+    expect(backend.logManual).not.toHaveBeenCalled();
   });
 
   it('focuses the first field that needs fixing when submit is attempted', async () => {
@@ -392,6 +422,47 @@ describe('Log meal is gated on the name and calories', () => {
   });
 });
 
+describe('a saved meal re-logs without a confirmation form', () => {
+  it('logs it as saved, spins in place of the star, and disables the other rows', async () => {
+    let release: () => void = () => {};
+    const logManual = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const other = { ...FAVORITE, id: 'f2', label: 'Oat latte' };
+    const { onLogged, onOpenChange } = setup({
+      listFavorites: vi.fn(async () => [FAVORITE, other]),
+      logManual,
+    });
+
+    const row = await screen.findByTitle(LONG);
+    fireEvent.click(row);
+
+    expect(logManual).toHaveBeenCalledWith(FAVORITE.meal);
+    expect(row.querySelector('.animate-spin')).toBeTruthy();
+    expect(screen.getByTitle('Oat latte')).toBeDisabled();
+
+    release();
+    await waitFor(() => expect(onLogged).toHaveBeenCalledTimes(1));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('removes a saved meal at once and puts the row back when the server refuses', async () => {
+    const removeFavorite = vi.fn().mockRejectedValue(new Error('nope'));
+    const { onToast } = setup({ removeFavorite });
+
+    await screen.findByTitle(LONG);
+    fireEvent.click(screen.getByRole('button', { name: `Remove ${LONG}` }));
+
+    // Optimistic: the row leaves now, then returns with the backend's message.
+    await waitFor(() => expect(screen.queryByTitle(LONG)).toBeNull());
+    await waitFor(() => expect(screen.getByTitle(LONG)).toBeInTheDocument());
+    expect(onToast).toHaveBeenCalledWith('error', 'nope');
+  });
+});
+
 describe('the sheet cannot be wider than the screen', () => {
   it('constrains its grid track, so no child can widen the sheet', async () => {
     await renderDialog();
@@ -432,9 +503,9 @@ describe('the sheet cannot be wider than the screen', () => {
 
     const primary = screen.getByRole('button', { name: 'Log meal' });
     const cancel = screen.getByRole('button', { name: 'Cancel' });
-    expect(primary.className).toContain('h-12');
+    expect(primary.className).toContain('h-11');
     expect(primary.className).toContain('w-full');
-    expect(cancel.className).toContain('h-11');
+    expect(cancel.className).toContain('min-h-11');
     expect(cancel.className).toContain('w-full');
   });
 });
