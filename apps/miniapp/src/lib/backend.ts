@@ -200,17 +200,17 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
       },
       async recent() {
         const { meals } = await api.listMeals();
-        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id, { width: 240 })));
+        return meals.map((m) => toRecent(m));
       },
       async mealsByDate(date) {
         const { meals } = await api.listMeals(date);
-        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id, { width: 240 })));
+        return meals.map((m) => toRecent(m));
       },
       async mealsInRange(startKey, endKey) {
         // The server filters to the inclusive [startKey, endKey] local-day range,
         // so the payload is just the week's meals (not the whole history).
         const { meals } = await api.mealsInRange(startKey, endKey);
-        return meals.map((m) => toRecent(m, (id) => api.photoUrl(id, { width: 240 })));
+        return meals.map((m) => toRecent(m));
       },
       mealDates() {
         return api.mealDates();
@@ -634,7 +634,7 @@ export function shortMealTitle(title: string | null | undefined, foodNames: stri
   return `${names[0]} & ${names.length - 1} more`;
 }
 
-function toRecent(m: MealSummary, photoUrl?: (id: string) => string): RecentMeal {
+function toRecent(m: MealSummary): RecentMeal {
   return {
     id: m.id,
     label: shortMealTitle(m.title, m.foods),
@@ -644,7 +644,7 @@ function toRecent(m: MealSummary, photoUrl?: (id: string) => string): RecentMeal
     fatG: m.fatG,
     aiProvider: m.aiProvider,
     when: m.loggedAt,
-    ...(m.hasPhoto && photoUrl ? { previewUrl: photoUrl(m.id) } : {}),
+    ...(m.previewUrl ? { previewUrl: m.previewUrl } : {}),
   };
 }
 

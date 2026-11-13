@@ -1,6 +1,6 @@
 import type { MealResult } from '@snapbite/core';
 import { describe, expect, it, vi } from 'vitest';
-import { ApiClient, ApiError, LOAD_FAILED_MESSAGE } from './api.js';
+import { ApiClient, ApiError, LOAD_FAILED_MESSAGE, type MealSummary } from './api.js';
 
 const meal: MealResult = {
   foods: [
@@ -19,6 +19,26 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+/** The Worker's list shape; `previewUrl` is added by the client, never sent. */
+function mealSummary(over: Partial<MealSummary> = {}): MealSummary {
+  return {
+    id: 'meal-1',
+    loggedAt: 1,
+    title: 'Meal',
+    notes: null,
+    confidence: null,
+    energyKcal: 100,
+    proteinG: 10,
+    carbsG: 20,
+    fatG: 5,
+    source: 'table',
+    aiProvider: 'gemini',
+    foods: ['rice'],
+    hasPhoto: false,
+    ...over,
+  };
 }
 
 describe('ApiClient', () => {
@@ -108,6 +128,37 @@ describe('ApiClient', () => {
     const full = new URL(client.photoUrl('meal-2'));
     expect(full.searchParams.has('w')).toBe(false);
     expect(full.searchParams.get('initData')).toBe('INIT DATA&1');
+  });
+
+  it('adds a 240px previewUrl only to meals that have a photo', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        meals: [
+          mealSummary({ id: 'with-photo', hasPhoto: true }),
+          mealSummary({ id: 'manual', hasPhoto: false }),
+        ],
+        groups: [],
+      }),
+    );
+    const client = new ApiClient('https://api.example.com', () => '', fetchMock);
+
+    const { meals } = await client.listMeals('2026-11-13');
+
+    expect(meals[0]?.previewUrl).toBe('https://api.example.com/api/meal-photo/with-photo?w=240');
+    expect(meals[1]?.previewUrl).toBeUndefined();
+    // Omitted, not `previewUrl: undefined`, so a manual meal asks for nothing.
+    expect(meals[1] && 'previewUrl' in meals[1]).toBe(false);
+  });
+
+  it('maps previewUrl for range meals through the same mapper', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ meals: [mealSummary({ id: 'range-photo', hasPhoto: true })], groups: [] }),
+    );
+    const client = new ApiClient('https://api.example.com', () => '', fetchMock);
+
+    const { meals } = await client.mealsInRange('2026-11-10', '2026-11-13');
+
+    expect(meals[0]?.previewUrl).toBe('https://api.example.com/api/meal-photo/range-photo?w=240');
   });
 
   it('saves a profile via PUT /api/settings/profile', async () => {

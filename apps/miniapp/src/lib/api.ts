@@ -38,6 +38,11 @@ export interface MealSummary {
   aiProvider: string | null;
   foods: string[];
   hasPhoto: boolean;
+  /**
+   * List-thumbnail URL, added by the client mapper below. Omitted when the meal
+   * has no photo so a manual meal never requests a 404.
+   */
+  previewUrl?: string;
 }
 
 export interface DayGroup {
@@ -413,15 +418,27 @@ export class ApiClient {
     });
   }
 
+  /**
+   * The list-row mapper: the one place a meal summary gains its thumbnail URL.
+   * `photoUrl()` stays the single URL builder, so Telegram's initData and the
+   * `?w=240` downscale request are never duplicated here.
+   */
+  #withPreview(meal: MealSummary): MealSummary {
+    return meal.hasPhoto ? { ...meal, previewUrl: this.photoUrl(meal.id, { width: 240 }) } : meal;
+  }
+
   /** List meals; optionally scope to one day (YYYY-MM-DD) for a lighter payload. */
-  listMeals(date?: string): Promise<{ meals: MealSummary[]; groups: DayGroup[] }> {
+  async listMeals(date?: string): Promise<{ meals: MealSummary[]; groups: DayGroup[] }> {
     const params = new URLSearchParams({ tz: String(tzOffsetMinutes()) });
     if (date) params.set('date', date);
-    return this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>(`/api/meals?${params}`);
+    const res = await this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>(
+      `/api/meals?${params}`,
+    );
+    return { ...res, meals: res.meals.map((m) => this.#withPreview(m)) };
   }
 
   /** Meals within an inclusive local-day-key range (server-side filtered). */
-  mealsInRange(
+  async mealsInRange(
     startKey: string,
     endKey: string,
   ): Promise<{ meals: MealSummary[]; groups: DayGroup[] }> {
@@ -430,7 +447,10 @@ export class ApiClient {
       from: startKey,
       to: endKey,
     });
-    return this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>(`/api/meals?${params}`);
+    const res = await this.#request<{ meals: MealSummary[]; groups: DayGroup[] }>(
+      `/api/meals?${params}`,
+    );
+    return { ...res, meals: res.meals.map((m) => this.#withPreview(m)) };
   }
 
   /** Distinct logged days for calendar dots, plus the current streak (2+ days). */

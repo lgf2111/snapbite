@@ -81,12 +81,13 @@ describe('MealThumb', () => {
     }
   });
 
-  it('paints the SnapBite mark inside the placeholder, not an empty grey block', () => {
+  it('paints the Utensils icon inside the placeholder, not an empty grey block', () => {
     render(<MealThumb src={null} />);
-    const mark = screen.getByTestId('meal-thumb-mark');
-    expect(mark.className).toContain('size-7');
-    expect(mark.className).toContain('bg-contain');
-    expect(mark.style.backgroundImage).toContain('/icon-192.png');
+    const icon = screen.getByTestId('meal-thumb-icon');
+    const cls = icon.getAttribute('class') ?? '';
+    expect(cls).toContain('size-4');
+    expect(cls).toContain('text-muted-foreground');
+    expect(icon.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('gives a different url its own chance', () => {
