@@ -18,16 +18,13 @@ function renderDialog(name = 'Chicken rice bowl', onSave = vi.fn()) {
 }
 
 describe('SaveMealDialog', () => {
-  it('disables Save while the name is empty or only whitespace', () => {
+  it('keeps Save meal live for an empty name; the caller supplies the fallback', () => {
     const { rerender, props } = renderDialog('');
-    const save = () => screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    const save = () => screen.getByRole('button', { name: 'Save meal' }) as HTMLButtonElement;
 
-    expect(save().disabled).toBe(true);
+    expect(save().disabled).toBe(false);
 
     rerender(<SaveMealDialog {...props} name="   " />);
-    expect(save().disabled).toBe(true);
-
-    rerender(<SaveMealDialog {...props} name="Chicken rice bowl" />);
     expect(save().disabled).toBe(false);
   });
 
@@ -57,12 +54,12 @@ describe('SaveMealDialog', () => {
     expect(form.className).toContain('gap-4');
     expect(input.closest('[data-slot=dialog-footer]')).toBeNull();
 
-    const actions = screen.getByRole('button', { name: 'Save' }).parentElement as HTMLElement;
+    const actions = screen.getByRole('button', { name: 'Save meal' }).parentElement as HTMLElement;
     expect(actions.dataset.slot).toBe('dialog-actions');
     expect(actions.className).toContain('flex-col');
     expect(actions.className).not.toContain('sticky');
     expect(actions.className).not.toContain('-mt');
-    expect(screen.getByRole('button', { name: 'Save' }).className).toContain('h-12');
+    expect(screen.getByRole('button', { name: 'Save meal' }).className).toContain('h-12');
 
     // jsdom does no layout, so this is the geometry those classes encode at
     // 430×932: field bottom, 16px gap, Save top. The inset ring stays inside
@@ -74,12 +71,12 @@ describe('SaveMealDialog', () => {
     expect(sheet.className).toContain('w-[calc(100%-2rem)]');
   });
 
-  it('renders Cancel as a text button with a 44px target', () => {
+  it('renders Cancel as a 44px text link', () => {
     renderDialog();
     const cancel = screen.getByRole('button', { name: 'Cancel' });
 
-    expect(cancel.className).toContain('h-11');
-    expect(cancel.className).toContain('text-muted-foreground');
+    expect(cancel.className).toContain('min-h-11');
+    expect(cancel.className).toContain('text-primary-text');
     expect(cancel.className).not.toContain('bg-secondary');
     expect(cancel.className).not.toContain('bg-primary');
     expect(cancel.getAttribute('type')).toBe('button');
@@ -102,10 +99,10 @@ describe('SaveMealDialog', () => {
     expect(props.onSave).toHaveBeenCalledTimes(1);
   });
 
-  it('ignores a submit when the name is only whitespace', () => {
+  it('submits a whitespace name too, leaving the fallback label to the caller', () => {
     const onSave = vi.fn();
     renderDialog('   ', onSave);
     fireEvent.submit(screen.getByLabelText('Name').closest('form') as HTMLFormElement);
-    expect(onSave).not.toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 });

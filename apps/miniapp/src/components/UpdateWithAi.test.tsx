@@ -33,8 +33,8 @@ function setup(over: Record<string, unknown> = {}) {
   return { ...view, props, reviseDraft };
 }
 
-const input = () => screen.getByPlaceholderText(/describe the change/i) as HTMLInputElement;
-const apply = () => screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement;
+const input = () => screen.getByPlaceholderText(/describe the change/i) as HTMLTextAreaElement;
+const apply = () => screen.getByRole('button', { name: 'Update meal' }) as HTMLButtonElement;
 
 describe('Update with AI', () => {
   it('autofocuses the instruction when it opens', async () => {
@@ -42,50 +42,51 @@ describe('Update with AI', () => {
     await waitFor(() => expect(document.activeElement).toBe(input()));
   });
 
-  it('keeps Apply disabled until the instruction is at least three characters', () => {
-    setup();
-    expect(apply().disabled).toBe(true);
-
-    fireEvent.change(input(), { target: { value: '  ' } });
-    expect(apply().disabled).toBe(true);
-
-    fireEvent.change(input(), { target: { value: 'ab' } });
-    expect(apply().disabled).toBe(true);
-
-    fireEvent.change(input(), { target: { value: ' add a coke ' } });
+  it('keeps Update meal live and focuses the field when the instruction is too short', () => {
+    const { reviseDraft } = setup();
     expect(apply().disabled).toBe(false);
 
-    fireEvent.change(input(), { target: { value: '   ' } });
-    expect(apply().disabled).toBe(true);
+    fireEvent.click(apply());
+    expect(reviseDraft).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(input());
+
+    fireEvent.change(input(), { target: { value: 'ab' } });
+    fireEvent.click(apply());
+    expect(reviseDraft).not.toHaveBeenCalled();
+
+    fireEvent.change(input(), { target: { value: ' add a coke ' } });
+    fireEvent.click(apply());
+    return waitFor(() => expect(reviseDraft).toHaveBeenCalledWith('m1', 'add a coke'));
   });
 
-  it('submits from Enter only when the instruction is valid', async () => {
+  it('leaves Enter in the textarea for new lines; the button submits', async () => {
     const { reviseDraft } = setup();
+    fireEvent.change(input(), { target: { value: 'the rice was double' } });
+
     fireEvent.keyDown(input(), { key: 'Enter' });
     expect(reviseDraft).not.toHaveBeenCalled();
 
-    fireEvent.change(input(), { target: { value: 'the rice was double' } });
-    fireEvent.keyDown(input(), { key: 'Enter' });
+    fireEvent.click(apply());
     await waitFor(() => expect(reviseDraft).toHaveBeenCalledWith('m1', 'the rice was double'));
   });
 
-  it('shows a one-line hint of the shape that works', () => {
+  it('labels the field Change and explains the shape that works', () => {
     setup();
-    const hint = screen.getByText(/Try "add a can of coke"/i);
-    expect(hint.className).toContain('text-caption');
-    expect(hint.className).toContain('text-muted-foreground');
-    expect(hint.textContent).toContain('the rice was double');
+    const field = input();
+    expect(screen.getByLabelText('Change')).toBe(field);
+    expect(screen.getByText(/for example "add a can of coke"/i)).toBeTruthy();
+    expect(screen.getByText(/Review the result before saving/i)).toBeTruthy();
   });
 
-  it('standardises the actions: 48px primary over a 44px text Cancel', () => {
+  it('standardises the actions: 48px primary over a 44px text link', () => {
     setup();
     const cancel = screen.getByRole('button', { name: 'Cancel' });
 
     expect(apply().className).toContain('h-12');
     expect(apply().className).toContain('w-full');
-    expect(cancel.className).toContain('h-11');
+    expect(cancel.className).toContain('min-h-11');
     expect(cancel.className).toContain('w-full');
-    expect(cancel.className).toContain('text-muted-foreground');
+    expect(cancel.className).toContain('text-primary-text');
     expect(cancel.className).not.toContain('bg-secondary');
 
     const actions = apply().parentElement as HTMLElement;

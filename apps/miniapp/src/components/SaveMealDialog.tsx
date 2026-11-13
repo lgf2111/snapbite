@@ -31,7 +31,6 @@ interface Props {
  */
 export function SaveMealDialog({ open, name, saving, onNameChange, onOpenChange, onSave }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const valid = name.trim().length > 0;
 
   return (
     <Dialog open={open} onOpenChange={(next) => (saving ? null : onOpenChange(next))}>
@@ -51,7 +50,7 @@ export function SaveMealDialog({ open, name, saving, onNameChange, onOpenChange,
           className="grid gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            if (valid && !saving) onSave();
+            if (!saving) onSave();
           }}
         >
           <div className="grid gap-2">
@@ -67,19 +66,18 @@ export function SaveMealDialog({ open, name, saving, onNameChange, onOpenChange,
               autoCapitalize="sentences"
               spellCheck={false}
               enterKeyHint="done"
-              className="h-11"
               onChange={(event) => onNameChange(event.target.value)}
             />
           </div>
 
           <DialogActions>
-            <Button type="submit" className="h-12 w-full" disabled={saving || !valid}>
-              {saving ? 'Saving…' : 'Save'}
+            <Button type="submit" className="h-12 w-full" disabled={saving}>
+              {saving ? 'Saving…' : 'Save meal'}
             </Button>
             <Button
               type="button"
-              variant="ghost"
-              className="text-muted-foreground h-11 w-full"
+              variant="link"
+              className="w-full"
               disabled={saving}
               onClick={() => onOpenChange(false)}
             >
