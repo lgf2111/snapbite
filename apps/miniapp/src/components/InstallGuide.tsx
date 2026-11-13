@@ -63,16 +63,16 @@ export function InstallGuide() {
   const ios = platform === 'ios';
 
   return (
-    <Card data-testid="install-guide" className="gap-0 p-0">
+    <Card data-testid="install-guide" className="gap-0 rounded-surface border-border p-0">
       <div className="flex items-center gap-1 pr-1">
         <button
           type="button"
           aria-expanded={expanded}
           aria-controls="install-guide-body"
           onClick={() => setExpanded((v) => !v)}
-          className="text-caption flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-control px-4 text-left focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="text-caption flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-control px-4 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          <Smartphone className="text-primary-text size-4 shrink-0" aria-hidden />
+          <Smartphone className="text-foreground size-4 shrink-0" aria-hidden />
           <span className="min-w-0 flex-1 font-medium">Install SnapBite on your phone</span>
           <ChevronDown
             className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${expanded ? 'rotate-180' : ''}`}
@@ -96,7 +96,7 @@ export function InstallGuide() {
               {!isIosSafari() && <p>These steps are for Safari. Open this page in Safari first.</p>}
               <ol className="flex list-decimal flex-col gap-1.5 pl-5">
                 <li>
-                  Tap the Share button at the bottom of Safari — the square with an arrow pointing
+                  Tap the Share button at the bottom of Safari: the square with an arrow pointing
                   up.
                 </li>
                 <li>Scroll down and tap Add to Home Screen, then Add.</li>
