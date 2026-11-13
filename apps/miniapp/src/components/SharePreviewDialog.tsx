@@ -1,7 +1,12 @@
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import type { MealShareCardInput } from '@/lib/shareCard';
-import { Share2 } from 'lucide-react';
 import { ShareCard } from './ShareCard.js';
 
 interface Props {
@@ -25,7 +30,7 @@ interface Props {
 export function SharePreviewDialog({ open, onOpenChange, card, sharing, onShare }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent hideClose className="gap-0 rounded-surface p-0">
+      <DialogContent variant="sheet" hideClose className="gap-0 p-0">
         <DialogTitle className="sr-only">Share this meal</DialogTitle>
         <DialogDescription className="sr-only">
           Preview your meal card, then share it.
@@ -33,21 +38,20 @@ export function SharePreviewDialog({ open, onOpenChange, card, sharing, onShare 
 
         <ShareCard {...card} />
 
-        <div className="border-border border-t p-4">
-          <Button className="h-12 w-full gap-2" onClick={onShare} disabled={sharing}>
-            <Share2 className="size-4" aria-hidden />
-            {sharing ? 'Sharing…' : 'Share'}
+        <DialogFooter className="border-t border-border p-4">
+          <Button className="h-12 w-full" onClick={onShare} disabled={sharing}>
+            {sharing ? 'Sharing…' : 'Share meal'}
           </Button>
-          {/* A text action, not a second slab: transparent at rest, 44 px tall. */}
+          {/* A text action, not a second slab: 44px tall and full width. */}
           <Button
-            variant="ghost"
-            className="text-muted-foreground mt-2 h-11 w-full"
+            variant="link"
+            className="w-full"
             onClick={() => onOpenChange(false)}
             disabled={sharing}
           >
             Cancel
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

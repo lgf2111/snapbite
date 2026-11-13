@@ -600,7 +600,7 @@ describe('HomeScreen', () => {
     // Describe the change and apply.
     const input = await screen.findByPlaceholderText(/describe the change/i);
     await userEvent.type(input, 'the portion was double');
-    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Update meal' }));
 
     await waitFor(() => expect(reviseDraft).toHaveBeenCalledWith('x', 'the portion was double'));
     await waitFor(() => expect(update).toHaveBeenCalledWith('x', draft));

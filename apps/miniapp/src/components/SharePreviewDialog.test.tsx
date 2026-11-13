@@ -40,15 +40,15 @@ describe('SharePreviewDialog', () => {
 
     expect(screen.getByTestId('share-card')).toBeTruthy();
 
-    const share = screen.getByRole('button', { name: 'Share' });
+    const share = screen.getByRole('button', { name: 'Share meal' });
     expect(share.className).toContain('h-12');
     expect(share.className).toContain('w-full');
 
     const cancel = screen.getByRole('button', { name: 'Cancel' });
-    // Ghost at rest: no filled slab competing with the primary action.
-    expect(cancel.className).toContain('h-11');
+    // A text link: no filled slab competing with the primary action.
+    expect(cancel.className).toContain('min-h-11');
     expect(cancel.className).toContain('w-full');
-    expect(cancel.className).toContain('text-muted-foreground');
+    expect(cancel.className).toContain('text-primary-text');
     expect(cancel.className).not.toContain('bg-secondary');
     expect(cancel.className).not.toContain('bg-primary');
 
@@ -67,7 +67,8 @@ describe('SharePreviewDialog', () => {
 
     expect(sheet.className).toContain('p-0');
     expect(sheet.className).toContain('gap-0');
-    expect(sheet.className).toContain('rounded-surface');
+    expect(sheet.className).toContain('rounded-t-surface');
+    expect(sheet.className).toContain('rounded-b-none');
     expect(sheet.className).toContain('border');
     expect(sheet.className).toContain('bg-card');
     // The card itself is flush with the sheet, with no border of its own.
@@ -81,7 +82,7 @@ describe('SharePreviewDialog', () => {
     const sheet = document.querySelector('[data-slot=dialog-content]') as HTMLElement;
     // The sheet can never exceed the viewport, and it is width-bounded.
     expect(sheet.className).toContain('max-h-');
-    expect(sheet.className).toContain('max-w-sm');
+    expect(sheet.className).toContain('max-w-md');
     expect(sheet.className).toContain('w-[calc(100%-2rem)]');
 
     /*

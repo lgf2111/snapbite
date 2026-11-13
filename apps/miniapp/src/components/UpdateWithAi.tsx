@@ -7,11 +7,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import type { Backend } from '@/lib/backend';
 import { hapticNotify } from '@/lib/telegram';
 import type { MealResult } from '@snapbite/core';
-import { Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 type ToastKind = 'success' | 'error' | 'info';
@@ -51,7 +51,7 @@ export function ReviseWithAiDialog({
   const [text, setText] = useState(initialInstruction);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const instruction = text.trim();
   /** A one-word instruction is not enough to revise a meal. */
   const valid = instruction.length >= 3;
@@ -83,13 +83,17 @@ export function ReviseWithAiDialog({
   }, [busy]);
 
   async function submit() {
-    if (!valid || busy) return;
+    if (busy) return;
+    if (!valid) {
+      inputRef.current?.focus();
+      return;
+    }
     setBusy(true);
     try {
       const { notice, ...revised } = await backend.reviseDraft(mealId, instruction);
       if (notice) onCreditNotice?.(notice);
       hapticNotify('success');
-      onToast?.('success', 'Applied — review and save');
+      onToast?.('success', 'Applied. Review, then save.');
       onDraft(revised);
       onOpenChange(false);
       setText('');
@@ -112,8 +116,8 @@ export function ReviseWithAiDialog({
         <DialogHeader>
           <DialogTitle>Update with AI</DialogTitle>
           <DialogDescription>
-            Describe the change in plain words — e.g. "add a can of coke", "the rice was double", or
-            "remove the fries". You'll review the result before saving.
+            Describe the change in plain words, for example "add a can of coke", "the rice was
+            double", or "remove the fries". Review the result before saving.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -123,46 +127,32 @@ export function ReviseWithAiDialog({
             void submit();
           }}
         >
-          <div className="grid gap-2">
-            <Input
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ai-change">Change</Label>
+            <Textarea
+              id="ai-change"
               ref={inputRef}
               placeholder="Describe the change…"
               value={text}
               maxLength={500}
               disabled={busy}
-              enterKeyHint="send"
+              className="min-h-24"
               onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
-                e.preventDefault();
-                if (valid) void submit();
-              }}
             />
-            <p className="text-caption text-muted-foreground">
-              Try "add a can of coke" · "the rice was double".
-            </p>
           </div>
           {busy && (
-            <p className="text-muted-foreground flex items-center gap-2 text-sm" aria-live="polite">
-              <Loader2 className="size-4 animate-spin" />
+            <p className="text-muted-foreground text-caption" aria-live="polite">
               {status}
             </p>
           )}
           <DialogActions>
-            <Button type="submit" className="h-12 w-full" disabled={busy || !valid}>
-              {busy ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Updating…
-                </>
-              ) : (
-                'Apply'
-              )}
+            <Button type="submit" className="h-12 w-full" disabled={busy}>
+              {busy ? 'Updating…' : 'Update meal'}
             </Button>
             <Button
               type="button"
-              variant="ghost"
-              className="text-muted-foreground h-11 w-full"
+              variant="link"
+              className="w-full"
               disabled={busy}
               onClick={() => onOpenChange(false)}
             >

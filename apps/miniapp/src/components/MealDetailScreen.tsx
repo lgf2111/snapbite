@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -9,6 +8,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { MealDetail } from '@/lib/api';
 import { type Backend, type RecentMeal, shortMealTitle } from '@/lib/backend';
 import { getCached, setCached } from '@/lib/cache';
@@ -189,7 +190,13 @@ export function MealDetailScreen({
         apply(d);
       })
       .catch((e: unknown) => {
-        if (!cached) setError(e instanceof Error ? e.message : 'Failed to load');
+        if (!cached) {
+          setError(
+            e instanceof Error && e.message
+              ? e.message
+              : "Couldn't load this meal. Close it and open it again.",
+          );
+        }
       });
   }, [backend, mealId]);
 
@@ -469,13 +476,26 @@ export function MealDetailScreen({
         </Button>
       </div>
 
-      {error && <p className="text-destructive text-caption">{error}</p>}
-      {!detail && !error && <p className="text-muted-foreground text-caption">Loading…</p>}
+      {error && (
+        <p role="alert" className="text-destructive text-caption">
+          {error}
+        </p>
+      )}
+      {!detail && !error && (
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-40 w-full rounded-control" />
+          <Skeleton className="h-20 w-full rounded-control" />
+          <Skeleton className="h-20 w-full rounded-control" />
+        </div>
+      )}
 
       {detail && (
         <>
           <p className="text-muted-foreground text-caption">
-            {new Date(detail.loggedAt).toLocaleString()}
+            {new Date(detail.loggedAt).toLocaleString(undefined, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            })}
             {detail.aiProvider
               ? ` · analyzed by ${PROVIDER_LABEL[detail.aiProvider] ?? detail.aiProvider}`
               : ''}
@@ -484,7 +504,7 @@ export function MealDetailScreen({
             <img
               src={backend.photoUrl(mealId) as string}
               alt="Meal"
-              className="w-full rounded-surface border object-cover"
+              className="w-full rounded-surface border border-border object-cover"
             />
           )}
 
@@ -497,9 +517,7 @@ export function MealDetailScreen({
               aria-pressed={savedFavId !== null}
               onClick={onToggleFavorite}
             >
-              <Star
-                className={cn('size-4', savedFavId !== null && 'fill-current text-primary-text')}
-              />
+              <Star className={cn('size-4', savedFavId !== null && 'fill-current')} />
               {savedFavId !== null ? 'Saved' : 'Save meal'}
             </Button>
             <Button variant="secondary" className="flex-1 gap-2" onClick={openCardPreview}>
@@ -508,102 +526,102 @@ export function MealDetailScreen({
             </Button>
           </div>
 
-          <Card>
-            <CardContent className="flex flex-col gap-4">
-              {foods.map((food, i) => {
-                const nutrition = resolvedByFood.get(food) ??
-                  resolveFoodNutrition(food) ?? {
-                    energyKcal: 0,
-                    proteinG: 0,
-                    carbsG: 0,
-                    fatG: 0,
-                  };
-                const removing = Boolean(food.pendingRemove);
-                return (
-                  <div
-                    // Draft foods have no stable id (built from editable name/macros)
-                    // and the list is edited in place, so the index is the stable key.
-                    // biome-ignore lint/suspicious/noArrayIndexKey: no stable id on draft foods
-                    key={i}
-                    className={cn(
-                      'flex flex-col gap-2 border-b pb-3 last:border-b-0 last:pb-0',
-                      removing && 'opacity-50',
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Input
-                        aria-label={`Food ${i + 1} name`}
-                        value={food.name}
-                        disabled={removing}
-                        onChange={(e) => updateFood(i, { name: e.target.value })}
-                        className={cn('font-medium', removing && 'line-through')}
-                      />
-                      {removing ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Keep food ${i + 1}`}
-                          onClick={() => toggleRemove(i)}
-                        >
-                          <RotateCcw className="size-4" />
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Remove food ${i + 1}`}
-                          onClick={() => toggleRemove(i)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      )}
-                    </div>
+          <div className="divide-border flex flex-col divide-y">
+            {foods.map((food, i) => {
+              const nutrition = resolvedByFood.get(food) ??
+                resolveFoodNutrition(food) ?? {
+                  energyKcal: 0,
+                  proteinG: 0,
+                  carbsG: 0,
+                  fatG: 0,
+                };
+              const removing = Boolean(food.pendingRemove);
+              return (
+                <div
+                  // Draft foods have no stable id (built from editable name/macros)
+                  // and the list is edited in place, so the index is the stable key.
+                  // biome-ignore lint/suspicious/noArrayIndexKey: no stable id on draft foods
+                  key={i}
+                  className={cn('flex flex-col gap-3 py-3', removing && 'opacity-50')}
+                >
+                  <div className="flex items-center gap-2">
+                    <Input
+                      aria-label={`Food ${i + 1} name`}
+                      value={food.name}
+                      disabled={removing}
+                      onChange={(e) => updateFood(i, { name: e.target.value })}
+                      className={cn('min-w-0 flex-1 font-medium', removing && 'line-through')}
+                    />
                     {removing ? (
-                      <p className="text-muted-foreground text-caption">
-                        Will be removed when you save.
-                      </p>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Keep food ${i + 1}`}
+                        onClick={() => toggleRemove(i)}
+                      >
+                        <RotateCcw className="size-4" />
+                      </Button>
                     ) : (
-                      <div className="flex flex-wrap items-center gap-2">
-                        {macroFields.map(({ key, label, suffix }) => {
-                          const id = `food-${i}-${key}`;
-                          return (
-                            <label
-                              key={key}
-                              htmlFor={id}
-                              className="text-caption flex items-center gap-1 whitespace-nowrap"
-                            >
-                              <span className="text-muted-foreground">{label}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Remove food ${i + 1}`}
+                        onClick={() => toggleRemove(i)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    )}
+                  </div>
+                  {removing ? (
+                    <p className="text-muted-foreground text-caption">
+                      Will be removed when you save.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                      {macroFields.map(({ key, label, suffix }) => {
+                        const id = `food-${i}-${key}`;
+                        return (
+                          <div key={key} className="flex min-w-0 flex-col gap-1.5">
+                            <Label htmlFor={id} className="text-muted-foreground">
+                              {label}
+                            </Label>
+                            <div className="relative">
                               <Input
                                 id={id}
                                 aria-label={`Food ${i + 1} ${label.toLowerCase()}`}
-                                type="number"
-                                min={0}
+                                type="text"
+                                inputMode="decimal"
                                 value={nutrition[key]}
                                 onChange={(e) => setMacro(i, key, Number(e.target.value) || 0)}
-                                className="h-8 w-16 px-2"
+                                className="tabular pr-12"
                               />
-                              <span className="text-muted-foreground">{suffix}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                              <span
+                                aria-hidden
+                                className="text-muted-foreground text-caption pointer-events-none absolute inset-y-0 right-3 flex items-center"
+                              >
+                                {suffix}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
-              <MealTotals
-                energyKcal={resolved.total.energyKcal}
-                proteinG={resolved.total.proteinG}
-                carbsG={resolved.total.carbsG}
-                fatG={resolved.total.fatG}
-                source={sourceLabel(resolved.total.source)}
-              />
-            </CardContent>
-          </Card>
+          <MealTotals
+            energyKcal={resolved.total.energyKcal}
+            proteinG={resolved.total.proteinG}
+            carbsG={resolved.total.carbsG}
+            fatG={resolved.total.fatG}
+            source={sourceLabel(resolved.total.source)}
+          />
 
-          <Button variant="secondary" className="gap-2" onClick={() => setAiOpen(true)}>
-            <Sparkles className="text-primary-text size-4" /> Update with AI
+          <Button variant="secondary" className="w-full gap-2" onClick={() => setAiOpen(true)}>
+            <Sparkles className="size-4" /> Update with AI
           </Button>
 
           <ReviseWithAiDialog
@@ -626,14 +644,14 @@ export function MealDetailScreen({
           )}
 
           <Button
-            variant="ghost"
+            variant="link"
             className="text-destructive w-full"
             onClick={() => {
               hapticImpact('medium');
               setConfirmDelete(true);
             }}
           >
-            <Trash2 className="size-4" /> Delete meal
+            Delete meal
           </Button>
 
           <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
@@ -643,15 +661,15 @@ export function MealDetailScreen({
                 <DialogDescription>This can't be undone.</DialogDescription>
               </DialogHeader>
               <DialogFooter>
+                <Button variant="destructive" disabled={busy !== null} onClick={handleDelete}>
+                  {busy === 'deleting' ? 'Deleting…' : 'Delete meal'}
+                </Button>
                 <Button
                   variant="secondary"
                   disabled={busy !== null}
                   onClick={() => setConfirmDelete(false)}
                 >
                   Cancel
-                </Button>
-                <Button variant="destructive" disabled={busy !== null} onClick={handleDelete}>
-                  {busy === 'deleting' ? 'Deleting…' : 'Delete'}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -685,11 +703,11 @@ export function MealDetailScreen({
                 <DialogDescription>Your unsaved edits will be lost.</DialogDescription>
               </DialogHeader>
               <DialogFooter>
+                <Button variant="destructive" onClick={onBack}>
+                  Discard changes
+                </Button>
                 <Button variant="secondary" onClick={() => setConfirmDiscard(false)}>
                   Keep editing
-                </Button>
-                <Button variant="destructive" onClick={onBack}>
-                  Discard
                 </Button>
               </DialogFooter>
             </DialogContent>
