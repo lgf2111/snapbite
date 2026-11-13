@@ -1,7 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TOAST_OFFSET, Toaster } from './sonner.js';
+
+const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
 
 afterEach(() => {
   cleanup();
@@ -34,6 +38,38 @@ describe('Toaster placement', () => {
       expect(style).toContain(`${prefix}-right: ${TOAST_OFFSET.right}`);
     }
     expect(container).toBeTruthy();
+  });
+});
+
+describe('Toaster styling', () => {
+  it('draws the toast on the level-2 surface and the action in brand text', async () => {
+    render(<Toaster />);
+    act(() => {
+      toast('Meal deleted', { action: { label: 'Undo', onClick: () => {} } });
+    });
+
+    const message = await screen.findByText('Meal deleted');
+    const li = message.closest('[data-sonner-toast]') as HTMLElement;
+    const style = li.getAttribute('style') ?? '';
+    expect(style).toContain('var(--card)');
+    expect(style).toContain('var(--radius-surface)');
+    expect(style).toContain('var(--lift)');
+
+    const action = within(li).getByRole('button', { name: 'Undo' });
+    expect(action.style.color).toBe('var(--primary-text)');
+    expect(action.style.fontWeight).toBe('500');
+  });
+
+  it('names an error in words, with no red glyph', async () => {
+    render(<Toaster />);
+    act(() => {
+      toast.error('Could not delete');
+    });
+
+    await screen.findByText('Could not delete');
+    expect(css).toMatch(
+      /\[data-sonner-toast\]\[data-type="error"\] \[data-icon\]\s*\{\s*display: none;/,
+    );
   });
 });
 

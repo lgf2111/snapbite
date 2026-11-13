@@ -383,6 +383,11 @@ body {
   padding-right: 48px;
 }
 
+/* An error is named in the message; a red glyph would be a second signal. */
+[data-sonner-toast][data-type="error"] [data-icon] {
+  display: none;
+}
+
 /* No sliding: a dismissed toast is simply removed. */
 @media (prefers-reduced-motion: reduce) {
   [data-sonner-toast],
