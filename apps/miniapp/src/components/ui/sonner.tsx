@@ -77,12 +77,18 @@ function Toaster(props: ToasterProps) {
           width: `min(24rem, calc(100vw - ${TOAST_OFFSET.left} - ${TOAST_OFFSET.right}))`,
         }}
         toastOptions={{
+          actionButtonStyle: {
+            color: 'var(--primary-text)',
+            fontWeight: 500,
+          },
           style: {
             background: 'var(--card)',
             color: 'var(--foreground)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-surface)',
             boxShadow: 'var(--lift)',
+            fontSize: '1rem',
+            lineHeight: 1.45,
             // Fill the list above (sonner's narrow-screen width subtracts the
             // offsets a second time).
             width: '100%',
