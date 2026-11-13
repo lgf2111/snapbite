@@ -49,26 +49,24 @@ export function ShareCard({ photoUrl, title, calories, proteinG, carbsG, fatG }:
         ) : (
           // No photo is a plain panel with the wordmark, never a broken frame.
           <div className="flex size-full items-center justify-center gap-2.5">
-            <img src="/icon.png" alt="" className="size-10 rounded-full" />
-            <span className="text-base font-bold">SnapBite</span>
+            <img src="/icon.png" alt="" className="size-10 rounded-control" />
+            <span className="text-body font-semibold">SnapBite</span>
           </div>
         )}
 
         {photoUrl && (
-          <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-control bg-black/40 py-1 pr-2.5 pl-1 text-white backdrop-blur-sm">
-            <img src="/icon.png" alt="" className="size-5 rounded-full" />
-            <span className="text-[0.6875rem] font-bold tracking-tight">SnapBite</span>
+          <div className="bg-background text-foreground absolute top-3 left-3 flex items-center gap-1.5 rounded-control py-1 pr-2.5 pl-1">
+            <img src="/icon.png" alt="" className="size-5 rounded-control" />
+            <span className="text-caption font-semibold">SnapBite</span>
           </div>
         )}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col px-4 pt-3 pb-3">
-        <h3 className="truncate text-base leading-tight font-semibold">{cleanTitle(title)}</h3>
+        <h3 className="text-body truncate font-medium">{cleanTitle(title)}</h3>
 
         <p className="mt-2 flex items-baseline gap-1.5">
-          <span className="font-display tabular text-[2rem] leading-none">
-            {Math.round(calories)}
-          </span>
+          <span className="font-display tabular text-numeral">{Math.round(calories)}</span>
           <span className="text-caption text-muted-foreground">kcal</span>
         </p>
 
@@ -76,7 +74,7 @@ export function ShareCard({ photoUrl, title, calories, proteinG, carbsG, fatG }:
           {macros.map(([label, grams]) => (
             <div key={label} className="min-w-0 text-center">
               <dt className="text-caption text-muted-foreground">{label}</dt>
-              <dd className="tabular mt-1 text-sm font-semibold">{Math.round(grams)}g</dd>
+              <dd className="tabular text-body mt-1 font-medium">{Math.round(grams)}g</dd>
             </div>
           ))}
         </dl>
