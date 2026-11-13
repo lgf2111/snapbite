@@ -182,6 +182,54 @@ export interface AdvancedReportInput {
   target: ReportTarget | null;
 }
 
+/** One local day's totals, already summed by the database. */
+export interface ReportDayAggregate {
+  dayKey: string;
+  energyKcal: number;
+  proteinG: number;
+  meals: number;
+}
+
+/** Meals and kcal for one local hour, already counted by the database. */
+export interface ReportHourAggregate {
+  /** Local hour, 0–23. */
+  hour: number;
+  meals: number;
+  energyKcal: number;
+}
+
+/** Meals containing one dish, already grouped by the database. */
+export interface ReportDishAggregate {
+  name: string;
+  meals: number;
+}
+
+/**
+ * First and last observed portion for one dish. The database provides the
+ * endpoints and the observation count; the report derives the drift.
+ */
+export interface ReportPortionAggregate {
+  name: string;
+  firstWeightG: number;
+  lastWeightG: number;
+  observations: number;
+}
+
+/**
+ * A report built from rows the database already grouped. Every aggregate must
+ * already be scoped to the report range (and to the user's timezone) so this
+ * stays a pure assembly step.
+ */
+export interface AdvancedReportAggregateInput {
+  range: ReportRange;
+  todayKey: string;
+  days: readonly ReportDayAggregate[];
+  hours: readonly ReportHourAggregate[];
+  dishes: readonly ReportDishAggregate[];
+  portions: readonly ReportPortionAggregate[];
+  target: ReportTarget | null;
+}
+
 const round = (n: number) => Math.round(n);
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -375,7 +423,7 @@ function weekdayPattern(days: Map<string, DayAggregate>): ReportWeekday[] {
   }));
 }
 
-function timeOfDayPattern(meals: readonly ReportMeal[]): ReportTimeOfDay[] {
+function timeOfDayPattern(hours: readonly ReportHourAggregate[]): ReportTimeOfDay[] {
   const buckets: Array<Omit<ReportTimeOfDay, 'sharePct' | 'avgKcal'> & { kcal: number }> = [
     { bucket: 'morning', label: 'Morning · 5–11', meals: 0, kcal: 0 },
     { bucket: 'afternoon', label: 'Afternoon · 11–17', meals: 0, kcal: 0 },
@@ -383,22 +431,22 @@ function timeOfDayPattern(meals: readonly ReportMeal[]): ReportTimeOfDay[] {
     { bucket: 'night', label: 'Night · 22–5', meals: 0, kcal: 0 },
   ];
 
-  for (const meal of meals) {
+  for (const row of hours) {
     const index =
-      meal.hour >= 5 && meal.hour < 11
+      row.hour >= 5 && row.hour < 11
         ? 0
-        : meal.hour >= 11 && meal.hour < 17
+        : row.hour >= 11 && row.hour < 17
           ? 1
-          : meal.hour >= 17 && meal.hour < 22
+          : row.hour >= 17 && row.hour < 22
             ? 2
             : 3;
     const bucket = buckets[index];
     if (!bucket) continue;
-    bucket.meals += 1;
-    bucket.kcal += meal.energyKcal;
+    bucket.meals += row.meals;
+    bucket.kcal += row.energyKcal;
   }
 
-  const total = meals.length;
+  const total = hours.reduce((sum, row) => sum + row.meals, 0);
   return buckets.map(({ bucket, label, meals: count, kcal }) => ({
     bucket,
     label,
@@ -408,65 +456,36 @@ function timeOfDayPattern(meals: readonly ReportMeal[]): ReportTimeOfDay[] {
   }));
 }
 
-function dishFrequency(meals: readonly ReportMeal[]): ReportDish[] {
-  const names = new Map<string, string>();
-  const counts = new Map<string, number>();
-
-  for (const meal of meals) {
-    const seen = new Set<string>();
-    for (const food of meal.foods) {
-      const key = normalizeFood(food.name);
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      if (!names.has(key)) names.set(key, food.name.trim());
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-  }
-
-  const total = meals.length;
-  return [...counts.entries()]
-    .map(([key, count]) => ({
-      name: names.get(key) ?? key,
-      meals: count,
-      sharePct: total > 0 ? round((count / total) * 100) : 0,
+function dishFrequency(dishes: readonly ReportDishAggregate[], totalMeals: number): ReportDish[] {
+  return dishes
+    .map((dish) => ({
+      name: dish.name,
+      meals: dish.meals,
+      sharePct: totalMeals > 0 ? round((dish.meals / totalMeals) * 100) : 0,
     }))
     .sort((a, b) => (b.meals !== a.meals ? b.meals - a.meals : a.name < b.name ? -1 : 1))
     .slice(0, 8);
 }
 
-function portionDrift(meals: readonly ReportMeal[]): ReportPortionDrift[] {
-  const names = new Map<string, string>();
-  const points = new Map<string, Array<{ loggedAt: number; weightG: number }>>();
-
-  for (const meal of meals) {
-    for (const food of meal.foods) {
-      const key = normalizeFood(food.name);
-      if (!key || food.weightG == null || !(food.weightG > 0)) continue;
-      if (!names.has(key)) names.set(key, food.name.trim());
-      const list = points.get(key) ?? [];
-      list.push({ loggedAt: meal.loggedAt, weightG: food.weightG });
-      points.set(key, list);
-    }
-  }
-
+function portionDrift(portions: readonly ReportPortionAggregate[]): ReportPortionDrift[] {
   const drift: ReportPortionDrift[] = [];
-  for (const [key, list] of points) {
-    if (list.length < 3) continue;
-    list.sort((a, b) => a.loggedAt - b.loggedAt);
-    const first = list[0];
-    const last = list[list.length - 1];
-    if (!first || !last || first.weightG <= 0) continue;
 
-    const deltaPct = round(((last.weightG - first.weightG) / first.weightG) * 100);
+  for (const portion of portions) {
+    if (portion.observations < 3) continue;
+    if (!(portion.firstWeightG > 0)) continue;
+
+    const deltaPct = round(
+      ((portion.lastWeightG - portion.firstWeightG) / portion.firstWeightG) * 100,
+    );
     if (Math.abs(deltaPct) < 5) continue;
 
     drift.push({
-      name: names.get(key) ?? key,
-      firstWeightG: round1(first.weightG),
-      lastWeightG: round1(last.weightG),
-      deltaG: round1(last.weightG - first.weightG),
+      name: portion.name,
+      firstWeightG: round1(portion.firstWeightG),
+      lastWeightG: round1(portion.lastWeightG),
+      deltaG: round1(portion.lastWeightG - portion.firstWeightG),
       deltaPct,
-      observations: list.length,
+      observations: portion.observations,
     });
   }
 
@@ -582,7 +601,7 @@ function reportCard(
   };
 }
 
-function reportTotals(meals: readonly ReportMeal[], days: Map<string, DayAggregate>): ReportTotals {
+function reportTotals(mealCount: number, days: Map<string, DayAggregate>): ReportTotals {
   let sumKcal = 0;
   let sumProtein = 0;
   for (const day of days.values()) {
@@ -591,12 +610,76 @@ function reportTotals(meals: readonly ReportMeal[], days: Map<string, DayAggrega
   }
   const loggedDays = days.size;
   return {
-    meals: meals.length,
+    meals: mealCount,
     loggedDays,
     avgKcalPerLoggedDay: loggedDays > 0 ? round(sumKcal / loggedDays) : 0,
     avgProteinPerLoggedDay: loggedDays > 0 ? round(sumProtein / loggedDays) : 0,
-    avgMealsPerLoggedDay: loggedDays > 0 ? round1(meals.length / loggedDays) : 0,
+    avgMealsPerLoggedDay: loggedDays > 0 ? round1(mealCount / loggedDays) : 0,
   };
+}
+
+function daysFromMeals(meals: readonly ReportMeal[]): ReportDayAggregate[] {
+  return [...aggregateDays(meals)].map(([dayKey, day]) => ({ dayKey, ...day }));
+}
+
+function hoursFromMeals(meals: readonly ReportMeal[]): ReportHourAggregate[] {
+  const byHour = new Map<number, { meals: number; energyKcal: number }>();
+  for (const meal of meals) {
+    const hour = byHour.get(meal.hour) ?? { meals: 0, energyKcal: 0 };
+    hour.meals += 1;
+    hour.energyKcal += meal.energyKcal;
+    byHour.set(meal.hour, hour);
+  }
+  return [...byHour].map(([hour, aggregate]) => ({ hour, ...aggregate }));
+}
+
+function dishesFromMeals(meals: readonly ReportMeal[]): ReportDishAggregate[] {
+  const names = new Map<string, string>();
+  const counts = new Map<string, number>();
+
+  for (const meal of meals) {
+    const seen = new Set<string>();
+    for (const food of meal.foods) {
+      const key = normalizeFood(food.name);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      if (!names.has(key)) names.set(key, food.name.trim());
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+
+  return [...counts.entries()].map(([key, count]) => ({
+    name: names.get(key) ?? key,
+    meals: count,
+  }));
+}
+
+function portionsFromMeals(meals: readonly ReportMeal[]): ReportPortionAggregate[] {
+  const names = new Map<string, string>();
+  const points = new Map<string, Array<{ loggedAt: number; weightG: number }>>();
+
+  for (const meal of meals) {
+    for (const food of meal.foods) {
+      const key = normalizeFood(food.name);
+      if (!key || food.weightG == null || !(food.weightG > 0)) continue;
+      if (!names.has(key)) names.set(key, food.name.trim());
+      const list = points.get(key) ?? [];
+      list.push({ loggedAt: meal.loggedAt, weightG: food.weightG });
+      points.set(key, list);
+    }
+  }
+
+  return [...points.entries()].map(([key, list]) => {
+    list.sort((a, b) => a.loggedAt - b.loggedAt);
+    const first = list[0];
+    const last = list[list.length - 1];
+    return {
+      name: names.get(key) ?? key,
+      firstWeightG: first?.weightG ?? 0,
+      lastWeightG: last?.weightG ?? 0,
+      observations: list.length,
+    };
+  });
 }
 
 /**
@@ -609,7 +692,39 @@ export function buildAdvancedReport(input: AdvancedReportInput): AdvancedReport 
     .filter((meal) => meal.dayKey >= rangeStartKey && meal.dayKey <= input.todayKey)
     .slice()
     .sort((a, b) => a.loggedAt - b.loggedAt);
-  const days = aggregateDays(meals);
+
+  return buildAdvancedReportFromAggregates({
+    range: input.range,
+    todayKey: input.todayKey,
+    days: daysFromMeals(meals),
+    hours: hoursFromMeals(meals),
+    dishes: dishesFromMeals(meals),
+    portions: portionsFromMeals(meals),
+    target: input.target,
+  });
+}
+
+/**
+ * Builds the same report from database aggregates. This is the API's path: the
+ * Worker groups totals per local day (and per hour/dish) in SQL, so a long
+ * range never ships every meal row to the Worker.
+ */
+export function buildAdvancedReportFromAggregates(
+  input: AdvancedReportAggregateInput,
+): AdvancedReport {
+  const rangeStartKey = reportRangeStartKey(input.range, input.todayKey);
+  const days = new Map<string, DayAggregate>();
+  let mealCount = 0;
+
+  for (const day of input.days) {
+    if (day.dayKey < rangeStartKey || day.dayKey > input.todayKey) continue;
+    const aggregate = days.get(day.dayKey) ?? { energyKcal: 0, proteinG: 0, meals: 0 };
+    aggregate.energyKcal += day.energyKcal;
+    aggregate.proteinG += day.proteinG;
+    aggregate.meals += day.meals;
+    days.set(day.dayKey, aggregate);
+    mealCount += day.meals;
+  }
 
   return {
     range: input.range,
@@ -621,11 +736,11 @@ export function buildAdvancedReport(input: AdvancedReportInput): AdvancedReport 
         : monthlySeries(rangeStartKey, days),
     weeks: weeklyAdherence(rangeStartKey, input.todayKey, days, input.target),
     weekdays: weekdayPattern(days),
-    timeOfDay: timeOfDayPattern(meals),
-    dishes: dishFrequency(meals),
-    portionDrift: portionDrift(meals),
+    timeOfDay: timeOfDayPattern(input.hours),
+    dishes: dishFrequency(input.dishes, mealCount),
+    portionDrift: portionDrift(input.portions),
     projection: projectionFor(days, input.target, input.todayKey),
     card: reportCard(days, input.target, input.todayKey),
-    totals: reportTotals(meals, days),
+    totals: reportTotals(mealCount, days),
   };
 }

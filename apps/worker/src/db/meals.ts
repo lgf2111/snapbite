@@ -1,13 +1,27 @@
 import type { MealResult } from '@snapbite/core';
 import { and, count, desc, eq, gte } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { type FoodItemRow, foodItems, meals, nutrition } from './schema.js';
+import { type FoodItemRow, analyticsCache, foodItems, meals, nutrition } from './schema.js';
 
 export function createMealsDb(d1: D1Database) {
-  return drizzle(d1, { schema: { meals, foodItems, nutrition } });
+  return drizzle(d1, { schema: { meals, foodItems, nutrition, analyticsCache } });
 }
 
 export type MealsDb = ReturnType<typeof createMealsDb>;
+
+/**
+ * Drops a user's cached reports after any meal change. Best-effort: the meal
+ * write is what matters, and a failed clear only means one stale report until
+ * the next write (the cache is also scoped to the local day).
+ */
+async function invalidateAnalyticsCache(db: MealsDb, userId: string): Promise<void> {
+  try {
+    await db.delete(analyticsCache).where(eq(analyticsCache.userId, userId));
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[analytics_cache] invalidate failed', err);
+  }
+}
 
 export interface SaveMealInput {
   userId: string;
@@ -80,6 +94,7 @@ export async function saveMeal(db: MealsDb, input: SaveMealInput): Promise<strin
 
   // drizzle-d1 batch takes a non-empty tuple; we always have >= 2 statements.
   await db.batch(statements as [(typeof statements)[number], ...(typeof statements)[number][]]);
+  await invalidateAnalyticsCache(db, input.userId);
   return mealId;
 }
 
@@ -327,6 +342,7 @@ export async function updateMeal(
     }),
   ];
   await db.batch(statements as [(typeof statements)[number], ...(typeof statements)[number][]]);
+  await invalidateAnalyticsCache(db, userId);
   return true;
 }
 
@@ -388,6 +404,7 @@ export async function deleteMeal(db: MealsDb, mealId: string, userId: string): P
   const owned = await mealOwnedBy(db, mealId, userId);
   if (!owned) return false;
   await db.delete(meals).where(eq(meals.id, mealId));
+  await invalidateAnalyticsCache(db, userId);
   return true;
 }
 

@@ -1,6 +1,6 @@
 import type { MealResult } from '@snapbite/core';
 import { describe, expect, it, vi } from 'vitest';
-import { ApiClient, ApiError } from './api.js';
+import { ApiClient, ApiError, LOAD_FAILED_MESSAGE } from './api.js';
 
 const meal: MealResult = {
   foods: [
@@ -47,6 +47,7 @@ describe('ApiClient', () => {
   });
 
   it('throws ApiError with the server detail on failure', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const fetchMock = vi.fn(async () => jsonResponse({ detail: 'Add your AI key' }, 400));
     const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
     await expect(client.analyze({ base64: 'x', mimeType: 'image/jpeg' })).rejects.toMatchObject({
@@ -54,6 +55,34 @@ describe('ApiClient', () => {
       status: 400,
       message: 'Add your AI key',
     });
+    errorSpy.mockRestore();
+  });
+
+  it('hides a bodyless error status behind a retry sentence', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchMock = vi.fn(async () => new Response('', { status: 503 }));
+    const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
+
+    await expect(client.analytics('90d')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 503,
+      message: LOAD_FAILED_MESSAGE,
+    });
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('HTTP 503'));
+    expect(LOAD_FAILED_MESSAGE).not.toMatch(/HTTP/);
+    errorSpy.mockRestore();
+  });
+
+  it('replaces a status code echoed in the server detail', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchMock = vi.fn(async () => jsonResponse({ detail: 'gemini returned HTTP 503' }, 503));
+    const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
+
+    await expect(client.analytics('90d')).rejects.toMatchObject({
+      status: 503,
+      message: LOAD_FAILED_MESSAGE,
+    });
+    errorSpy.mockRestore();
   });
 
   it('revises a meal (draft) via POST /api/meals/:id/revise and returns the meal', async () => {

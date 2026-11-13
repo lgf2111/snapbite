@@ -3,6 +3,7 @@ import {
   type ReportMeal,
   type ReportTarget,
   buildAdvancedReport,
+  buildAdvancedReportFromAggregates,
   reportGoal,
   reportRangeStartKey,
 } from './advanced.js';
@@ -83,6 +84,36 @@ describe('trend series and totals', () => {
       avgProteinPerLoggedDay: 53,
       avgMealsPerLoggedDay: 1.5,
     });
+  });
+
+  it('builds the same report from database aggregates', () => {
+    const fromMeals = buildAdvancedReport({
+      range: '90d',
+      todayKey: TODAY,
+      meals,
+      target: target(),
+    });
+    const fromAggregates = buildAdvancedReportFromAggregates({
+      range: '90d',
+      todayKey: TODAY,
+      days: [
+        { dayKey: '2026-11-11', energyKcal: 600, proteinG: 35, meals: 1 },
+        { dayKey: '2026-11-12', energyKcal: 1200, proteinG: 70, meals: 2 },
+      ],
+      hours: [
+        { hour: 13, meals: 1, energyKcal: 600 },
+        { hour: 12, meals: 1, energyKcal: 500 },
+        { hour: 19, meals: 1, energyKcal: 700 },
+      ],
+      dishes: [
+        { name: 'Chicken', meals: 2 },
+        { name: 'Rice', meals: 1 },
+      ],
+      portions: [],
+      target: target(),
+    });
+
+    expect(fromAggregates).toEqual(fromMeals);
   });
 
   it('builds 12 monthly points for 12m', () => {

@@ -240,6 +240,9 @@ export interface BillingSummary {
   packs: BillingPack[];
 }
 
+/** What a person sees when the request failed and the server sent no detail. */
+export const LOAD_FAILED_MESSAGE = "Couldn't load that — tap to retry.";
+
 /**
  * Thin client for the SnapBite Worker API. Attaches the signed Telegram initData
  * on every request so the Worker can authenticate.
@@ -289,13 +292,19 @@ export class ApiClient {
     }
 
     if (!res.ok) {
-      let detail = `HTTP ${res.status}`;
+      // Keep the numeric status in the log, never on screen. This is also the
+      // line that identifies which route failed when Home reports an outage.
+      console.error(`[api] ${init.method ?? 'GET'} ${path} failed with HTTP ${res.status}`);
+      let detail: string = LOAD_FAILED_MESSAGE;
       try {
         const body = (await res.json()) as { detail?: string; error?: string };
         detail = body.detail ?? body.error ?? detail;
       } catch {
         // non-JSON error body
       }
+      // A server may still echo a provider's status text in `detail`; never let
+      // "HTTP 503" reach a person.
+      if (/\bHTTP\s+\d{3}\b/i.test(detail)) detail = LOAD_FAILED_MESSAGE;
       throw new ApiError(res.status, detail);
     }
     return (await res.json()) as T;

@@ -84,6 +84,12 @@ function friendlyProviderDetail(detail: string | undefined, message?: string): s
   if (/location is not supported|user location|not available in your/i.test(raw)) {
     return "Your AI provider isn't available in this region (it reported your location isn't supported — common with Google Gemini). Switch to OpenAI or DeepSeek in Settings and try again.";
   }
+  // A provider body with a human message ("Invalid API key") is useful; keep it.
+  if (detail && !/\bHTTP\s+\d{3}\b/i.test(detail)) return detail;
+  // Status-only messages ("gemini returned HTTP 503") are not actionable.
+  if (/\bHTTP\s+\d{3}\b/i.test(raw)) {
+    return 'The AI provider is busy or unavailable right now. Please try again in a moment.';
+  }
   return detail;
 }
 
