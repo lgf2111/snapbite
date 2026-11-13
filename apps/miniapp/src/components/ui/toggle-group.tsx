@@ -20,7 +20,7 @@ const toggleGroupVariants = cva(
         // so the padding is subtracted here rather than left to chance.
         // `--seg-pad` is that padding, shared with the sliding indicator.
         default: 'h-[52px] p-1 [--seg-pad:0.25rem]',
-        sm: 'h-11 p-0.5 [--seg-pad:0.125rem]',
+        sm: 'h-12 p-0.5 [--seg-pad:0.125rem]',
       },
       block: {
         true: 'flex w-full',
@@ -37,12 +37,12 @@ const toggleGroupVariants = cva(
  * the highlight can travel between segments instead of swapping.
  */
 const toggleGroupItemVariants = cva(
-  'relative inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-control px-3 text-caption font-medium whitespace-nowrap transition-[transform,color] duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=on]:font-semibold data-[state=on]:text-foreground',
+  'relative inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-control px-3 text-caption font-medium whitespace-nowrap transition-[transform,color] duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-[state=on]:font-semibold data-[state=on]:text-foreground',
   {
     variants: {
       size: {
         default: 'min-h-[44px]',
-        sm: 'min-h-10 px-2',
+        sm: 'min-h-11 px-2',
       },
     },
     defaultVariants: { size: 'default' },
@@ -128,12 +128,12 @@ function ToggleGroup({
     >
       {single && (
         // Under the labels, never in the way of a tap. Carries the segment's
-        // shape: fill, hairline ring, shadow.
+        // shape: fill and a brand-text ring.
         <span
           ref={indicator}
           aria-hidden="true"
           data-slot="toggle-group-indicator"
-          className="pointer-events-none absolute inset-y-[var(--seg-pad)] left-[var(--seg-pad)] rounded-control bg-background shadow-xs ring-1 ring-primary-text/50"
+          className="pointer-events-none absolute inset-y-[var(--seg-pad)] left-[var(--seg-pad)] rounded-control bg-background ring-1 ring-primary-text"
         />
       )}
       {children}

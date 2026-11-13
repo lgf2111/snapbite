@@ -5,7 +5,7 @@ function Skeleton({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="skeleton"
-      className={cn('bg-accent animate-pulse rounded-control', className)}
+      className={cn('bg-secondary animate-pulse motion-reduce:animate-none rounded-control', className)}
       {...props}
     />
   );

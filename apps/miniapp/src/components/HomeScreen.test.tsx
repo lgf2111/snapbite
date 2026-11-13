@@ -392,10 +392,11 @@ describe('HomeScreen', () => {
       expect(toggle.parentElement).toBe(card);
       expect(ringRow.contains(toggle)).toBe(false);
       expect(ringRow.nextElementSibling).toBe(toggle);
-      // Full width and 44px tall; labels at caption size, never truncated.
+      // Full width; a 48px track around 44px items (§4.8); labels at caption size, never truncated.
       expect(toggle.className).toContain('w-full');
-      expect(toggle.className).toContain('h-11');
+      expect(toggle.className).toContain('h-12');
       for (const item of within(toggle).getAllByRole('radio')) {
+        expect(item.className).toContain('min-h-[44px]');
         expect(item.className).toContain('text-caption');
         expect(item.className).toContain('whitespace-nowrap');
         expect(item.className).not.toMatch(/truncate|overflow-hidden|text-ellipsis/);

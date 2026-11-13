@@ -461,7 +461,7 @@ export function ReportsScreen({ backend, onBack, onSeeCredits }: ReportsScreenPr
               <h2 className="font-display text-body font-medium">Could not load the report</h2>
             </div>
             <p className="text-muted-foreground text-caption">{message}</p>
-            <Button variant="outline" onClick={() => setReload((value) => value + 1)}>
+            <Button variant="secondary" onClick={() => setReload((value) => value + 1)}>
               Try again
             </Button>
           </CardContent>

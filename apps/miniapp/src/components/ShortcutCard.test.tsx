@@ -353,14 +353,14 @@ describe('ShortcutCard: revoke confirmation', () => {
     return { dialog: await screen.findByRole('dialog'), spies };
   }
 
-  it('is built on the dialog primitive: a dimming, blurred scrim covers the screen behind it', async () => {
+  it('is built on the dialog primitive: a dimming scrim covers the screen behind it', async () => {
     await openOne();
     const scrim = document.querySelector('[data-slot=dialog-overlay]') as HTMLElement;
     expect(scrim).toBeTruthy();
     expect(scrim.className).toContain('fixed');
     expect(scrim.className).toContain('inset-0');
-    expect(scrim.className).toContain('bg-background/80');
-    expect(scrim.className).toContain('backdrop-blur');
+    expect(scrim.className).toContain('bg-[var(--scrim)]');
+    expect(scrim.className).not.toContain('backdrop-blur');
     // Above the tab bar (z-40), so nothing behind the panel stays readable.
     expect(scrim.className).toContain('z-50');
   });

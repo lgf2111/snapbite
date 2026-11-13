@@ -79,7 +79,7 @@ export function InstallGuide() {
             aria-hidden
           />
         </button>
-        <Button variant="ghost" size="icon-sm" aria-label="Dismiss install tip" onClick={dismiss}>
+        <Button variant="ghost" size="icon" aria-label="Dismiss install tip" onClick={dismiss}>
           <X className="size-4" aria-hidden />
         </Button>
       </div>

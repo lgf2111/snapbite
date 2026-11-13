@@ -578,7 +578,7 @@ export function HomeScreen({
                   </button>
                   <Button
                     variant="ghost"
-                    size="icon-sm"
+                    size="icon"
                     aria-label="Update with AI"
                     onClick={(e) => {
                       e.stopPropagation();
