@@ -1,8 +1,8 @@
 import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { cn } from '@/lib/utils';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { XIcon } from 'lucide-react';
 import { type VariantProps, cva } from 'class-variance-authority';
+import { XIcon } from 'lucide-react';
 import type * as React from 'react';
 
 const Dialog = DialogPrimitive.Root;
@@ -85,7 +85,12 @@ function DialogContent({
 
 function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
-    <div data-slot="dialog-header" className={cn('flex flex-col gap-1.5', className)} {...props} />
+    <div
+      data-slot="dialog-header"
+      // Room for the 44px close button at the top-right of every dialog.
+      className={cn('flex flex-col gap-1.5 pr-10', className)}
+      {...props}
+    />
   );
 }
 

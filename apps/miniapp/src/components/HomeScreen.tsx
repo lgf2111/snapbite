@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { Backend, MealDates, RecentMeal } from '@/lib/backend';
@@ -14,16 +13,15 @@ import {
   saveWeekViewMode,
   weekRange,
 } from '@/lib/weekPrefs';
-import { type DailyTargets, type MealResult, PROVIDER_PRESETS } from '@snapbite/core';
-import { ChevronRight, RefreshCw, Sparkles, TrendingUp } from 'lucide-react';
+import type { DailyTargets, MealResult } from '@snapbite/core';
+import { ChevronRight, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DateSelector } from './DateSelector.js';
 import { InstallGuide } from './InstallGuide.js';
-import { MacroLine } from './MacroLine.js';
-import { MealThumb } from './MealThumb.js';
+import { MacroRow, type MacroTone } from './MacroRow.js';
+import { MealRow } from './MealRow.js';
 import { ProgressRing } from './ProgressRing.js';
-import { SwipeableRow } from './SwipeableRow.js';
 import { ReviseWithAiDialog } from './UpdateWithAi.js';
 import {
   Dialog,
@@ -39,16 +37,11 @@ type ToastKind = 'success' | 'error' | 'info';
 /** The undo window after a swipe-delete; the removal is committed when it ends. */
 const UNDO_MS = 6000;
 
-/** The one pointer to the camera, used by both the progress and no-goal cards. */
+/** The one pointer to the camera, used by both the progress and no-goal blocks. */
 const CAMERA_CUE = 'Tap the camera to add one.';
 
-/** Short human labels for the provider id shown on meal cards. */
-const PROVIDER_LABEL: Record<string, string> = {
-  gemini: 'Gemini',
-  openai: 'OpenAI',
-  deepseek: 'DeepSeek',
-  ...Object.fromEntries(Object.values(PROVIDER_PRESETS).map((p) => [p.id, p.label])),
-};
+/** Shown when the backend gave no message of its own. */
+const LOAD_ERROR = "Couldn't load meals. Tap Refresh to try again.";
 
 interface HomeScreenProps {
   backend: Backend;
@@ -74,37 +67,19 @@ interface HomeScreenProps {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-type MacroTone = 'primary' | 'warning' | 'destructive';
-
 /** Consumed as a share of the target; a missing target reads as zero. */
 const macroRatio = (have: number, target: number) => (target > 0 ? Math.max(0, have / target) : 0);
 
-/** Consumed as a 0–100 share of the target; a missing target reads as empty. */
-const macroPercent = (have: number, target: number) =>
-  Math.min(100, macroRatio(have, target) * 100);
-
 /**
- * Bar state by share of target: the brand fill while at or under target,
+ * Macro state by share of target: the brand fill while at or under target,
  * `--warning` once over, and `--destructive` once more than 20% over. The
- * value text uses the same tone so the state is never only a hue.
+ * value text carries a `+` as well, so the state is never only a hue.
  */
 const macroTone = (have: number, target: number): MacroTone => {
   const ratio = macroRatio(have, target);
   if (ratio > 1.2) return 'destructive';
   if (ratio > 1) return 'warning';
   return 'primary';
-};
-
-const MACRO_FILL: Record<MacroTone, string> = {
-  primary: 'bg-primary',
-  warning: 'bg-warning',
-  destructive: 'bg-destructive',
-};
-
-const MACRO_TEXT: Record<MacroTone, string> = {
-  primary: 'text-primary',
-  warning: 'text-warning',
-  destructive: 'text-destructive',
 };
 
 /**
@@ -177,10 +152,13 @@ export function HomeScreen({
     loading: mealsLoading,
     error,
     refresh: refreshMeals,
-  } = useCachedData<RecentMeal[]>(mealsKey, () =>
-    view === 'weekly'
-      ? backend.mealsInRange(range.startKey, range.endKey)
-      : backend.mealsByDate(date),
+  } = useCachedData<RecentMeal[]>(
+    mealsKey,
+    () =>
+      view === 'weekly'
+        ? backend.mealsInRange(range.startKey, range.endKey)
+        : backend.mealsByDate(date),
+    LOAD_ERROR,
   );
   // Hidden rows are deleted optimistically: totals, verdict and the list all stop
   // counting the meal during the undo window, and Undo puts it straight back.
@@ -355,54 +333,58 @@ export function HomeScreen({
   const proteinShort =
     hasMeals && viewTargets != null && consumed.proteinG < viewTargets.proteinG * 0.8 && !kcalOver;
 
+  // First load with nothing cached: the ring is empty and the verdict stays blank,
+  // because "Nothing logged yet" would be a claim about data that has not arrived.
+  const settled = mealsData !== undefined;
+
   return (
     <div className="flex flex-col gap-5">
-      <header className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <h1 className="text-title min-w-0 truncate">SnapBite</h1>
-          {streak != null && streak > 0 && (
-            <button
-              type="button"
-              aria-label={`${streak}-day logging streak`}
-              onClick={() => setStreakOpen(true)}
-              className="bg-secondary text-foreground text-caption inline-flex min-h-11 shrink-0 items-center gap-1 rounded-control px-3 font-medium"
-            >
-              <span className="tabular">{streak}</span>
-            </button>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Refresh"
-            disabled={refreshing}
-            onClick={manualRefresh}
-          >
-            <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
-          </Button>
-        </div>
-      </header>
+      <DateSelector
+        value={date}
+        onChange={onDateChange}
+        loggedDates={loggedDates}
+        {...(weekly ? { label: range.label } : {})}
+      />
 
-      <div className="flex flex-col gap-2">
-        <DateSelector value={date} onChange={onDateChange} loggedDates={loggedDates} />
+      <div className="flex items-center gap-2">
         <ToggleGroup
           type="single"
           value={view}
           onValueChange={(v) => v && onViewChange(v as 'daily' | 'weekly')}
-          block
+          className="min-w-0 flex-1"
           aria-label="View"
         >
           <ToggleGroupItem value="daily">Daily</ToggleGroupItem>
           <ToggleGroupItem value="weekly">Weekly</ToggleGroupItem>
         </ToggleGroup>
+        {streak != null && streak > 0 && (
+          <button
+            type="button"
+            onClick={() => setStreakOpen(true)}
+            className="bg-secondary text-foreground text-caption inline-flex min-h-11 shrink-0 items-center rounded-control px-3 font-medium transition-transform duration-[120ms] hover:bg-accent active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <span className="tabular">{streak}-day streak</span>
+          </button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Refresh"
+          disabled={refreshing}
+          onClick={manualRefresh}
+          className="shrink-0"
+        >
+          <RefreshCw
+            className={cn('size-4', refreshing && 'animate-spin motion-reduce:animate-none')}
+          />
+        </Button>
       </div>
 
       {!hideInstallGuide && <InstallGuide />}
 
       {viewTargets ? (
-        <section aria-label="Today's progress" className="flex flex-col gap-4 rounded-flush">
-          <div className="flex items-center gap-4">
+        <section aria-label="Progress" className="flex flex-col gap-4">
+          <div className="flex flex-wrap gap-4">
             <ProgressRing
               consumed={consumed.energyKcal}
               target={viewTargets.energyKcal}
@@ -411,84 +393,52 @@ export function HomeScreen({
               hero
               colorClass="text-primary"
             />
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-title leading-tight">
-                {!hasMeals
-                  ? 'Nothing logged yet'
-                  : kcalOver
-                    ? `Over by ${Math.abs(kcalLeft ?? 0)}`
-                    : proteinShort
-                      ? 'Protein is short'
-                      : 'On track'}
-              </p>
-              {!hasMeals ? (
+            <div className="min-w-[11rem] flex-1">
+              {settled && (
+                <p className="font-display text-title font-normal">
+                  {!hasMeals
+                    ? 'Nothing logged yet'
+                    : kcalOver
+                      ? `Over by ${Math.abs(kcalLeft ?? 0)}\u00a0kcal`
+                      : proteinShort
+                        ? 'Protein is short'
+                        : 'On track'}
+                </p>
+              )}
+              {settled && !hasMeals ? (
                 <p className="text-muted-foreground text-caption">{CAMERA_CUE}</p>
               ) : (
-                weekly && (
+                weekly &&
+                settled && (
                   <p className="text-muted-foreground text-caption">
-                    {weeklyAverage ? 'Daily average' : 'Week total'} · {range.label}
+                    {weeklyAverage ? 'Daily average' : 'Week total'}
                   </p>
                 )
               )}
 
-              <dl className="mt-3 flex flex-col gap-1.5">
-                {[
-                  ['Protein', consumed.proteinG, viewTargets.proteinG, 'g'],
-                  ['Carbs', consumed.carbsG, viewTargets.carbsG, 'g'],
-                  ['Fat', consumed.fatG, viewTargets.fatG, 'g'],
-                ].map(([label, have, target, unit]) => {
-                  const consumed = Number(have);
-                  const goal = Number(target);
-                  const tone = macroTone(consumed, goal);
-                  const over = tone !== 'primary';
-                  return (
-                    <div key={String(label)} className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1">
-                      <dt className="text-muted-foreground text-caption">{label}</dt>
-                      <dd
-                        data-slot="macro-value"
-                        data-tone={tone}
-                        className={cn('tabular text-caption font-medium', MACRO_TEXT[tone])}
-                      >
-                        {Math.round(consumed)}
-                        <span className={over ? 'opacity-80' : 'text-muted-foreground'}>
-                          {' / '}
-                          {Math.round(goal)}
-                          {unit}
-                        </span>
-                        {over && (
-                          <span data-slot="macro-over" className="ml-0.5 font-semibold">
-                            +<span className="sr-only"> over target</span>
-                          </span>
-                        )}
-                      </dd>
-                      {/* Progress as length, so it never rests on colour alone. The
-                        numbers above stay the source of truth. */}
-                      <dd
-                        aria-hidden
-                        data-slot="macro-bar"
-                        className="bg-muted ring-border/60 col-span-2 h-[3px] overflow-hidden rounded-full ring-1"
-                      >
-                        <div
-                          data-slot="macro-fill"
-                          data-tone={tone}
-                          className={cn(
-                            'h-full w-full origin-left rounded-full transition-transform duration-500 ease-[var(--ease-out-quint)] motion-reduce:transition-none',
-                            MACRO_FILL[tone],
-                          )}
-                          style={{
-                            transform: `scaleX(${macroPercent(consumed, goal) / 100})`,
-                          }}
-                        />
-                      </dd>
-                    </div>
-                  );
-                })}
+              <dl className="mt-3 flex flex-col gap-3">
+                {(
+                  [
+                    ['Protein', consumed.proteinG, viewTargets.proteinG],
+                    ['Carbs', consumed.carbsG, viewTargets.carbsG],
+                    ['Fat', consumed.fatG, viewTargets.fatG],
+                  ] as const
+                ).map(([label, have, target]) => (
+                  <MacroRow
+                    key={label}
+                    label={label}
+                    have={have}
+                    target={target}
+                    unit="g"
+                    tone={macroTone(have, target)}
+                  />
+                ))}
               </dl>
             </div>
           </div>
 
-          {/* Its own row under the ring and the macros, the card's full inner width: beside
-              the ring column it was squeezed and its second label clipped. Weekly only. */}
+          {/* Its own full-width row under the ring and the macros; beside the ring
+              column it was squeezed and its second label clipped. Weekly only. */}
           {weekly && (
             <ToggleGroup
               type="single"
@@ -504,19 +454,19 @@ export function HomeScreen({
           )}
         </section>
       ) : (
-        <section className="flex items-center justify-between gap-3 rounded-surface border border-border bg-card p-4">
-          <div className="min-w-0">
+        <section className="flex flex-col gap-3">
+          <div>
             <p className="text-body font-medium">Set a goal to see today&rsquo;s progress</p>
-            {meals && meals.length === 0 && (
+            {meals.length === 0 && (
               <p className="text-muted-foreground text-caption">{CAMERA_CUE}</p>
             )}
-            {meals && meals.length > 0 && (
+            {meals.length > 0 && (
               <p className="text-muted-foreground text-caption">
-                Set a goal later — meals log without one.
+                Set a goal later. Meals log without one.
               </p>
             )}
           </div>
-          <Button size="sm" onClick={onSetGoal}>
+          <Button className="w-full" onClick={onSetGoal}>
             Set goal
           </Button>
         </section>
@@ -527,71 +477,46 @@ export function HomeScreen({
       <button
         type="button"
         onClick={onOpenReports}
-        className="flex w-full items-center justify-between gap-3 rounded-surface border border-border bg-card p-4 text-left transition-transform duration-[120ms] active:scale-[0.99] motion-reduce:transition-none"
+        className="flex min-h-14 w-full items-center justify-between gap-3 border-y border-border text-left transition-transform duration-[120ms] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="bg-secondary text-primary-text flex size-9 shrink-0 items-center justify-center rounded-control">
-            <TrendingUp className="size-4" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-body font-medium">Reports</p>
-          </div>
-        </div>
-        <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+        <span className="text-body font-medium">Reports</span>
+        <ChevronRight className="text-muted-foreground size-4 shrink-0" aria-hidden />
       </button>
 
       {creditNotice && (
         <output className="text-muted-foreground text-caption block">{creditNotice}</output>
       )}
 
-      {error && <p className="text-destructive text-caption">{error}</p>}
+      {error && (
+        <p role="alert" className="text-destructive text-caption">
+          {error}
+        </p>
+      )}
 
       {mealsLoading && mealsData === undefined && !error && (
         <div className="flex flex-col gap-2">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-surface" />
+            <Skeleton key={i} className="h-20 w-full rounded-control" />
           ))}
         </div>
       )}
 
       {meals.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {meals.map((m) => (
-            <SwipeableRow key={m.id} animateIn={newIds.has(m.id)} onDelete={() => handleDelete(m)}>
-              <Card className="overflow-hidden rounded-none border-0 shadow-none">
-                <CardContent className="flex items-center gap-3 p-3">
-                  <MealThumb src={m.previewUrl} />
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 rounded-control text-left transition-transform duration-[120ms] active:scale-[0.99] motion-reduce:transition-none"
-                    onClick={() => onOpenMeal(m)}
-                  >
-                    <div className="truncate font-medium">{m.label}</div>
-                    <div className="flex items-center gap-2">
-                      <MacroLine energyKcal={m.energyKcal} compact />
-                      {m.aiProvider && (
-                        <span className="text-muted-foreground text-[10px] tracking-wide uppercase">
-                          {PROVIDER_LABEL[m.aiProvider] ?? m.aiProvider}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Update with AI"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setAiMeal(m);
-                    }}
-                  >
-                    <Sparkles className="text-primary-text size-4" />
-                  </Button>
-                </CardContent>
-              </Card>
-            </SwipeableRow>
-          ))}
-        </div>
+        <section>
+          <h2 className="sr-only">Meals</h2>
+          <div className="divide-border flex flex-col divide-y">
+            {meals.map((m) => (
+              <MealRow
+                key={m.id}
+                meal={m}
+                isNew={newIds.has(m.id)}
+                onOpen={onOpenMeal}
+                onDelete={handleDelete}
+                onAi={setAiMeal}
+              />
+            ))}
+          </div>
+        </section>
       )}
 
       {aiMeal && (
@@ -614,15 +539,15 @@ export function HomeScreen({
             <DialogTitle>Logging streak</DialogTitle>
             <DialogDescription>A day counts when you log at least one meal.</DialogDescription>
           </DialogHeader>
-          <ul className="text-muted-foreground flex list-disc flex-col gap-2 pl-4 text-sm">
+          <ul className="text-muted-foreground flex list-disc flex-col gap-2 pl-4 text-caption">
             <li>
-              Today or yesterday keeps the run alive — logging in the evening never breaks it.
+              Today or yesterday keeps the run alive, so logging in the evening never breaks it.
             </li>
             <li>A whole day with no meals ends the streak.</li>
             <li>Miss a day and your next log within the week can revive it, once every 30 days.</li>
           </ul>
           <DialogFooter>
-            <Button onClick={() => setStreakOpen(false)}>Got it</Button>
+            <Button onClick={() => setStreakOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

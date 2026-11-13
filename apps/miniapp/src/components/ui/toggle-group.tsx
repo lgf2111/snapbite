@@ -37,7 +37,7 @@ const toggleGroupVariants = cva(
  * the highlight can travel between segments instead of swapping.
  */
 const toggleGroupItemVariants = cva(
-  'relative inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-control px-3 text-caption font-medium whitespace-nowrap transition-[transform,color] duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-[state=on]:font-semibold data-[state=on]:text-foreground',
+  'relative inline-flex flex-1 items-center justify-center gap-1.5 rounded-control px-3 text-caption font-medium whitespace-nowrap transition-[transform,color] duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 data-[state=on]:font-semibold data-[state=on]:text-foreground',
   {
     variants: {
       size: {

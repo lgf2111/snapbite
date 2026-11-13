@@ -10,8 +10,6 @@ interface ProgressRingProps {
   label: string;
   /** Ring diameter in px. */
   size?: number;
-  /** Emoji/icon shown above the number. */
-  icon?: string;
   /** Tailwind text-color class for the ring stroke + accents. */
   colorClass?: string;
   /** Renders the remaining amount in the display face (the verdict ring). */
@@ -32,7 +30,6 @@ export function ProgressRing({
   target,
   label,
   size = 96,
-  icon,
   colorClass = 'text-primary',
   hero = false,
 }: ProgressRingProps) {
@@ -111,20 +108,18 @@ export function ProgressRing({
           className="absolute inset-0 flex flex-col items-center justify-center leading-none"
           aria-hidden="true"
         >
-          {icon && <span className="text-sm">{icon}</span>}
           <span
             data-slot="ring-numeral"
             className={cn(
               'tabular whitespace-nowrap',
-              hero ? 'font-display text-display' : 'font-semibold',
-              !hero && (size >= 96 ? 'text-lg' : 'text-sm'),
+              hero ? 'font-display text-display' : 'text-body font-medium',
             )}
             // Hero only: a long weekly total steps down instead of spilling over the ring.
             style={hero ? { fontSize: `${ringNumeralSizeRem(shown)}rem` } : undefined}
           >
             {shown}
           </span>
-          <span className={cn('text-muted-foreground', hero ? 'text-caption' : 'text-[10px]')}>
+          <span className="text-muted-foreground text-caption">
             {hero ? `${label} ${over ? 'over' : 'left'}` : over ? 'over' : 'left'}
           </span>
         </div>

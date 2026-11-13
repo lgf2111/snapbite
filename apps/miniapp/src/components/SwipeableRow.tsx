@@ -24,10 +24,10 @@ const COLLAPSE_MS = 260;
  * works on phone and Mac.
  *
  * The reveal is the row's own background, not a block behind the card. The
- * root is one clipped surface with the card's radius and a full-bleed
- * destructive layer (`absolute inset-0`, no radius). The card slides over it
- * with no radius or shadow of its own, so every pixel between the card edge
- * and the trash strip is red — there is no page-coloured seam at any offset.
+ * root is one clipped square surface with a full-bleed destructive layer
+ * (`absolute inset-0`). The row slides over it with no radius or shadow of its
+ * own, so every pixel between the row edge and the trash strip is red — there
+ * is no page-coloured seam at any offset.
  * The trash strip is exactly REVEAL wide, flush right, and transparent so the
  * row background shows through it.
  *
@@ -101,29 +101,23 @@ export function SwipeableRow({ children, onDelete, animateIn = false }: Swipeabl
     <div
       ref={rootRef}
       data-testid="swipe-row"
-      // mb-2 provides the inter-row spacing here (the parent list has no gap),
-      // so it can collapse to 0 with the row when removed — closing the gap.
-      // overflow-hidden + the card radius are the reveal's only clip: nothing
-      // from the action can show above or below the row. The red is only
-      // painted while the action is out, so its antialiased edge cannot tint
-      // the rounded corners of a resting row.
+      // Flush and square: the parent list draws the hairlines (`divide-y`), and
+      // the row collapses by height and opacity only. overflow-hidden is the
+      // reveal's only clip, so nothing from the action shows above or below.
       className={cn(
-        'relative mb-2 overflow-hidden rounded-surface',
-        revealed ? 'bg-destructive' : 'bg-card',
+        'relative overflow-hidden rounded-none',
+        revealed ? 'bg-destructive' : 'bg-background',
         removing && 'pointer-events-none',
       )}
       style={{
-        transition: `max-height ${COLLAPSE_MS}ms ease, opacity ${COLLAPSE_MS}ms ease, margin ${COLLAPSE_MS}ms ease`,
+        transition: `max-height ${COLLAPSE_MS}ms ease, opacity ${COLLAPSE_MS}ms ease`,
         // Collapsed state for both removing (out) and entering (in, pre-frame).
-        ...(removing || entering
-          ? { maxHeight: 0, opacity: 0, marginTop: 0, marginBottom: 0 }
-          : { maxHeight: 500 }),
+        ...(removing || entering ? { maxHeight: 0, opacity: 0 } : { maxHeight: 500 }),
       }}
     >
       {/*
         The red is the row: one full-bleed layer under everything, with no
-        radius of its own. The root's rounded-surface clip shapes it, so the card
-        and the action always share the same outside corners. It is painted
+        radius of its own. It is painted
         only while the action is out; at rest the row is card-coloured and the
         layer is invisible.
       */}
@@ -144,8 +138,7 @@ export function SwipeableRow({ children, onDelete, animateIn = false }: Swipeabl
       {/*
         The trash strip is only the part the card uncovers: exactly REVEAL
         wide, full height, flush right, and transparent so the row's red
-        surface is the colour, not a separate block. No radius; the root clip
-        rounds the outside corners.
+        surface is the colour, not a separate block. No radius.
       */}
       <button
         type="button"
@@ -166,7 +159,7 @@ export function SwipeableRow({ children, onDelete, animateIn = false }: Swipeabl
       <div
         {...handlers}
         data-testid="swipe-card"
-        className="bg-card relative transition-transform duration-200 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
+        className="bg-background relative transition-transform duration-200 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
         style={{
           transform: `translateX(${removing ? '-110%' : `${offset}px`})`,
           // 1:1 with the thumb while dragging; animate only on release.

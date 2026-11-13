@@ -81,6 +81,8 @@ function Toaster(props: ToasterProps) {
             background: 'var(--card)',
             color: 'var(--foreground)',
             border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-surface)',
+            boxShadow: 'var(--lift)',
             // Fill the list above (sonner's narrow-screen width subtracts the
             // offsets a second time).
             width: '100%',
