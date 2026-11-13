@@ -58,6 +58,18 @@ const TEXT_PAIRS: Array<[string, string, number]> = [
   ['destructive', 'background', 4.5],
   ['success', 'background', 4.5],
   ['warning', 'background', 4.5],
+
+  ['foreground', 'secondary', 4.5],
+  ['muted-foreground', 'muted', 4.5],
+  ['muted-foreground', 'secondary', 4.5],
+  ['destructive', 'card', 4.5],
+  ['destructive-foreground', 'destructive', 4.5],
+
+  // Focus outline and editable-field outline are non-text UI: 3:1.
+  ['ring', 'background', 3],
+  ['ring', 'card', 3],
+  ['input', 'background', 3],
+  ['input', 'card', 3],
 ];
 
 describe.each(['light', 'dark'] as const)('%s palette', (mode) => {
@@ -110,6 +122,14 @@ describe.each(['light', 'dark'] as const)('%s palette', (mode) => {
     expect(Number(ratio.toFixed(2))).toBeGreaterThanOrEqual(1.8);
   });
 
+  it('keeps --popover equal to --card, so a floating surface has one ground', () => {
+    expect(vars.popover).toBe(vars.card);
+  });
+
+  it('keeps the field outline distinct from the hairline', () => {
+    expect(vars.input).not.toBe(vars.border);
+  });
+
   it('keeps the border visible against both surfaces (>= 1.5:1)', () => {
     // Decorative, so not held to 3:1 — but at 1.1:1 a card edge disappears.
     expect(contrast(vars.border as string, vars.background as string)).toBeGreaterThanOrEqual(1.5);
@@ -118,6 +138,12 @@ describe.each(['light', 'dark'] as const)('%s palette', (mode) => {
 });
 
 describe('palette wiring', () => {
+  it('declares the scrim and the lift shadow in both modes and exposes shadow-lift', () => {
+    expect(css.match(/--scrim:/g)).toHaveLength(2);
+    expect(css.match(/--lift:/g)).toHaveLength(2);
+    expect(css).toContain('--shadow-lift: var(--lift);');
+  });
+
   it('switches on the OS setting instead of a class', () => {
     expect(css).toContain('@media (prefers-color-scheme: dark)');
     expect(css).not.toContain('@custom-variant dark');
