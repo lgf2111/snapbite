@@ -33,11 +33,11 @@ describe('SwipeableRow: the reveal is part of the row', () => {
     const row = screen.getByTestId('swipe-row');
     const surface = screen.getByTestId('swipe-action-surface');
 
-    // The only clip is the row itself, with the card's radius.
+    // The only clip is the row itself, flush and square (§4.11).
     expect(row.className).toContain('overflow-hidden');
-    expect(row.className).toContain('rounded-surface');
-    // At rest the row is card-coloured: no red under the radius to tint it.
-    expect(row.className).toContain('bg-card');
+    expect(row.className).toContain('rounded-none');
+    // At rest the row is page-coloured: no red under it to tint the edge.
+    expect(row.className).toContain('bg-background');
     expect(row.className).not.toContain('bg-destructive');
     expect(surface.className).toContain('absolute');
     expect(surface.className).toContain('inset-0');

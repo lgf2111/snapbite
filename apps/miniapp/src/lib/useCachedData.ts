@@ -25,7 +25,11 @@ export interface CachedResult<T> {
  *
  * `key` may be null to skip fetching (e.g. while inputs aren't ready).
  */
-export function useCachedData<T>(key: string | null, fetcher: () => Promise<T>): CachedResult<T> {
+export function useCachedData<T>(
+  key: string | null,
+  fetcher: () => Promise<T>,
+  errorFallback = 'Failed to load',
+): CachedResult<T> {
   const [data, setData] = useState<T | undefined>(() => (key ? getCached<T>(key) : undefined));
   const [loading, setLoading] = useState<boolean>(() =>
     key ? getCached<T>(key) === undefined : false,
@@ -41,30 +45,35 @@ export function useCachedData<T>(key: string | null, fetcher: () => Promise<T>):
   const currentKey = useRef<string | null>(key);
   currentKey.current = key;
 
-  const run = useCallback((k: string) => {
-    setError(null);
-    revalidate<T>(k, () => fetcherRef.current())
-      .then((fresh) => {
-        if (currentKey.current !== k) return; // stale response — ignore
-        setData(fresh);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if (currentKey.current !== k) return; // stale response — ignore
-        setLoading(false);
-        // Only surface an error when we have nothing cached to show.
-        if (getCached<T>(k) === undefined) {
-          setError(e instanceof Error ? e.message : 'Failed to load');
-        }
-      });
-  }, []);
+  const run = useCallback(
+    (k: string) => {
+      setError(null);
+      revalidate<T>(k, () => fetcherRef.current())
+        .then((fresh) => {
+          if (currentKey.current !== k) return; // stale response — ignore
+          setData(fresh);
+          setLoading(false);
+        })
+        .catch((e: unknown) => {
+          if (currentKey.current !== k) return; // stale response — ignore
+          setLoading(false);
+          // Surface the failure even when cached rows stay on screen: the day the
+          // user is looking at may be out of date, and hiding that reads as truth.
+          setError(e instanceof Error && e.message ? e.message : errorFallback);
+        });
+    },
+    [errorFallback],
+  );
 
   useEffect(() => {
     if (!key) {
       setData(undefined);
       setLoading(false);
+      setError(null);
       return;
     }
+    // A failure belongs to the key it was fetched for, not to the next day.
+    setError(null);
     // Snap to THIS key's cached value immediately (never another key's data),
     // so the list always matches the selected day with no cross-day flash.
     const cached = getCached<T>(key);

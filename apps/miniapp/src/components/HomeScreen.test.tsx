@@ -83,20 +83,21 @@ describe('HomeScreen', () => {
     expect(backend.mealsByDate).toHaveBeenCalledWith('2026-09-16');
   });
 
-  it('keeps the meal card square and flat so the swipe reveal has one surface', async () => {
+  it('lists meals as flat, square rows between hairlines, with no card (§4.11)', async () => {
     const backend = stubBackend({
       mealsByDate: vi.fn(async () => [meal({ id: 'a', label: 'Chicken rice' })]),
     });
     render(<HomeScreen {...props(backend)} />);
 
     const label = await screen.findByText('Chicken rice');
-    const card = label.closest<HTMLElement>('[data-slot="card"]');
-    expect(card).not.toBeNull();
-    // The row root owns the radius and the red. A second radius, border, or
-    // shadow here is what made the card and the action look detached.
-    expect(card?.className).toContain('rounded-none');
-    expect(card?.className).toContain('border-0');
-    expect(card?.className).toContain('shadow-none');
+    // The row root owns the red and has no radius of its own; the list draws the
+    // hairlines. A card here is what made the row and the action look detached.
+    expect(label.closest('[data-slot="card"]')).toBeNull();
+    const row = label.closest<HTMLElement>('[data-testid="swipe-row"]');
+    expect(row?.className).toContain('rounded-none');
+    expect(row?.className).toContain('bg-background');
+    expect(row?.parentElement?.className).toContain('divide-y');
+    expect(row?.className).not.toContain('mb-2');
   });
 
   it('shows an empty-day state when there are no meals', async () => {
@@ -107,16 +108,15 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(screen.getByText('Nothing logged yet')).toBeInTheDocument());
   });
 
-  it('shows the current logging streak in the header', async () => {
+  it('shows the current logging streak as visible text on the chip', async () => {
     const backend = stubBackend({
       mealDates: vi.fn(async () => ({ dates: ['2026-09-15'], streak: 5 })),
     });
     render(<HomeScreen {...props(backend)} />);
 
-    const badge = await screen.findByRole('button', { name: '5-day logging streak' });
+    const badge = await screen.findByRole('button', { name: '5-day streak' });
     expect(badge.querySelector('svg')).toBeNull();
-    expect(within(badge).getByText('5')).toBeInTheDocument();
-    expect(screen.queryByText(/5-day streak/)).not.toBeInTheDocument();
+    expect(within(badge).getByText('5-day streak')).toBeInTheDocument();
   });
 
   it.each([0, null])('hides the streak badge when the streak is %s', async (value) => {
@@ -126,7 +126,7 @@ describe('HomeScreen', () => {
     render(<HomeScreen {...props(backend)} />);
 
     await waitFor(() => expect(backend.mealDates).toHaveBeenCalled());
-    expect(screen.queryByRole('button', { name: /logging streak/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /day streak/i })).not.toBeInTheDocument();
   });
 
   it('explains what counts as a day and how a revive works', async () => {
@@ -135,7 +135,7 @@ describe('HomeScreen', () => {
     });
     render(<HomeScreen {...props(backend)} />);
 
-    await userEvent.click(await screen.findByRole('button', { name: '5-day logging streak' }));
+    await userEvent.click(await screen.findByRole('button', { name: '5-day streak' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Logging streak')).toBeInTheDocument();
     expect(within(dialog).getByText(/at least one meal/i)).toBeInTheDocument();
@@ -143,17 +143,20 @@ describe('HomeScreen', () => {
     expect(within(dialog).getByText(/whole day with no meals/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/revive it, once every 30 days/i)).toBeInTheDocument();
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Got it' }));
+    // The dialog's corner × is also named Close; the footer button is the one in the copy.
+    const footerClose = dialog.querySelector('[data-slot="dialog-footer"] button') as HTMLElement;
+    expect(footerClose).toHaveTextContent('Close');
+    await userEvent.click(footerClose);
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
-  it('gives the badge a 44px quiet pill and leaves the truncation to the wordmark', async () => {
+  it('gives the chip a 44px quiet pill and leaves the truncation to the date label', async () => {
     const backend = stubBackend({
       mealDates: vi.fn(async () => ({ dates: ['2026-09-15'], streak: 5 })),
     });
     render(<HomeScreen {...props(backend)} />);
 
-    const badge = await screen.findByRole('button', { name: '5-day logging streak' });
+    const badge = await screen.findByRole('button', { name: '5-day streak' });
     for (const cls of [
       'min-h-11',
       'rounded-control',
@@ -165,14 +168,11 @@ describe('HomeScreen', () => {
       expect(badge.className).toContain(cls);
     }
 
-    const header = badge.closest('header') as HTMLElement;
-    const wordmark = within(header).getByRole('heading', { level: 1 });
-    // At 375pt the wordmark is the only thing allowed to truncate.
-    expect(wordmark.className).toContain('truncate');
-    expect(wordmark.className).toContain('min-w-0');
-    expect(screen.getByRole('button', { name: 'Refresh' }).parentElement?.className).toContain(
-      'shrink-0',
-    );
+    // At 375pt the date label is the only thing allowed to truncate.
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading.className).toContain('min-w-0');
+    expect(heading.querySelector('span')?.className).toContain('truncate');
+    expect(screen.getByRole('button', { name: 'Refresh' }).className).toContain('shrink-0');
   });
 
   it('prompts to set a goal when no targets are configured', async () => {
@@ -189,9 +189,7 @@ describe('HomeScreen', () => {
     });
     render(<HomeScreen {...props(backend)} />);
 
-    expect(
-      await screen.findByText('Set a goal later — meals log without one.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Set a goal later. Meals log without one.')).toBeInTheDocument();
   });
 
   it('shows exactly one empty message when targets exist', async () => {
@@ -268,7 +266,7 @@ describe('HomeScreen', () => {
       'destructive',
     ]);
     expect(values.map((value) => value.className)).toEqual([
-      expect.stringContaining('text-primary'),
+      expect.stringContaining('text-foreground'),
       expect.stringContaining('text-warning'),
       expect.stringContaining('text-destructive'),
     ]);
@@ -300,7 +298,7 @@ describe('HomeScreen', () => {
     });
     render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
 
-    await waitFor(() => expect(screen.getByText('Over by 400')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Over by 400 kcal')).toBeInTheDocument());
     // The ring's caption says "over" in words, not just in hue.
     expect(screen.getByText('kcal over')).toBeInTheDocument();
     expect(screen.queryByText('kcal left')).not.toBeInTheDocument();
@@ -386,7 +384,7 @@ describe('HomeScreen', () => {
       const card = toggle.closest('section') as HTMLElement;
       const ringRow = card
         .querySelector('[data-slot="ring-numeral"]')
-        ?.closest('.flex.items-center.gap-4') as HTMLElement;
+        ?.closest('.flex.flex-wrap.gap-4') as HTMLElement;
 
       // A direct child of the card, after the row that holds the ring and the macros.
       expect(toggle.parentElement).toBe(card);

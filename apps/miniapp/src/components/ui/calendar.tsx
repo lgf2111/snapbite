@@ -21,22 +21,22 @@ export function Calendar({
       classNames={{
         months: 'flex flex-col',
         month: 'flex flex-col gap-3',
-        month_caption: 'flex h-9 items-center justify-center',
-        caption_label: 'text-sm font-medium',
-        nav: 'flex items-center justify-between absolute inset-x-0 top-1 px-1',
+        month_caption: 'flex h-11 items-center justify-center',
+        caption_label: 'text-body font-medium',
+        nav: 'flex items-center justify-between absolute inset-x-0 top-0 px-1',
         button_previous: cn(
-          'inline-flex size-11 items-center justify-center rounded-control opacity-70 transition-[transform,background-color,opacity] duration-[120ms] hover:opacity-100 hover:bg-accent active:scale-90 motion-reduce:active:scale-100',
+          'inline-flex size-11 items-center justify-center rounded-control opacity-70 transition-[transform,background-color,opacity] duration-[120ms] hover:opacity-100 hover:bg-accent active:scale-[0.97] motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring',
         ),
         button_next: cn(
-          'inline-flex size-11 items-center justify-center rounded-control opacity-70 transition-[transform,background-color,opacity] duration-[120ms] hover:opacity-100 hover:bg-accent active:scale-90 motion-reduce:active:scale-100',
+          'inline-flex size-11 items-center justify-center rounded-control opacity-70 transition-[transform,background-color,opacity] duration-[120ms] hover:opacity-100 hover:bg-accent active:scale-[0.97] motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring',
         ),
         month_grid: 'w-full border-collapse',
         weekdays: 'flex',
-        weekday: 'text-muted-foreground w-9 text-center text-[0.7rem] font-normal',
+        weekday: 'text-muted-foreground w-11 text-center text-caption font-normal',
         week: 'flex w-full mt-1',
-        day: 'size-9 p-0 text-center text-sm',
+        day: 'size-11 p-0 text-center text-body',
         day_button: cn(
-          'inline-flex size-9 items-center justify-center rounded-control font-normal transition-[transform,background-color,color] duration-[120ms] active:scale-90 motion-reduce:active:scale-100 hover:bg-accent hover:text-accent-foreground aria-selected:opacity-100',
+          'inline-flex size-11 items-center justify-center rounded-control font-normal transition-[transform,background-color,color] duration-[120ms] active:scale-[0.97] motion-reduce:active:scale-100 hover:bg-accent hover:text-accent-foreground aria-selected:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring',
         ),
         // The selected day is the one filled pill, and owns its text colour. Today
         // is marked with an inset ring and weight only: it sets no text colour, so

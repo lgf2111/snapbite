@@ -49,13 +49,25 @@ describe('useCachedData', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it('surfaces an error only when there is nothing cached to show', async () => {
+  it('surfaces an error when there is nothing cached to show', async () => {
     const fetcher = vi.fn().mockRejectedValue(new Error('network down'));
     const { result } = renderHook(() => useCachedData('k3', fetcher));
 
     await waitFor(() => expect(result.current.error).toBe('network down'));
     expect(result.current.loading).toBe(false);
     expect(result.current.data).toBeUndefined();
+  });
+
+  it('keeps cached rows but still surfaces a revalidation error', async () => {
+    setCached('k3b', 'cached');
+    const fetcher = vi.fn().mockRejectedValue(new Error('network down'));
+    const { result } = renderHook(() => useCachedData('k3b', fetcher));
+
+    act(() => result.current.refresh());
+
+    await waitFor(() => expect(result.current.error).toBe('network down'));
+    expect(result.current.data).toBe('cached');
+    expect(result.current.loading).toBe(false);
   });
 
   it('ignores a stale response for a previous key after the key changes', async () => {
