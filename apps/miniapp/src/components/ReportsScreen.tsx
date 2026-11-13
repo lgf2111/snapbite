@@ -1,5 +1,5 @@
+import { Section } from '@/components/Section';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { ApiError } from '@/lib/api';
@@ -14,8 +14,8 @@ import type {
   ReportWeek,
   ReportWeekday,
 } from '@snapbite/core';
-import { ArrowLeft, ChevronRight, Lock, TrendingUp } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface ReportsScreenProps {
   backend: Backend;
@@ -53,31 +53,11 @@ function gradeFor(score: number | null): string | null {
   return 'D';
 }
 
-function Section({
-  title,
-  hint,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-3 rounded-surface border border-border bg-card p-4">
-      <div>
-        <h2 className="font-display text-body font-medium">{title}</h2>
-        {hint && <p className="text-muted-foreground text-caption">{hint}</p>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
       <dt className="text-muted-foreground text-caption">{label}</dt>
-      <dd className="tabular font-display text-body font-medium">{value}</dd>
+      <dd className="tabular text-body font-medium">{value}</dd>
     </div>
   );
 }
@@ -141,43 +121,39 @@ function ReportCardSection({
 }) {
   const grade = gradeFor(card.scorePct);
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-muted-foreground text-caption tracking-wide uppercase">
-              Report card · last 7 days
-            </p>
-            <p className="font-display text-title mt-0.5">
-              {card.daysLogged === 0
-                ? 'No meals logged'
-                : `${card.daysOnTarget} of 7 days on target`}
-            </p>
-          </div>
-          {grade && (
-            <span
-              aria-label={`Grade ${grade}`}
-              className="bg-secondary text-primary-text font-display flex size-11 shrink-0 items-center justify-center rounded-control text-xl font-semibold"
-            >
-              {grade}
-            </span>
-          )}
-        </div>
-
-        <dl className="grid grid-cols-3 gap-3">
-          <Stat label="Logged" value={`${card.daysLogged}/7`} />
-          <Stat label="Avg kcal" value={card.daysLogged > 0 ? NUM.format(card.avgKcal) : '—'} />
-          <Stat label="Avg protein" value={card.daysLogged > 0 ? `${card.avgProteinG} g` : '—'} />
-        </dl>
-
-        {card.scorePct == null && (
-          <p className="text-muted-foreground text-caption">
-            Set a goal in Settings to score calorie and protein adherence.
+    <section className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-muted-foreground text-caption font-medium">
+            Report card · last 7 days
           </p>
+          <p className="font-display text-title mt-0.5">
+            {card.daysLogged === 0 ? 'No meals logged' : `${card.daysOnTarget} of 7 days on target`}
+          </p>
+        </div>
+        {grade && (
+          <span
+            aria-label={`Grade ${grade}`}
+            className="bg-secondary font-display text-numeral flex size-11 shrink-0 items-center justify-center rounded-control"
+          >
+            {grade}
+          </span>
         )}
-        <ProjectionLine projection={projection} />
-      </CardContent>
-    </Card>
+      </div>
+
+      <dl className="grid grid-cols-3 gap-3">
+        <Stat label="Logged" value={`${card.daysLogged}/7`} />
+        <Stat label="Avg kcal" value={card.daysLogged > 0 ? NUM.format(card.avgKcal) : '—'} />
+        <Stat label="Avg protein" value={card.daysLogged > 0 ? `${card.avgProteinG}g` : '—'} />
+      </dl>
+
+      {card.scorePct == null && (
+        <p className="text-muted-foreground text-caption">
+          Set a goal in Settings to score calorie and protein adherence.
+        </p>
+      )}
+      <ProjectionLine projection={projection} />
+    </section>
   );
 }
 
@@ -193,7 +169,9 @@ function TrendSection({ points, range }: { points: ReportTrendPoint[]; range: Re
       <div
         className="flex h-28 items-end gap-[2px]"
         role="img"
-        aria-label={`${range === '90d' ? 'Daily' : 'Monthly'} calorie trend`}
+        aria-label={`${range === '90d' ? 'Daily' : 'Monthly'} calorie trend, ${logged} logged ${
+          range === '90d' ? 'days' : 'months'
+        }`}
       >
         {points.map((point) => (
           <div
@@ -234,11 +212,8 @@ function AdherenceSection({ weeks }: { weeks: ReportWeek[] }) {
             <span className="text-muted-foreground text-caption">
               {shortDate(week.weekStartKey)}
             </span>
-            <div className="bg-muted h-2 overflow-hidden rounded-full">
-              <div
-                className="bg-primary h-full rounded-full"
-                style={{ width: `${week.scorePct ?? 0}%` }}
-              />
+            <div className="bg-muted h-2 overflow-hidden">
+              <div className="bg-primary h-full" style={{ width: `${week.scorePct ?? 0}%` }} />
             </div>
             <span className="tabular text-caption text-right">
               {week.scorePct == null ? '—' : `${week.scorePct}%`}
@@ -275,14 +250,14 @@ function WeekdaySection({ weekdays }: { weekdays: ReportWeekday[] }) {
           <div key={day.weekday} className="flex min-w-0 flex-1 flex-col items-center gap-1">
             <div className="flex w-full flex-1 items-end">
               <div
-                className={`w-full rounded-none ${day.loggedDays > 0 ? 'bg-primary/80' : 'bg-muted'}`}
+                className={`w-full rounded-none ${day.loggedDays > 0 ? 'bg-primary' : 'bg-muted'}`}
                 style={{
                   height: `${day.loggedDays > 0 ? Math.max(3, (day.avgKcal / max) * 100) : 3}%`,
                 }}
                 title={`${day.label}: ${NUM.format(day.avgKcal)} kcal`}
               />
             </div>
-            <span className="text-muted-foreground text-[10px]">{day.label}</span>
+            <span className="text-muted-foreground text-caption">{day.label}</span>
           </div>
         ))}
       </div>
@@ -303,11 +278,8 @@ function TimeOfDaySection({ buckets }: { buckets: ReportTimeOfDay[] }) {
         {buckets.map((bucket) => (
           <div key={bucket.bucket} className="grid grid-cols-[7.5rem_1fr_2rem] items-center gap-2">
             <span className="text-caption">{bucket.label}</span>
-            <div className="bg-muted h-2 overflow-hidden rounded-full">
-              <div
-                className="bg-primary h-full rounded-full"
-                style={{ width: `${bucket.sharePct}%` }}
-              />
+            <div className="bg-muted h-2 overflow-hidden">
+              <div className="bg-primary h-full" style={{ width: `${bucket.sharePct}%` }} />
             </div>
             <span className="tabular text-caption text-right">{bucket.meals}</span>
           </div>
@@ -336,15 +308,13 @@ function DishesSection({
       </ul>
       {drift.length > 0 && (
         <div className="flex flex-col gap-1.5 border-t border-border pt-3">
-          <p className="text-muted-foreground text-caption tracking-wide uppercase">
-            Portion drift
-          </p>
+          <p className="text-muted-foreground text-caption font-medium">Portion drift</p>
           {drift.map((item) => (
-            <p key={item.name} className="text-caption flex items-baseline justify-between gap-3">
+            <p key={item.name} className="flex items-baseline justify-between gap-3">
               <span className="min-w-0 truncate">{item.name}</span>
-              <span className="text-muted-foreground tabular shrink-0">
+              <span className="text-muted-foreground text-caption tabular shrink-0">
                 {item.deltaPct > 0 ? '+' : ''}
-                {item.deltaPct}% · {item.firstWeightG} → {item.lastWeightG} g
+                {item.deltaPct}% · {item.firstWeightG} → {item.lastWeightG}g
               </span>
             </p>
           ))}
@@ -383,7 +353,11 @@ export function ReportsScreen({ backend, onBack, onSeeCredits }: ReportsScreenPr
           setStatus('locked');
           return;
         }
-        setMessage(error instanceof Error ? error.message : 'Could not load the report.');
+        setMessage(
+          error instanceof Error && error.message
+            ? error.message
+            : 'Check the connection, then try again.',
+        );
         setStatus('error');
       });
     return () => {
@@ -392,7 +366,7 @@ export function ReportsScreen({ backend, onBack, onSeeCredits }: ReportsScreenPr
   }, [backend, range, reload]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <header className="flex items-center gap-2">
         <Button variant="ghost" size="icon" aria-label="Back" onClick={onBack}>
           <ArrowLeft className="size-4" />
@@ -414,85 +388,67 @@ export function ReportsScreen({ backend, onBack, onSeeCredits }: ReportsScreenPr
         <ToggleGroupItem value="12m">12 months</ToggleGroupItem>
       </ToggleGroup>
 
-      {status === 'loading' && (
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-36 w-full rounded-surface" />
-          <Skeleton className="h-40 w-full rounded-surface" />
-          <Skeleton className="h-32 w-full rounded-surface" />
-        </div>
-      )}
+      <div className="flex flex-col gap-4">
+        {status === 'loading' && (
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-36 w-full rounded-control" />
+            <Skeleton className="h-40 w-full rounded-control" />
+            <Skeleton className="h-32 w-full rounded-control" />
+          </div>
+        )}
 
-      {status === 'locked' && (
-        <Card>
-          <CardContent className="flex flex-col gap-3 p-4">
-            <div className="bg-secondary text-primary-text flex size-10 items-center justify-center rounded-control">
-              <Lock className="size-5" />
-            </div>
-            <div>
-              <h2 className="font-display text-title">Reports are part of the supporter tag</h2>
-              <p className="text-muted-foreground text-caption mt-1">
-                Buy any credit pack once — or start the trial — and advanced analytics stay unlocked
-                permanently. Credits run the AI; the tag does not expire.
-              </p>
-            </div>
-            <Button onClick={onSeeCredits}>
-              See credits and supporter
-              <ChevronRight className="size-4" />
-            </Button>
-            <button
-              type="button"
-              className="text-muted-foreground text-caption min-h-11 text-left underline-offset-4 hover:underline"
+        {status === 'locked' && (
+          <Section title="Reports are part of the supporter tag">
+            <p className="text-muted-foreground text-caption">
+              Buy any credit pack once, or start the trial, and Reports stay unlocked for good.
+              Credits run the AI. The tag does not expire.
+            </p>
+            <Button onClick={onSeeCredits}>See credits and supporter</Button>
+            <Button
+              variant="link"
+              className="w-full"
               onClick={() => setReload((value) => value + 1)}
             >
-              I already bought a pack — check again
-            </button>
+              Check again after buying a pack
+            </Button>
             <p className="text-muted-foreground text-caption">
-              The daily rings, weekly view, recap and streak stay free.
+              The daily ring, weekly view, recap and streak stay free.
             </p>
-          </CardContent>
-        </Card>
-      )}
+          </Section>
+        )}
 
-      {status === 'error' && (
-        <Card>
-          <CardContent className="flex flex-col gap-3 p-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="text-muted-foreground size-5" />
-              <h2 className="font-display text-body font-medium">Could not load the report</h2>
-            </div>
+        {status === 'error' && (
+          <Section title="Could not load the report">
             <p className="text-muted-foreground text-caption">{message}</p>
             <Button variant="secondary" onClick={() => setReload((value) => value + 1)}>
               Try again
             </Button>
-          </CardContent>
-        </Card>
-      )}
+          </Section>
+        )}
 
-      {status === 'ready' && report && (
-        <>
-          <ReportCardSection card={report.card} projection={report.projection} />
+        {status === 'ready' && report && (
+          <>
+            <ReportCardSection card={report.card} projection={report.projection} />
 
-          {report.totals.meals === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col gap-2 p-4">
-                <h2 className="font-display text-body font-medium">Nothing to report yet</h2>
+            {report.totals.meals === 0 ? (
+              <Section title="Nothing to report yet">
                 <p className="text-muted-foreground text-caption">
                   Log a few meals and this page fills in: trends, weekly adherence, weekday
                   patterns, recurring dishes and a projection.
                 </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <TrendSection points={report.series} range={report.range} />
-              <AdherenceSection weeks={report.weeks} />
-              <WeekdaySection weekdays={report.weekdays} />
-              <TimeOfDaySection buckets={report.timeOfDay} />
-              <DishesSection dishes={report.dishes} drift={report.portionDrift} />
-            </>
-          )}
-        </>
-      )}
+              </Section>
+            ) : (
+              <>
+                <TrendSection points={report.series} range={report.range} />
+                <AdherenceSection weeks={report.weeks} />
+                <WeekdaySection weekdays={report.weekdays} />
+                <TimeOfDaySection buckets={report.timeOfDay} />
+                <DishesSection dishes={report.dishes} drift={report.portionDrift} />
+              </>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
