@@ -487,6 +487,31 @@ export function detailToAnalysis(detail: MealDetail): AIFoodAnalysis {
 }
 
 /**
+ * A strong, quoted ETag for one representation of a photo. R2's `httpEtag` is
+ * already a strong validator; the width is appended because `?w=240` and
+ * `?w=480` are different representations and must not share a validator.
+ */
+function photoEtag(base: string, maxEdge: number | null): string {
+  const bare = base.replace(/^W\//, '').replace(/^"(.*)"$/, '$1');
+  return maxEdge ? `"${bare}-w${maxEdge}"` : `"${bare}"`;
+}
+
+/** Fallback validator for bytes with no store metadata (the Telegram proxy). */
+function keyEtag(key: string, size: number): string {
+  return `${key}:${size}`;
+}
+
+/** If-None-Match uses weak comparison: `W/"x"` matches `"x"` (RFC 9110). */
+function matchesEtag(header: string | undefined, etag: string): boolean {
+  if (!header) return false;
+  const bare = (value: string) => value.trim().replace(/^W\//, '');
+  return header.split(',').some((candidate) => {
+    const value = candidate.trim();
+    return value === '*' || bare(value) === bare(etag);
+  });
+}
+
+/**
  * Photo proxy route, mounted separately because <img> tags can't send the
  * initData header — it's passed as a query param and verified inline here. The
  * bot token never reaches the client; the Worker fetches the image and streams
@@ -530,10 +555,7 @@ export function mealPhotoRoutes(botClientFactory: BotClientFactory = defaultBotC
 
     // The PWA renders photos from a different origin than the API (Pages vs
     // workers.dev), so an <img> needs this header to be allowed at all.
-    const cacheHeaders = {
-      'cache-control': 'private, max-age=86400',
-      'access-control-allow-origin': '*',
-    } as const;
+    const cors = { 'access-control-allow-origin': '*' } as const;
 
     // `?w=` asks for a thumbnail: a JPEG with at most `w` px on the long edge.
     // No parameter means the stored original, untouched (the detail screen).
@@ -541,21 +563,53 @@ export function mealPhotoRoutes(botClientFactory: BotClientFactory = defaultBotC
     const requested = Number.parseInt(c.req.query('w') ?? '', 10);
     const maxEdge =
       Number.isFinite(requested) && requested > 0 ? Math.min(requested, MAX_THUMB_EDGE) : null;
-    const respond = (bytes: Uint8Array | ArrayBuffer, mime: string) => {
-      const resized = maxEdge
-        ? resizeImage(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), mime, maxEdge)
-        : null;
-      return new Response(resized?.bytes ?? bytes, {
-        headers: { 'content-type': resized?.mimeType ?? mime, ...cacheHeaders },
+
+    // A thumbnail is a pure function of the stored bytes + width, so it can be
+    // cached for a year without revalidation. The original keeps a day: the
+    // detail screen should notice a replaced photo.
+    const cacheControl = maxEdge
+      ? 'private, max-age=31536000, immutable'
+      : 'private, max-age=86400';
+
+    const notModified = (etag: string) =>
+      new Response(null, {
+        status: 304,
+        headers: { etag, 'cache-control': cacheControl, ...cors },
+      });
+
+    const respond = (bytes: Uint8Array, mime: string, etag: string) => {
+      const resized = maxEdge ? resizeImage(bytes, mime, maxEdge) : null;
+      const body = resized?.bytes ?? bytes;
+      return new Response(body, {
+        headers: {
+          'content-type': resized?.mimeType ?? mime,
+          // Explicit, so a browser can store the response without waiting for
+          // a chunked stream to finish.
+          'content-length': String(body.byteLength),
+          etag,
+          'cache-control': cacheControl,
+          ...cors,
+        },
       });
     };
 
-    // 1) Bytes we own (Shortcut / PWA uploads).
+    // 1) Bytes we own (Shortcut / PWA uploads). A conditional request only
+    // needs `head`: no body download, no Photon resize. An unconditional one
+    // goes straight to `get`, so a first view pays for one R2 read, not two.
     const store = r2Store(c.env.PHOTOS);
     if (store && detail.photoKey) {
+      const ifNoneMatch = c.req.header('if-none-match');
+      if (ifNoneMatch) {
+        const meta = await store.head(detail.photoKey);
+        if (meta) {
+          const etag = photoEtag(meta.etag ?? keyEtag(detail.photoKey, meta.size), maxEdge);
+          if (matchesEtag(ifNoneMatch, etag)) return notModified(etag);
+        }
+      }
       const stored = await store.get(detail.photoKey);
       if (stored) {
-        return respond(stored.bytes, stored.mime ?? 'image/jpeg');
+        const etag = photoEtag(stored.etag ?? keyEtag(detail.photoKey, stored.size), maxEdge);
+        return respond(stored.bytes, stored.mime ?? 'image/jpeg', etag);
       }
     }
 
@@ -568,7 +622,9 @@ export function mealPhotoRoutes(botClientFactory: BotClientFactory = defaultBotC
     if (!file) return c.text('Not found', 404);
 
     const bytes = Uint8Array.from(atob(file.base64), (ch) => ch.charCodeAt(0));
-    return respond(bytes, file.mimeType);
+    const etag = photoEtag(keyEtag(detail.telegramFileId, bytes.length), maxEdge);
+    if (matchesEtag(c.req.header('if-none-match'), etag)) return notModified(etag);
+    return respond(bytes, file.mimeType, etag);
   });
 
   return app;

@@ -8,9 +8,23 @@
  * bot going away.
  */
 
+export interface ObjectMeta {
+  mime: string | null;
+  /** Strong validator for these bytes, quotes included when the store has one. */
+  etag: string | null;
+  /** Stored size in bytes. */
+  size: number;
+}
+
+export interface StoredObject extends ObjectMeta {
+  bytes: Uint8Array;
+}
+
 export interface ObjectStore {
   put(key: string, bytes: Uint8Array, mime: string): Promise<void>;
-  get(key: string): Promise<{ bytes: Uint8Array; mime: string | null } | null>;
+  /** Metadata only: the cheap path for a conditional photo request. */
+  head(key: string): Promise<ObjectMeta | null>;
+  get(key: string): Promise<StoredObject | null>;
   delete(key: string): Promise<void>;
 }
 
@@ -25,11 +39,25 @@ export function r2Store(bucket: R2Bucket | undefined): ObjectStore | null {
     async put(key, bytes, mime) {
       await bucket.put(key, bytes, { httpMetadata: { contentType: mime } });
     },
+    async head(key) {
+      const obj = await bucket.head(key);
+      if (!obj) return null;
+      return {
+        mime: obj.httpMetadata?.contentType ?? null,
+        etag: obj.httpEtag || null,
+        size: obj.size,
+      };
+    },
     async get(key) {
       const obj = await bucket.get(key);
       if (!obj) return null;
       const bytes = new Uint8Array(await obj.arrayBuffer());
-      return { bytes, mime: obj.httpMetadata?.contentType ?? null };
+      return {
+        bytes,
+        mime: obj.httpMetadata?.contentType ?? null,
+        etag: obj.httpEtag || null,
+        size: obj.size,
+      };
     },
     async delete(key) {
       await bucket.delete(key);
