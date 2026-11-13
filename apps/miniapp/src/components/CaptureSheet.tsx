@@ -1,4 +1,3 @@
-import { cn } from '@/lib/utils';
 import type { MealResult } from '@snapbite/core';
 import { Loader2 } from 'lucide-react';
 import { type RefObject, useEffect, useRef, useState } from 'react';
@@ -9,7 +8,14 @@ import { CaptureFan } from './CaptureFan.js';
 import { type CaptureAction, CaptureMenu } from './CaptureMenu.js';
 import { ManualMealDialog } from './ManualMealDialog.js';
 import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
 
 type Stage = 'idle' | 'analyzing' | 'review' | 'saving' | 'error';
 
@@ -386,18 +392,34 @@ export function CaptureSheet({
           if (!next) reset();
         }}
       >
-        <DialogContent className="sheet-safe bottom-0 top-auto max-w-md translate-y-0 rounded-b-none rounded-t-surface duration-200 data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2 data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100">
+        <DialogContent variant="sheet" hideClose={stage === 'saving'}>
           <DialogHeader>
-            <DialogTitle className="text-title">
-              {stage === 'review' || stage === 'saving' ? 'Log this meal?' : 'Add a meal photo'}
-            </DialogTitle>
-            <DialogDescription>
+            <DialogTitle>
               {stage === 'analyzing'
                 ? 'Reading the photo…'
                 : stage === 'review' || stage === 'saving'
+                  ? 'Log this meal?'
+                  : draft
+                    ? "Couldn't save that meal"
+                    : "Couldn't read that photo"}
+            </DialogTitle>
+            {stage === 'analyzing' ? (
+              <DialogDescription className="flex items-center gap-2">
+                <Loader2
+                  className="size-4 shrink-0 animate-spin motion-reduce:animate-none"
+                  aria-hidden
+                />
+                This usually takes a few seconds.
+              </DialogDescription>
+            ) : (
+              <DialogDescription>
+                {stage === 'review' || stage === 'saving'
                   ? 'Check the estimate, then save it.'
-                  : 'That did not work.'}
-            </DialogDescription>
+                  : draft
+                    ? 'Your estimate is kept. Try again, or discard it.'
+                    : 'Try another photo, or log it by hand from the menu.'}
+              </DialogDescription>
+            )}
           </DialogHeader>
 
           {preview.current && (
@@ -408,31 +430,24 @@ export function CaptureSheet({
             />
           )}
 
-          {stage === 'analyzing' && (
-            <div className="text-muted-foreground flex items-center gap-2 text-caption">
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-              Analysing…
-            </div>
-          )}
-
-          {draft && (stage === 'review' || stage === 'saving' || stage === 'error') && (
-            <div className="rounded-control border border-border bg-background p-3">
+          {draft && stage !== 'analyzing' && (
+            <div className="flex flex-col gap-3 border-t border-border pt-4">
               <p className="font-display text-display tabular leading-none">
                 {Math.round(draft.total.energyKcal)}
-                <span className="text-muted-foreground ml-1 text-caption">kcal</span>
+                <span className="text-muted-foreground text-caption">{'\u00a0'}kcal</span>
               </p>
-              <p className="text-muted-foreground mt-2 text-caption">
+              <p className="text-muted-foreground text-caption line-clamp-2">
                 {draft.foods.map((item) => item.food.name).join(' · ') || 'Meal'}
               </p>
-              <dl className="text-caption mt-3 grid grid-cols-3 gap-2">
+              <dl className="grid grid-cols-3 gap-2">
                 {[
                   ['Protein', draft.total.proteinG],
                   ['Carbs', draft.total.carbsG],
                   ['Fat', draft.total.fatG],
                 ].map(([label, value]) => (
                   <div key={String(label)}>
-                    <dt className="text-muted-foreground">{label}</dt>
-                    <dd className="tabular font-medium">{Math.round(Number(value))} g</dd>
+                    <dt className="text-muted-foreground text-caption">{label}</dt>
+                    <dd className="text-body tabular font-medium">{Math.round(Number(value))}g</dd>
                   </div>
                 ))}
               </dl>
@@ -445,31 +460,39 @@ export function CaptureSheet({
             </p>
           )}
 
-          <div className={cn('flex flex-col gap-2', stage === 'review' && 'mt-1')}>
-            {(stage === 'review' || stage === 'saving') && (
-              <Button onClick={() => void save()} disabled={busy}>
-                {stage === 'saving' ? 'Saving…' : 'Save meal'}
-              </Button>
-            )}
+          {stage !== 'analyzing' && (
+            <DialogFooter>
+              {(stage === 'review' || stage === 'saving') && (
+                <Button onClick={() => void save()} disabled={busy}>
+                  {stage === 'saving' ? 'Saving…' : 'Save meal'}
+                </Button>
+              )}
 
-            {stage === 'error' && draft && (
-              <Button onClick={() => void save()} disabled={busy}>
-                Try saving again
-              </Button>
-            )}
+              {stage === 'error' && draft && (
+                <Button onClick={() => void save()} disabled={busy}>
+                  Try saving again
+                </Button>
+              )}
 
-            {stage === 'error' && !draft && (
-              <Button onClick={uploadImage} disabled={busy}>
-                Choose another photo
-              </Button>
-            )}
+              {stage === 'error' && !draft && (
+                <Button onClick={uploadImage} disabled={busy}>
+                  Choose another photo
+                </Button>
+              )}
 
-            {(stage === 'review' || stage === 'error') && (
-              <Button variant="ghost" onClick={reset}>
-                Discard
-              </Button>
-            )}
-          </div>
+              {(stage === 'review' || (stage === 'error' && draft)) && (
+                <Button variant="link" onClick={reset}>
+                  Discard estimate
+                </Button>
+              )}
+
+              {stage === 'error' && !draft && (
+                <Button variant="link" onClick={reset}>
+                  Close
+                </Button>
+              )}
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
