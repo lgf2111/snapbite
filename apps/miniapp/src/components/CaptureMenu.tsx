@@ -198,7 +198,7 @@ export function CaptureMenu({ open, onClose, onPick, triggerRef, highlight = nul
         data-testid="capture-scrim"
         onClick={dismiss}
         className={cn(
-          'fixed inset-0 z-30 cursor-default bg-black/50',
+          'fixed inset-0 z-30 cursor-default bg-[var(--scrim)]',
           instant ? '' : 'transition-opacity duration-200',
           shown ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
@@ -244,7 +244,7 @@ export function CaptureMenu({ open, onClose, onPick, triggerRef, highlight = nul
                     onPick(id);
                   }}
                   data-highlighted={highlight === id ? 'true' : undefined}
-                  className="flex min-h-24 w-full flex-col items-start gap-2 rounded-surface border border-border bg-card p-4 text-left text-card-foreground shadow-lg focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none data-[highlighted=true]:border-primary data-[highlighted=true]:ring-2 data-[highlighted=true]:ring-primary"
+                  className="flex min-h-24 w-full flex-col items-start gap-2 rounded-surface border border-border bg-card p-4 text-left text-card-foreground shadow-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[highlighted=true]:border-primary data-[highlighted=true]:ring-2 data-[highlighted=true]:ring-primary"
                   style={{
                     pointerEvents: shown ? 'auto' : 'none',
                     opacity: shown ? 1 : 0,
@@ -261,7 +261,7 @@ export function CaptureMenu({ open, onClose, onPick, triggerRef, highlight = nul
                       : 'cubic-bezier(0.4, 0, 1, 1), ease-in',
                   }}
                 >
-                  <Icon className="text-primary-text size-6" aria-hidden />
+                  <Icon className="text-foreground size-6" aria-hidden />
                   <span className="flex flex-col">
                     <span className="text-body font-medium leading-tight">{title}</span>
                     <span className="text-muted-foreground text-caption">{hint}</span>

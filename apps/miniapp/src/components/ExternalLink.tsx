@@ -82,7 +82,7 @@ function CopyLink({ href, children, className }: Props) {
         aria-label={`Copy link to ${hostOf(href)}`}
         onClick={() => void copy()}
         className={cn(
-          '-my-2 inline-flex items-center gap-1 py-2 text-left focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
+          '-my-2 inline-flex items-center gap-1 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
           className,
         )}
       >

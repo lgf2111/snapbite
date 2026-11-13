@@ -268,7 +268,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     <>
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 z-30 bg-black/40 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
+        className="pointer-events-none fixed inset-0 z-30 bg-[var(--scrim)] motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
       />
       {/* Centred on the button, bottom edge on its centre: only the half above it exists.
           Above the tab bar so the wedge ends are not clipped by it. */}
