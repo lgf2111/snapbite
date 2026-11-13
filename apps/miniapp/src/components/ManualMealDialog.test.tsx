@@ -181,7 +181,7 @@ describe('the sheet is a header / body / footer flex column', () => {
 
     for (const id of FIELD_IDS) {
       expect(field(id).className).toContain('h-11');
-      expect(field(id).className).toContain('ring-inset');
+      expect(field(id).className).toContain('-outline-offset-2');
     }
   });
 

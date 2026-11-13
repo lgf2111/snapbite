@@ -49,10 +49,10 @@ describe('SaveMealDialog', () => {
 
     // The field is 44px tall, and its group sits in a form with a 16px gap
     // before the action stack — not in the old sticky footer that painted over
-    // the input's ring when the keyboard shortened the sheet. The ring is inset
-    // as well, so it cannot leave the field even if a neighbour is close.
+    // the input's ring when the keyboard shortened the sheet. The focus outline
+    // is inset as well, so it cannot leave the field even if a neighbour is close.
     expect(input.className).toContain('h-11');
-    expect(input.className).toContain('ring-inset');
+    expect(input.className).toContain('-outline-offset-2');
     const form = input.closest('form') as HTMLFormElement;
     expect(form.className).toContain('gap-4');
     expect(input.closest('[data-slot=dialog-footer]')).toBeNull();

@@ -150,7 +150,7 @@ function CopyButton({
     <span className="inline-flex items-center gap-2">
       <Button
         type="button"
-        variant="outline"
+        variant="secondary"
         size="sm"
         aria-label={label}
         onClick={() => void copy()}
@@ -316,7 +316,7 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
         ) : (
           <Button
             type="button"
-            variant={hasToken ? 'outline' : 'default'}
+            variant={hasToken ? 'secondary' : 'default'}
             disabled={busy}
             onClick={() => void create()}
           >

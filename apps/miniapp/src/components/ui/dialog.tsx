@@ -2,12 +2,32 @@ import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { cn } from '@/lib/utils';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { XIcon } from 'lucide-react';
+import { type VariantProps, cva } from 'class-variance-authority';
 import type * as React from 'react';
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
 const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;
+
+/**
+ * `center` floats in the middle; `sheet` is anchored to the bottom edge with
+ * square bottom corners and slides up instead of zooming.
+ */
+const dialogContentVariants = cva(
+  'bg-card fixed left-1/2 z-50 grid w-[calc(100%-2rem)] -translate-x-1/2 grid-cols-[minmax(0,1fr)] gap-4 max-h-[calc(100svh-var(--keyboard-inset,0px)-2rem)] overflow-y-auto overscroll-contain border p-5 shadow-lift duration-200 motion-reduce:duration-0 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+  {
+    variants: {
+      variant: {
+        center:
+          'max-w-sm rounded-surface data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+        sheet:
+          'sheet-safe bottom-0 top-auto max-w-md translate-y-0 rounded-t-surface rounded-b-none data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-2',
+      },
+    },
+    defaultVariants: { variant: 'center' },
+  },
+);
 
 function DialogOverlay({
   className,
@@ -17,7 +37,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        'fixed inset-0 z-50 bg-background/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+        'fixed inset-0 z-50 bg-[var(--scrim)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         className,
       )}
       {...props}
@@ -29,8 +49,10 @@ function DialogContent({
   className,
   children,
   hideClose = false,
+  variant,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & { hideClose?: boolean }) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> &
+  VariantProps<typeof dialogContentVariants> & { hideClose?: boolean }) {
   // Every dialog can hold a text field, and iOS puts the keyboard over them.
   const keyboardInset = useKeyboardInset();
   return (
@@ -39,7 +61,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          'bg-card fixed left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 grid-cols-[minmax(0,1fr)] gap-4 max-h-[calc(100svh-var(--keyboard-inset,0px)-2rem)] overflow-y-auto overscroll-contain rounded-surface border p-5 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+          dialogContentVariants({ variant }),
           // With the keyboard up, sit directly above it (top edge on screen)
           // instead of centring in the half-dark space that is left.
           keyboardInset > 0
@@ -51,8 +73,8 @@ function DialogContent({
       >
         {children}
         {!hideClose && (
-          <DialogPrimitive.Close className="absolute top-4 right-4 rounded-control opacity-70 transition-opacity hover:opacity-100 focus:outline-none">
-            <XIcon className="size-4" />
+          <DialogPrimitive.Close className="absolute top-1 right-1 inline-flex size-11 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            <XIcon className="size-5" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}
@@ -74,10 +96,9 @@ function DialogFooter({ className, ...props }: React.ComponentProps<'div'>) {
       className={cn(
         // In flow, never sticky: a pinned footer sits on top of the sheet's
         // content when the keyboard shortens it, and it can cover the field
-        // (or its focus ring) directly above it. `flex-col-reverse` keeps the
-        // primary action (last in the DOM) on top; text-field dialogs use
-        // DialogActions instead.
-        'bg-card flex flex-col-reverse gap-2 sm:flex-row sm:justify-end',
+        // (or its focus outline) directly above it. Primary first in the DOM
+        // and on top.
+        'bg-card flex flex-col gap-2',
         className,
       )}
       {...props}
@@ -101,7 +122,7 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn('text-lg font-semibold leading-none', className)}
+      className={cn('text-title font-semibold', className)}
       {...props}
     />
   );
@@ -114,7 +135,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn('text-muted-foreground text-sm', className)}
+      className={cn('text-muted-foreground text-caption', className)}
       {...props}
     />
   );

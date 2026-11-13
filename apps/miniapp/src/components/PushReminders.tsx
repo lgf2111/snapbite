@@ -102,7 +102,7 @@ export function PushReminders({ push }: { push?: PushStatusView | null }) {
       {state === 'subscribed' && (
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           size="sm"
           className="self-start"
           disabled={busy}

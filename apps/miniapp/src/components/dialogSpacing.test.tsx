@@ -155,9 +155,9 @@ describe(`at ${VIEWPORT.width}×${VIEWPORT.height}, a focused field clears the n
       const gap = gapFromClasses(common as Element);
       expect(gap, `${name}: the container declares its vertical gap`).not.toBeNull();
 
-      // An inset ring stays inside the field; an outside one extends the box.
-      const overhang = field.className.includes('ring-inset') ? 0 : RING_PX;
-      expect(field.className).toContain('ring-inset');
+      // The focus outline is drawn inside the field (§2.7); an outside one would extend the box.
+      const overhang = field.className.includes('-outline-offset-2') ? 0 : RING_PX;
+      expect(field.className).toContain('-outline-offset-2');
       expect((gap as number) - overhang).toBeGreaterThanOrEqual(8);
 
       // No sticky/absolute footer may be painted across that gap.

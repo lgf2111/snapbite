@@ -165,7 +165,7 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
             </p>
 
             {providers.google && (
-              <Button asChild variant="outline">
+              <Button asChild variant="secondary">
                 <a href={`${apiBase}/api/auth/start/google`}>
                   <GoogleIcon />
                   Continue with Google
