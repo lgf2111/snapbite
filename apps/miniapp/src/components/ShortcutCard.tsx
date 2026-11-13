@@ -55,7 +55,7 @@ function AccordionRow({
         aria-expanded={open}
         aria-controls={id}
         onClick={onToggle}
-        className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left font-medium transition-[background-color,transform] duration-[120ms] active:scale-[0.99] active:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none motion-reduce:transition-none motion-reduce:active:scale-100"
+        className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left font-medium transition-[background-color,transform] duration-[120ms] active:scale-[0.97] active:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:active:scale-100"
       >
         <span className="flex min-w-0 items-center gap-2">
           <span className="min-w-0">{title}</span>
@@ -299,7 +299,7 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
           </code>
           <div className="flex items-center justify-between gap-2">
             <CopyButton text={fresh.token} target={tokenRef} label="Copy token" />
-            <Button type="button" variant="ghost" size="sm" onClick={() => setFresh(null)}>
+            <Button type="button" variant="link" onClick={() => setFresh(null)}>
               Done
             </Button>
           </div>
@@ -421,8 +421,8 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
                 </span>
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="sm"
+                  variant="link"
+                  className="text-destructive"
                   aria-label={`Revoke ${tokenName(t)} from ${fmtDate(t.createdAt)}`}
                   onClick={() => setConfirm({ kind: 'one', token: t })}
                 >
@@ -433,8 +433,7 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
           </ul>
           <Button
             type="button"
-            variant="ghost"
-            size="sm"
+            variant="link"
             className="text-destructive self-start"
             onClick={() => setConfirm({ kind: 'all' })}
           >
