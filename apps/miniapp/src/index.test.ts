@@ -170,4 +170,11 @@ describe('app shell top', () => {
     expect(root).toBeTruthy();
     expect(root).not.toMatch(/mask|gradient|backdrop|opacity|\/\d\d/);
   });
+
+  it('keeps the bottom bar opaque: no blur and no transparency on the nav classes (§4.1)', () => {
+    const shell = readFileSync(resolve(process.cwd(), 'src/components/AppShell.tsx'), 'utf8');
+    const nav = shell.match(/<nav[^>]*className="([^"]*)"/)?.[1] ?? '';
+    expect(nav).toContain('bg-background');
+    expect(nav).not.toMatch(/mask|gradient|backdrop|opacity|\/\d\d/);
+  });
 });

@@ -42,7 +42,7 @@ export function AppShell({
 
       <nav
         aria-label="Main"
-        className="pb-safe fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md border-t border-border bg-background/95 backdrop-blur"
+        className="pb-safe fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md border-t border-border bg-background"
       >
         <div className="relative flex h-[var(--spacing-bar)] items-stretch justify-around px-2">
           <NavButton
@@ -68,18 +68,19 @@ export function AppShell({
               aria-label={
                 menuOpen
                   ? 'Close add-meal menu'
-                  : 'Add a meal — tap for options, hold and slide to choose'
+                  : 'Add a meal. Tap for options, or hold and slide to choose.'
               }
               aria-expanded={menuOpen}
               aria-haspopup="true"
               className={cn(
-                'absolute -top-5 flex size-16 items-center justify-center rounded-full shadow-xl ring-4 ring-background transition-[transform,box-shadow,background-color,color] duration-[160ms] ease-[var(--ease-spring)] hover:shadow-2xl',
+                'absolute -top-5 flex size-16 items-center justify-center rounded-full ring-4 ring-background transition-[transform,background-color,color] duration-[160ms] ease-[var(--ease-spring)]', // unslop-ignore: circle
                 'active:scale-90 motion-reduce:transition-none motion-reduce:active:scale-100',
                 'disabled:pointer-events-none disabled:opacity-60',
                 // Press-and-hold-and-slide lives on this button only: no page pan, text
                 // selection or iOS callout from the long press.
                 'touch-none select-none [-webkit-touch-callout:none]',
-                'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
+                // The outline sits outside the ring-4 (4px), not on top of it.
+                'focus-visible:outline-2 focus-visible:outline-offset-[6px] focus-visible:outline-ring',
                 // Open: a quiet ×, not a second loud button.
                 menuOpen
                   ? 'bg-card text-foreground border border-border'
@@ -146,8 +147,8 @@ function NavButton({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex w-20 flex-col items-center justify-center gap-1 rounded-control px-3 py-2 text-caption transition-[transform,color] duration-[140ms] ease-[var(--ease-out-quint)] active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100',
-        'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
+        'flex w-20 flex-col items-center justify-center gap-1 rounded-control px-3 py-2 text-caption transition-[transform,color] duration-[140ms] ease-[var(--ease-out-quint)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
         active ? 'text-primary-text' : 'text-muted-foreground hover:text-foreground',
       )}
     >
