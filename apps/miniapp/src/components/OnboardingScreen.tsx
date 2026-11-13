@@ -229,6 +229,7 @@ export function OnboardingScreen({
   // API-key step state.
   const [provider, setProvider] = useState<ProviderId>(() => readResume()?.provider ?? 'gemini');
   const [apiKey, setApiKey] = useState('');
+  const keyInput = useRef<HTMLInputElement>(null);
 
   // Remember only *where* the user got to (step + provider), and only once they
   // have advanced: writing on mount recorded a half-finished step for people who
@@ -261,7 +262,10 @@ export function OnboardingScreen({
 
   async function saveKey() {
     const key = apiKey.trim();
-    if (!key) return;
+    if (!key) {
+      keyInput.current?.focus();
+      return;
+    }
     setSaving(true);
     try {
       await backend.saveApiKey(key, provider);
@@ -287,8 +291,8 @@ export function OnboardingScreen({
           <div className="flex flex-col gap-1">
             <h1 className="text-title">Add your AI key</h1>
             <p className="text-muted-foreground text-caption">
-              The photo bot uses your own AI key to read meals from photos. Add one now to enable it
-              — or skip and track meals manually in the app. You can add a key any time in Settings.
+              The photo bot uses your own AI key to read meals from photos. Add one now, or skip and
+              track meals by hand. A key can be added any time in Settings.
             </p>
           </div>
 
@@ -296,7 +300,7 @@ export function OnboardingScreen({
             <Label htmlFor="onb-provider">Provider</Label>
             <select
               id="onb-provider"
-              className="border-input text-body h-9 rounded-control border bg-transparent px-3"
+              className="border-input text-body h-11 w-full rounded-control border bg-transparent px-3"
               value={provider}
               onChange={(e) => chooseProvider(e.target.value as ProviderId)}
             >
@@ -312,6 +316,7 @@ export function OnboardingScreen({
             <Label htmlFor="onb-key">API key</Label>
             <Input
               id="onb-key"
+              ref={keyInput}
               type="password"
               autoComplete="off"
               placeholder="paste your key"
@@ -326,16 +331,11 @@ export function OnboardingScreen({
 
           <KeyHelp />
 
-          <Button disabled={!apiKey.trim() || saving} onClick={() => void saveKey()}>
-            {saving ? 'Saving…' : 'Save key & finish'}
+          <Button disabled={saving} onClick={() => void saveKey()}>
+            {saving ? 'Saving…' : 'Save key and finish'}
           </Button>
-          <Button
-            variant="ghost"
-            className="text-muted-foreground"
-            disabled={saving}
-            onClick={finishWithTargets}
-          >
-            Skip — I'll track meals manually
+          <Button variant="link" disabled={saving} onClick={finishWithTargets}>
+            Skip and track meals by hand
           </Button>
         </div>
       </div>
@@ -370,19 +370,16 @@ export function OnboardingScreen({
             className="relative flex h-[100svh] snap-start snap-always flex-col items-center justify-center gap-2 px-4 pt-[env(safe-area-inset-top)] pb-[calc(1rem+env(safe-area-inset-bottom))] text-center"
           >
             <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground absolute top-[calc(0.5rem+env(safe-area-inset-top))] right-3"
+              variant="link"
+              className="absolute top-[calc(0.5rem+env(safe-area-inset-top))] right-1"
               disabled={saving}
               onClick={onSkip}
             >
               Skip for now
             </Button>
 
-            <h1 className="motion-safe:animate-in motion-safe:fade-in font-display text-display leading-tight duration-500">
+            <h1 className="motion-safe:animate-in motion-safe:fade-in font-display text-display duration-500">
               Welcome
-              <br />
-              to SnapBite
             </h1>
             <p className="text-muted-foreground text-caption">Let&rsquo;s set up your targets.</p>
 
@@ -394,11 +391,11 @@ export function OnboardingScreen({
                   type="button"
                   data-testid="scroll-cue"
                   onClick={scrollToForm}
-                  className="motion-safe:animate-in motion-safe:fade-in text-muted-foreground text-caption flex w-fit flex-col items-center gap-1 rounded-control px-3 py-2 duration-500 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="motion-safe:animate-in motion-safe:fade-in text-muted-foreground text-caption flex w-fit flex-col items-center gap-1 rounded-control px-3 py-2 duration-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   <span>Scroll down to set your goal</span>
                   <ArrowDown
-                    className="text-primary-text motion-safe:animate-drift size-5"
+                    className="text-foreground motion-safe:animate-drift size-5"
                     aria-hidden
                   />
                 </button>
@@ -412,7 +409,7 @@ export function OnboardingScreen({
                   ref={signInTrigger}
                   data-testid="signin-link"
                   onClick={() => setSignInOpen(true)}
-                  className="text-muted-foreground text-caption flex min-h-11 items-center gap-1 rounded-control px-4 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="text-muted-foreground text-caption flex min-h-11 items-center gap-1 rounded-control px-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   Already have an account?
                   <span className="text-primary-text font-medium underline underline-offset-4">
@@ -449,9 +446,8 @@ export function OnboardingScreen({
                   <p className="text-caption font-medium break-all">Signed in as {account.email}</p>
                 )}
                 <p className="text-muted-foreground text-caption">
-                  Tell us a bit about yourself to get daily calorie and macro targets. You can
-                  change these any time in Settings — or skip and just start logging (targets simply
-                  won&rsquo;t show yet).
+                  Enter a few details to get daily calorie and macro targets. They can be changed
+                  any time in Settings. Skip, and targets stay hidden until a goal is set.
                 </p>
 
                 <ProfileForm
@@ -461,13 +457,8 @@ export function OnboardingScreen({
                   onSubmit={saveProfile}
                 />
 
-                <Button
-                  variant="ghost"
-                  className="text-muted-foreground"
-                  disabled={saving}
-                  onClick={onSkip}
-                >
-                  Skip for now — I&rsquo;ll just start logging
+                <Button variant="link" disabled={saving} onClick={onSkip}>
+                  Skip and start logging
                 </Button>
               </div>
             )}

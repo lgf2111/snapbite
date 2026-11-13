@@ -323,7 +323,7 @@ function PasteDiagram() {
       </text>
       <rect x="16" y="92" width="328" height="30" rx="15" fill={ACCENT} />
       <text x="140" y="111" fontSize="9" fill="#06121f" fontFamily="system-ui, sans-serif">
-        Save key &amp; finish
+        Save key and finish
       </text>
     </svg>
   );
@@ -348,7 +348,7 @@ export function KeyHelp() {
             <div className="flex flex-col gap-4">
               <ol className="flex flex-col gap-4">
                 <Step n={1} title="Sign in to Google — any normal Gmail works">
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-muted-foreground text-caption">
                     It is free, and you do not need a work or school account.
                   </p>
                   <HelpFigure
@@ -362,11 +362,11 @@ export function KeyHelp() {
                 <Step n={2} title="Open Google AI Studio">
                   <ExternalLink
                     href="https://aistudio.google.com/apikey"
-                    className="text-primary-text text-xs break-all underline underline-offset-2"
+                    className="text-primary-text text-caption break-all underline underline-offset-2"
                   >
                     aistudio.google.com/apikey
                   </ExternalLink>
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-muted-foreground text-caption">
                     This is the <strong className="text-foreground">API Keys</strong> page. The
                     button you need is top right.
                   </p>
@@ -379,12 +379,12 @@ export function KeyHelp() {
                 </Step>
 
                 <Step n={3} title="Press “Create API key”, then pick a project">
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-muted-foreground text-caption">
                     A box opens asking for a <strong className="text-foreground">key name</strong>{' '}
                     and a <strong className="text-foreground">project</strong>. Leave the key name
                     as it is — it is only a label.
                   </p>
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-muted-foreground text-caption">
                     Press the project dropdown. If your project is already listed, pick it and go to
                     step 5.
                   </p>
@@ -397,12 +397,12 @@ export function KeyHelp() {
                 </Step>
 
                 <Step n={4} title="Create the project (only if you had none)">
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-muted-foreground text-caption">
                     Name it anything — <code className="font-mono">SnapBite</code> is fine. Press{' '}
                     <strong className="text-foreground">Create project</strong> and wait for “New
                     project created!”.
                   </p>
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-muted-foreground text-caption">
                     <strong className="text-foreground">Organisation is optional</strong> — ignore
                     it unless a company gave you one. Nothing here costs money.
                   </p>
@@ -415,16 +415,16 @@ export function KeyHelp() {
                 </Step>
 
                 <Step n={5} title="Copy the key">
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-muted-foreground text-caption">
                     After the key is created, an{' '}
                     <strong className="text-foreground">API key details</strong> box appears. The
                     key starts <code className="font-mono">AQ.</code> (older ones start{' '}
                     <code className="font-mono">AIza</code>) — that is normal.
                   </p>
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-muted-foreground text-caption">
                     Tap the <strong className="text-foreground">copy icon</strong> beside it.
                   </p>
-                  <p className="text-xs text-amber-400">
+                  <p className="text-caption text-warning">
                     Copy it now. Close the box without copying and you will have to delete the key
                     and make a new one.
                   </p>
@@ -437,9 +437,9 @@ export function KeyHelp() {
                 </Step>
 
                 <Step n={6} title="Come back here, paste it, and save">
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-muted-foreground text-caption">
                     Long-press the API key box above → Paste. Then press{' '}
-                    <strong className="text-foreground">Save key &amp; finish</strong>.
+                    <strong className="text-foreground">Save key and finish</strong>.
                   </p>
                   <HelpFigure
                     src="/help/ai-studio-paste.png"
@@ -450,7 +450,7 @@ export function KeyHelp() {
                 </Step>
               </ol>
 
-              <p className="text-muted-foreground text-[11px]">
+              <p className="text-muted-foreground text-caption">
                 Stuck? Skip this step — you can still log meals by hand, and add the key later in
                 Settings.
               </p>
@@ -462,11 +462,11 @@ export function KeyHelp() {
           summary: 'A key always lives inside a project; here is the short version',
           children: (
             <div className="flex flex-col gap-3">
-              <p className="text-muted-foreground text-xs">
+              <p className="text-muted-foreground text-caption">
                 A Gemini key belongs to a Google Cloud project. If you have never made one, AI
                 Studio makes it for you — you do not have to visit the Cloud console.
               </p>
-              <ol className="flex flex-col gap-2 text-xs">
+              <ol className="flex flex-col gap-2 text-caption">
                 <li className="flex gap-2">
                   <span className="text-primary-text">1.</span>
                   <span>
@@ -494,12 +494,12 @@ export function KeyHelp() {
                   <span>Press Create key. Your key now belongs to that project.</span>
                 </li>
               </ol>
-              <p className="text-muted-foreground text-xs">
+              <p className="text-muted-foreground text-caption">
                 <strong className="text-foreground">Organisation is optional.</strong> If a screen
                 asks for one, choose <em>No organisation</em>. You do not need a company account,
                 and a free project costs nothing.
               </p>
-              <p className="text-muted-foreground text-xs">
+              <p className="text-muted-foreground text-caption">
                 Prefer the Cloud console instead?{' '}
                 <ExternalLink
                   href="https://console.cloud.google.com/projectcreate"
@@ -517,14 +517,14 @@ export function KeyHelp() {
           summary: 'Delete the old one, make a new one, paste it into Settings',
           children: (
             <div className="flex flex-col gap-3">
-              <p className="text-muted-foreground text-xs">
+              <p className="text-muted-foreground text-caption">
                 Do this if a key leaked, or if you want to move to another project. In SnapBite the
                 new key goes in <strong className="text-foreground">Settings → AI key</strong>.
               </p>
 
               <div className="flex flex-col gap-2">
-                <p className="text-foreground text-xs font-medium">Delete a key</p>
-                <ol className="flex flex-col gap-2 text-xs">
+                <p className="text-foreground text-body font-medium">Delete a key</p>
+                <ol className="flex flex-col gap-2 text-caption">
                   <li className="flex gap-2">
                     <span className="text-primary-text">1.</span>
                     <span>
@@ -559,7 +559,7 @@ export function KeyHelp() {
                   caption="The ⋮ menu on the key row — Delete key is the second item."
                   fallback={<KeyMenuPanel />}
                 />
-                <p className="text-xs text-amber-400">
+                <p className="text-caption text-warning">
                   Deleting is immediate and cannot be undone. Anything still using that key stops
                   working, including SnapBite until you paste a new one.
                 </p>
@@ -573,8 +573,8 @@ export function KeyHelp() {
               />
 
               <div className="flex flex-col gap-2">
-                <p className="text-foreground text-xs font-medium">Replace it</p>
-                <ol className="flex flex-col gap-2 text-xs">
+                <p className="text-foreground text-body font-medium">Replace it</p>
+                <ol className="flex flex-col gap-2 text-caption">
                   <li className="flex gap-2">
                     <span className="text-primary-text">1.</span>
                     <span>
@@ -590,7 +590,7 @@ export function KeyHelp() {
                     <span>Only after SnapBite works with the new key, delete the old one.</span>
                   </li>
                 </ol>
-                <p className="text-muted-foreground text-xs">
+                <p className="text-muted-foreground text-caption">
                   In that order you never lose meal logging. Doing it the other way round means
                   photo logging fails until you finish.
                 </p>
@@ -602,7 +602,7 @@ export function KeyHelp() {
           title: 'What does it cost?',
           summary: 'Free for normal use',
           children: (
-            <div className="text-muted-foreground flex flex-col gap-2 text-xs">
+            <div className="text-muted-foreground flex flex-col gap-2 text-caption">
               <p>
                 The key is yours, and Google bills it — not SnapBite. Gemini has a free tier that
                 covers a few dozen meal photos a day.
@@ -618,7 +618,7 @@ export function KeyHelp() {
           title: 'Is the key safe?',
           summary: 'Encrypted, never shown again',
           children: (
-            <div className="text-muted-foreground flex flex-col gap-2 text-xs">
+            <div className="text-muted-foreground flex flex-col gap-2 text-caption">
               <p>
                 The key is encrypted before it is stored, is only decrypted for the moment a photo
                 is analyzed, and is never sent back to the screen or written to logs.
@@ -633,7 +633,7 @@ export function KeyHelp() {
           title: 'Which provider should I pick?',
           summary: 'Gemini is the easiest',
           children: (
-            <div className="text-muted-foreground flex flex-col gap-2 text-xs">
+            <div className="text-muted-foreground flex flex-col gap-2 text-caption">
               <p>
                 <strong className="text-foreground">Gemini</strong> — free key, works immediately.
                 Best choice if you are unsure.
