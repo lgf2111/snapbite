@@ -14,15 +14,33 @@ import {
   resolveDeviceToken,
   touchDeviceToken,
 } from '../db/deviceTokens.js';
-import { describeError, logError } from '../db/errors.js';
+import { beginErrorLog, describeError, finishErrorLog, logError } from '../db/errors.js';
 import { countMealsSince, createMealsDb, saveMeal, setMealPhoto } from '../db/meals.js';
 import { recordMealSave } from '../db/metrics.js';
 import type { AppBindings } from '../env.js';
-import { base64FromBytes, base64ToBytes, shrinkImage } from '../storage/images.js';
+import { base64Bytes, base64FromBytes, base64ToBytes } from '../storage/images.js';
 import { photoKey, r2Store } from '../storage/photos.js';
 import { ALLOWED_MIME } from './meals.js';
 
 const BEARER = /^Bearer\s+/i;
+
+/**
+ * The Shortcut resizes before sending, so a photo larger than this is a
+ * misconfigured shortcut, not something to decode. Rejecting it before the
+ * body is parsed keeps a 1102 from costing anything.
+ */
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+/** Multipart boundaries and field headers ride along with the photo. */
+const MULTIPART_SLACK_BYTES = 64 * 1024;
+/** Base64 inflates bytes by 4/3; leave room for the JSON envelope and a hint. */
+const MAX_JSON_BODY_BYTES = 4 * 1024 * 1024;
+const TOO_BIG = 'that photo is too big — set Resize Image to 1024 in the shortcut';
+
+/** `Content-Length` when the client sent one; 0 when it is absent or invalid. */
+function declaredBytes(c: Context<AppBindings>): number {
+  const n = Number.parseInt(c.req.header('content-length') ?? '', 10);
+  return Number.isFinite(n) ? n : 0;
+}
 
 /** Image type from magic bytes — Shortcuts often sends octet-stream. */
 function sniffMime(b: Uint8Array): string | null {
@@ -117,6 +135,28 @@ function reply(c: Context<AppBindings>, r: Reply, status: ContentfulStatusCode =
 const fail = (c: Context<AppBindings>, message: string, status: ContentfulStatusCode) =>
   reply(c, { ok: false, message: `SnapBite: ${message}` }, status);
 
+const tooBig = (c: Context<AppBindings>) => fail(c, TOO_BIG, 413);
+
+/**
+ * The per-request budget breakdown stored in `error_logs.detail`. Timings are
+ * `Date.now()` deltas: `performance.now()` is quantized to 10 ms in workerd.
+ * `ms_shrink` stays in the shape (always 0) so old and new rows compare.
+ */
+function stageTimings(
+  bytesIn: number,
+  msBase64: number,
+  msAi: number,
+  msTotal: number,
+): Record<string, number> {
+  return {
+    bytes_in: bytesIn,
+    ms_shrink: 0,
+    ms_ai: msAi,
+    ms_total: msTotal,
+    ms_base64: msBase64,
+  };
+}
+
 /** What went wrong with the analysis, in a sentence a person can act on. */
 function analysisFailure(err: unknown): string {
   const kind = describeError(err).kind;
@@ -151,6 +191,7 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
   });
 
   app.post('/log', async (c) => {
+    const startedAt = Date.now();
     /* -------- identity -------- */
     const raw = readToken(c);
     if (!raw) {
@@ -171,26 +212,40 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
     let base64 = '';
     let mimeType = '';
     let hint: string | undefined;
+    /** The bytes as received, when they came as a file/body, so storage skips a re-decode. */
+    let photoBytes: Uint8Array | null = null;
+    let msBase64 = 0;
 
     const contentType = c.req.header('content-type') ?? '';
     try {
       if (contentType.includes('multipart/form-data')) {
+        if (declaredBytes(c) > MAX_UPLOAD_BYTES + MULTIPART_SLACK_BYTES) return tooBig(c);
         const form = await c.req.formData();
         const field = form.get('photo') as unknown;
         if (field == null || typeof field === 'string') {
           return fail(c, 'send the photo as a form field named "photo"', 400);
         }
         const file = field as File;
+        if (file.size > MAX_UPLOAD_BYTES) return tooBig(c);
         mimeType = file.type || 'image/jpeg';
-        base64 = base64FromBytes(await file.arrayBuffer());
+        photoBytes = new Uint8Array(await file.arrayBuffer());
+        const b64Start = Date.now();
+        base64 = base64FromBytes(photoBytes);
+        msBase64 = Date.now() - b64Start;
         const h = form.get('hint');
         if (typeof h === 'string' && h.trim()) hint = h.trim();
       } else if (contentType.startsWith('image/') || contentType.includes('octet-stream')) {
         // Shortcuts' "Request Body: File" sends the bytes directly.
+        if (declaredBytes(c) > MAX_UPLOAD_BYTES) return tooBig(c);
         const bytes = new Uint8Array(await c.req.arrayBuffer());
+        if (bytes.length > MAX_UPLOAD_BYTES) return tooBig(c);
+        photoBytes = bytes;
         mimeType = sniffMime(bytes) ?? contentType.split(';')[0] ?? '';
-        base64 = base64FromBytes(bytes.buffer as ArrayBuffer);
+        const b64Start = Date.now();
+        base64 = base64FromBytes(bytes);
+        msBase64 = Date.now() - b64Start;
       } else if (contentType.includes('application/json') || contentType === '') {
+        if (declaredBytes(c) > MAX_JSON_BODY_BYTES) return tooBig(c);
         const body = (await c.req.json()) as {
           base64?: unknown;
           mimeType?: unknown;
@@ -211,6 +266,8 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
     }
 
     if (!base64) return fail(c, 'the photo was not readable, try again', 400);
+    const bytesIn = base64Bytes(base64);
+    if (bytesIn > MAX_UPLOAD_BYTES) return tooBig(c);
     if (!ALLOWED_MIME.has(mimeType)) {
       return fail(
         c,
@@ -221,18 +278,36 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
       );
     }
 
-    /* -------- shrink (downscale + re-encode) -------- */
-    const shrunk = await shrinkImage(base64, mimeType);
-    base64 = shrunk.base64;
-    mimeType = shrunk.mimeType;
-
     /* -------- analyse + save -------- */
     const image: MealImage = { base64, mimeType: mimeType as MealImage['mimeType'] };
+    let logId: string | null = null;
+    let aiStart: number | null = null;
     try {
       const provider = await resolveProviderForUser(c.env.DB, c.env, resolved.userId, {
         providerFactory,
       });
+      logId = await beginErrorLog(c.env.DB, {
+        telegramUserId: resolved.telegramUserId,
+        source: 'shortcut',
+        kind: 'ai_started',
+        message: 'analysis started',
+        detail: JSON.stringify({ bytes_in: bytesIn, mime: mimeType }),
+      });
+      aiStart = Date.now();
       const analysis = await provider.analyzeMeal(image, hint ? { hint } : {});
+      const msAi = Date.now() - aiStart;
+
+      // Persist that the AI stage returned, so a kill during the save below is
+      // distinguishable from one during the call.
+      if (logId) {
+        await finishErrorLog(c.env.DB, logId, {
+          kind: 'ai_done',
+          status: 200,
+          message: 'analysis finished',
+          detail: JSON.stringify(stageTimings(bytesIn, msBase64, msAi, Date.now() - startedAt)),
+        });
+      }
+
       const meal = resolveMeal(analysis);
 
       const db = createMealsDb(c.env.DB);
@@ -249,7 +324,8 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
       if (store) {
         try {
           const key = photoKey(mealId);
-          await store.put(key, new Uint8Array(base64ToBytes(base64)), mimeType);
+          const bytes = photoBytes ?? base64ToBytes(base64);
+          await store.put(key, bytes, mimeType);
           await setMealPhoto(db, mealId, resolved.userId, key, mimeType);
         } catch (err) {
           console.error('[shortcut] photo store failed', err);
@@ -257,6 +333,15 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
       }
       if (resolved.telegramUserId != null) {
         await recordMealSave(c.env.DB, resolved.telegramUserId, isFirstMeal).catch(() => {});
+      }
+
+      if (logId) {
+        await finishErrorLog(c.env.DB, logId, {
+          kind: 'completed',
+          status: 200,
+          message: 'meal saved',
+          detail: JSON.stringify(stageTimings(bytesIn, msBase64, msAi, Date.now() - startedAt)),
+        });
       }
 
       const { energyKcal, proteinG, carbsG, fatG } = meal.total;
@@ -271,23 +356,59 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
         ...(provider.notice ? { notice: provider.notice } : {}),
       });
     } catch (err) {
+      const msAi = aiStart == null ? 0 : Date.now() - aiStart;
+      const total = Date.now() - startedAt;
+      const desc = describeError(err);
+      const detail = JSON.stringify({
+        ...stageTimings(bytesIn, msBase64, msAi, total),
+        error: desc.detail,
+      });
+
       if (err instanceof QuotaExceeded) {
+        if (logId) {
+          await finishErrorLog(c.env.DB, logId, {
+            kind: 'quota',
+            status: err.status,
+            message: err.userMessage,
+            detail,
+          });
+        }
         return fail(
           c,
           err.reason === 'no-access' ? 'add your AI key in Settings first' : err.userMessage,
           err.status,
         );
       }
-      if (err instanceof ProviderSetupError) return fail(c, err.userMessage, 500);
-      const desc = describeError(err);
-      await logError(c.env.DB, {
-        telegramUserId: resolved.telegramUserId,
-        source: 'shortcut',
-        kind: desc.kind ?? 'provider',
-        status: 502,
-        message: desc.message,
-        detail: desc.detail ?? null,
-      });
+      if (err instanceof ProviderSetupError) {
+        if (logId) {
+          await finishErrorLog(c.env.DB, logId, {
+            kind: 'setup',
+            status: 500,
+            message: err.userMessage,
+            detail,
+          });
+        }
+        return fail(c, err.userMessage, 500);
+      }
+      if (logId) {
+        await finishErrorLog(c.env.DB, logId, {
+          kind: desc.kind ?? 'provider',
+          status: 502,
+          message: desc.message,
+          detail,
+        });
+      } else {
+        // The start row could not be written; keep the old single-shot log so
+        // the failure is not lost entirely.
+        await logError(c.env.DB, {
+          telegramUserId: resolved.telegramUserId,
+          source: 'shortcut',
+          kind: desc.kind ?? 'provider',
+          status: 502,
+          message: desc.message,
+          detail: desc.detail ?? null,
+        });
+      }
       return fail(c, analysisFailure(err), 502);
     }
   });

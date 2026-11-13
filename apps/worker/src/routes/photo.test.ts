@@ -371,14 +371,14 @@ describe('POST /api/meals photo upload limits', () => {
     expect(list.meals).toEqual([]);
   });
 
-  it('shrinks a large photo to ≤400 KB and stores it as JPEG', async () => {
+  it('stores the browser-compressed photo as sent, without a server re-encode', async () => {
     const tgId = 9102;
     const app = createApp();
     const initData = await initFor(tgId);
     const headers = { [INIT_DATA_HEADER]: initData, 'content-type': 'application/json' };
 
-    // ~1.2 MB of 2000×1500 photo-like pixels: above the 400 KB budget and above
-    // the 1600 px edge, so both the downscale and the quality steps run.
+    // The Mini App compresses in the browser before upload. The server must
+    // store those bytes verbatim: a second Photon decode would only burn CPU.
     const original = photoJpeg(2000, 1500, { noise: 60, quality: 82 });
     expect(original.length).toBeGreaterThan(400 * 1024);
     expect(toBase64(original).length).toBeLessThan(2 * 1024 * 1024);
@@ -406,10 +406,10 @@ describe('POST /api/meals photo upload limits', () => {
     expect(photo.status).toBe(200);
     expect(photo.headers.get('content-type')).toBe('image/jpeg');
     const stored = new Uint8Array(await photo.arrayBuffer());
-    expect(stored.length).toBeLessThanOrEqual(400 * 1024);
-    expect(stored.length).toBeLessThan(original.length);
+    expect(stored).toEqual(original);
     const dims = jpegDimensions(stored);
-    expect(Math.max(dims.width, dims.height)).toBeLessThanOrEqual(1600);
+    expect(dims.width).toBe(2000);
+    expect(dims.height).toBe(1500);
   });
 
   it('rejects a body over 10 MB from its Content-Length without parsing it', async () => {

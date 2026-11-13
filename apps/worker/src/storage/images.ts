@@ -4,27 +4,17 @@ import { PhotonImage, SamplingFilter, resize } from '@cf-wasm/photon';
  * Photo bytes, on the Worker.
  *
  * The Workers runtime has no `OffscreenCanvas` / `createImageBitmap` (they are
- * browser APIs, not part of the Worker global scope), so downscaling goes through
- * Photon: a Rust image library compiled to WASM. It is the one dependency that
- * makes upload shrink and thumbnails real instead of best-effort no-ops.
+ * browser APIs, not part of the Worker global scope), so the thumbnail route
+ * downscales through Photon: a Rust image library compiled to WASM. Upload
+ * shrink was removed from the request path: the Mini App compresses in the
+ * browser and the Shortcut resizes before sending, so a second Photon decode
+ * only spent the Worker's CPU budget.
  */
 
-/** Longest edge for a stored photo: plenty for a plate at phone-hold distance. */
-const MAX_EDGE = 1600;
-/** Upper bound on a stored photo. Quality steps down until the result fits. */
-const MAX_BYTES = 400 * 1024;
-/** Photon's JPEG quality is 0–100, not 0–1. */
-const QUALITY_STEPS = [82, 70, 60, 50, 42];
 /** A thumbnail is already small; one re-encode is enough. */
 const THUMB_QUALITY = 78;
 /** Formats Photon can decode. GIF is served unchanged (animations must survive). */
 const SHRINKABLE = /^image\/(jpeg|png|webp)$/;
-
-export interface CompressedImage {
-  base64: string;
-  mimeType: string;
-  bytes: number;
-}
 
 export interface ResizedImage {
   bytes: Uint8Array;
@@ -33,8 +23,25 @@ export interface ResizedImage {
   height: number;
 }
 
+/**
+ * `latin1` maps each byte to one code unit, so `btoa` can encode the whole
+ * buffer natively. That is ~40x faster than building the binary string in
+ * chunks. The probe covers runtimes where `latin1` is windows-1252: there
+ * 0x80–0x9F become code points above 255 and `btoa` would throw.
+ */
+const LATIN1 = new TextDecoder('latin1');
+const LATIN1_IS_BINARY = (() => {
+  try {
+    return btoa(LATIN1.decode(new Uint8Array([0x80, 0xff]))) === 'gP8=';
+  } catch {
+    return false;
+  }
+})();
+
 export function base64FromBytes(bytes: Uint8Array | ArrayBuffer): string {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (LATIN1_IS_BINARY) return btoa(LATIN1.decode(view));
+
   let binary = '';
   // Chunked so a large photo doesn't blow the argument limit of fromCharCode.
   for (let i = 0; i < view.length; i += 0x8000) {
@@ -53,57 +60,6 @@ export function base64ToBytes(base64: string): Uint8Array {
 export function base64Bytes(base64: string): number {
   const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
   return Math.floor((base64.length * 3) / 4) - padding;
-}
-
-/**
- * Downscale + re-encode a photo before it is stored.
- *
- * Anything already under the byte budget is returned untouched, as is a format
- * the decoder may not handle. Any failure falls back to the original bytes —
- * storage must never lose a meal because a photo was unusual.
- */
-export async function shrinkImage(base64: string, mimeType: string): Promise<CompressedImage> {
-  const original: CompressedImage = { base64, mimeType, bytes: base64Bytes(base64) };
-  if (original.bytes <= MAX_BYTES || !SHRINKABLE.test(mimeType)) return original;
-
-  try {
-    const source = base64ToBytes(base64);
-    const image = PhotonImage.new_from_byteslice(source);
-    try {
-      const startWidth = image.get_width();
-      const startHeight = image.get_height();
-      const scale = Math.min(1, MAX_EDGE / Math.max(startWidth, startHeight));
-      const width = Math.max(1, Math.round(startWidth * scale));
-      const height = Math.max(1, Math.round(startHeight * scale));
-      const target = scale < 1 ? resize(image, width, height, SamplingFilter.Lanczos3) : image;
-
-      try {
-        let encoded: Uint8Array | null = null;
-        for (const quality of QUALITY_STEPS) {
-          encoded = target.get_bytes_jpeg(quality);
-          if (encoded.length <= MAX_BYTES) break;
-        }
-        if (!encoded || encoded.length >= original.bytes) return original;
-
-        // Photon re-encodes pixels only. Keep the EXIF (orientation!) and ICC
-        // profile segments of a JPEG, or a portrait photo turns sideways and a
-        // Display-P3 photo goes dull.
-        const bytes = mimeType === 'image/jpeg' ? attachJpegMetadata(encoded, source) : encoded;
-        if (bytes.length >= original.bytes) return original;
-        return {
-          base64: base64FromBytes(bytes),
-          mimeType: 'image/jpeg',
-          bytes: bytes.length,
-        };
-      } finally {
-        if (target !== image) target.free();
-      }
-    } finally {
-      image.free();
-    }
-  } catch {
-    return original;
-  }
 }
 
 /**

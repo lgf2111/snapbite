@@ -1,4 +1,4 @@
-import { desc, lt } from 'drizzle-orm';
+import { desc, eq, lt } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { type ErrorLogRow, errorLogs } from './schema.js';
 
@@ -49,6 +49,56 @@ export async function logError(d1: D1Database, evt: ErrorEvent): Promise<void> {
     // Swallow — never let logging break the request.
     // eslint-disable-next-line no-console
     console.error('[error_log] failed to persist', err);
+  }
+}
+
+/**
+ * Inserts the row that `finishErrorLog` later rewrites, so a request killed
+ * mid-flight still leaves evidence in D1. Best-effort: returns `null` when the
+ * write fails, letting the caller fall back to `logError`.
+ */
+export async function beginErrorLog(d1: D1Database, evt: ErrorEvent): Promise<string | null> {
+  try {
+    const id = crypto.randomUUID();
+    const db = createErrorsDb(d1);
+    await db.insert(errorLogs).values({
+      id,
+      createdAt: Date.now(),
+      telegramUserId: evt.telegramUserId ?? null,
+      source: evt.source,
+      kind: evt.kind ?? 'unhandled',
+      status: evt.status ?? null,
+      message: evt.message.slice(0, DETAIL_CAP),
+      detail: evt.detail ? evt.detail.slice(0, DETAIL_CAP) : null,
+    });
+    return id;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[error_log] failed to persist start', err);
+    return null;
+  }
+}
+
+/** Rewrites a row created by `beginErrorLog` with its outcome. Best-effort. */
+export async function finishErrorLog(
+  d1: D1Database,
+  id: string,
+  evt: Omit<ErrorEvent, 'source' | 'telegramUserId'>,
+): Promise<void> {
+  try {
+    const db = createErrorsDb(d1);
+    await db
+      .update(errorLogs)
+      .set({
+        kind: evt.kind ?? 'unhandled',
+        status: evt.status ?? null,
+        message: evt.message.slice(0, DETAIL_CAP),
+        detail: evt.detail ? evt.detail.slice(0, DETAIL_CAP) : null,
+      })
+      .where(eq(errorLogs.id, id));
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[error_log] failed to persist finish', err);
   }
 }
 

@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:test';
-import { AIProviderError, MockAIProvider, signInitData } from '@snapbite/core';
-import { describe, expect, it } from 'vitest';
+import { PhotonImage } from '@cf-wasm/photon';
+import { AIProviderError, type MealImage, MockAIProvider, signInitData } from '@snapbite/core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import {
   createDeviceToken,
@@ -9,9 +10,26 @@ import {
   mintDeviceToken,
   revokeAllDeviceTokens,
 } from '../db/deviceTokens.js';
+import { recentErrors } from '../db/errors.js';
+import type { ErrorLogRow } from '../db/schema.js';
 import { createDb, upsertUser } from '../db/users.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
+import { base64FromBytes } from '../storage/images.js';
 import { oneLine } from './shortcut.js';
+
+/**
+ * The route must never hand a photo to Photon: that decode + re-encode was the
+ * 1102. Mocking the WASM module makes any accidental call visible as a spy.
+ */
+vi.mock('@cf-wasm/photon', () => ({
+  PhotonImage: { new_from_byteslice: vi.fn() },
+  SamplingFilter: { Lanczos3: 0 },
+  resize: vi.fn(),
+}));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 const BOT_TOKEN = '123456:LOCAL-DEV-BOT-TOKEN';
 const IMAGE_BODY = { base64: 'aGVsbG8=', mimeType: 'image/jpeg' };
@@ -46,6 +64,13 @@ function post(token: string | null, body: unknown = IMAGE_BODY) {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (token) headers.authorization = `Bearer ${token}`;
   return { method: 'POST', headers, body: JSON.stringify(body) } as const;
+}
+
+/** A multipart request shaped like the Shortcut's `Request Body: Form`. */
+function photoForm(bytes: Uint8Array): FormData {
+  const form = new FormData();
+  form.append('photo', new File([bytes], 'photo.jpg', { type: 'image/jpeg' }));
+  return form;
 }
 
 describe('POST /api/shortcut/log', () => {
@@ -177,6 +202,81 @@ describe('POST /api/shortcut/log', () => {
 
     const obj = await env.PHOTOS.get(`photos/${mealId}`);
     expect(obj).not.toBeNull();
+  });
+
+  describe('upload size guard and stage logging', () => {
+    it('rejects a 2.5 MB photo with 413 before touching Photon', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const token = await tokenFor(app, 9610);
+      const bytes = new Uint8Array(2.5 * 1024 * 1024);
+      bytes.set([0xff, 0xd8, 0xff]);
+
+      const res = await app.request(
+        '/api/shortcut/log',
+        { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: photoForm(bytes) },
+        env,
+      );
+
+      expect(res.status).toBe(413);
+      expect(await res.text()).toBe(
+        'SnapBite: that photo is too big — set Resize Image to 1024 in the shortcut',
+      );
+      expect(PhotonImage.new_from_byteslice).not.toHaveBeenCalled();
+    });
+
+    it('passes a 300 KB photo to the provider byte-for-byte (no second encode)', async () => {
+      const provider = new MockAIProvider();
+      const app = createApp({ providerFactory: () => provider });
+      const token = await tokenFor(app, 9611);
+      const bytes = new Uint8Array(300 * 1024);
+      bytes.set([0xff, 0xd8, 0xff, 0xe0]);
+      for (let i = 4; i < bytes.length; i++) bytes[i] = i & 0xff;
+
+      const res = await app.request(
+        '/api/shortcut/log',
+        { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: photoForm(bytes) },
+        env,
+      );
+
+      expect(res.status).toBe(200);
+      expect(provider.lastImage?.base64).toBe(base64FromBytes(bytes));
+      expect(provider.lastImage?.mimeType).toBe('image/jpeg');
+      expect(PhotonImage.new_from_byteslice).not.toHaveBeenCalled();
+    });
+
+    it('writes an ai_started row before the provider call and completes it after', async () => {
+      let seen: ErrorLogRow[] = [];
+      const base = new MockAIProvider();
+      const provider = {
+        id: 'mock',
+        analyzeMeal: async (image: MealImage) => {
+          seen = await recentErrors(env.DB, 200);
+          return base.analyzeMeal(image);
+        },
+      };
+      const app = createApp({ providerFactory: () => provider as never });
+      const token = await tokenFor(app, 9612);
+
+      const res = await app.request('/api/shortcut/log', post(token), env);
+      expect(res.status).toBe(200);
+
+      // The row exists while the AI call is still running.
+      const started = seen.find((r) => r.telegramUserId === 9612 && r.kind === 'ai_started');
+      expect(started).toBeTruthy();
+      expect(JSON.parse(started?.detail ?? '{}')).toMatchObject({ bytes_in: 5 });
+
+      // The same row (not a second one) is rewritten with the measured stages.
+      const rows = (await recentErrors(env.DB, 200)).filter((r) => r.id === started?.id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.kind).toBe('completed');
+      expect(rows[0]?.status).toBe(200);
+      const detail = JSON.parse(rows[0]?.detail ?? '{}') as Record<string, number>;
+      expect(detail.bytes_in).toBe(5);
+      expect(detail.ms_shrink).toBe(0);
+      expect(typeof detail.ms_ai).toBe('number');
+      expect(typeof detail.ms_total).toBe('number');
+      expect(typeof detail.ms_base64).toBe('number');
+    });
   });
 
   describe('reply contract', () => {
