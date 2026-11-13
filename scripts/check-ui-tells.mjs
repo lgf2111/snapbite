@@ -3,8 +3,12 @@
  * UI-tells gate for the mini app.
  *
  * Fails when a shipped source file under apps/miniapp/src contains:
- *   - an emoji codepoint in a JSX text node or a string literal, or
- *   - a Tailwind radius utility outside the four role values.
+ *   - an emoji codepoint in a JSX text node or a string literal,
+ *   - a Tailwind radius utility outside the four role values, or
+ *   - an em dash (U+2014) in a JSX text node or string literal, unless the
+ *     string is exactly the em dash used as a missing-value mark.
+ * KeyHelp.tsx and ShortcutCard.tsx keep their long-form copy, em dashes
+ * included (§7).
  *
  * No network and no external script: the parser comes from the repo's pinned
  * `typescript` dev dependency.
@@ -28,6 +32,10 @@ const ALLOWED_RADII = new Set([
 const DIRECTIONAL =
   /^rounded-(?:t|r|b|l|tl|tr|br|bl|s|e|ss|se|es|ee)-(?:full|control|surface|flush|none)$/;
 const RADIUS_TOKEN = /^rounded(?:-[a-z0-9[\]().%,#/-]+)?$/i;
+const EM_DASH_EXEMPT = new Set([
+  'apps/miniapp/src/components/KeyHelp.tsx',
+  'apps/miniapp/src/components/ShortcutCard.tsx',
+]);
 
 const findings = [];
 let checked = 0;
@@ -58,6 +66,16 @@ function checkFile(path) {
   }
 
   function checkString(value, node) {
+    const testFile = /\.test\.(?:ts|tsx)$/.test(path);
+    if (
+      !testFile &&
+      !EM_DASH_EXEMPT.has(rel) &&
+      value.includes('\u2014') &&
+      value.trim() !== '\u2014'
+    ) {
+      report(node, 'em dash in UI copy (use a colon, comma or full stop)');
+    }
+
     for (const match of value.matchAll(EMOJI)) {
       const codepoints = [...match[0]]
         .map((char) => `U+${char.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`)
