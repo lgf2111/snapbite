@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { Utensils } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 /** The row's photo slot: one size, whatever it ends up showing. 56 px. */
@@ -65,11 +66,11 @@ export function MealThumb({ src }: { src?: string | null }) {
         aria-hidden
         className={cn('bg-secondary flex items-center justify-center', SLOT)}
       >
-        {/* The mark, as a background: a missing file shows nothing, not a glyph. */}
-        <span
-          data-testid="meal-thumb-mark"
-          className="size-7 rounded-control bg-contain bg-center bg-no-repeat opacity-80"
-          style={{ backgroundImage: 'url(/icon-192.png)' }}
+        {/* A meal with no photo reads as "no photo", not as an empty grey box. */}
+        <Utensils
+          data-testid="meal-thumb-icon"
+          className="text-muted-foreground size-4"
+          aria-hidden
         />
       </div>
     );
