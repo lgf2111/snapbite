@@ -1,8 +1,9 @@
+import { Section } from '@/components/Section';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible } from '@/components/ui/collapsible';
 import {
   Dialog,
+  DialogActions,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -11,13 +12,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
 import { cacheKey, getCached, revalidate } from '@/lib/cache';
-import { cn } from '@/lib/utils';
 import {
   type WeekMode,
   type WeekPrefs,
@@ -28,6 +29,7 @@ import {
 import {
   DEFAULT_REMINDER_TIMES,
   FEEDBACK_MAX_LEN,
+  GOAL_LABELS,
   PROVIDER_PRESETS,
   type ProviderId,
   REMINDER_STEP_MINUTES,
@@ -35,17 +37,8 @@ import {
   profileAge,
   snapToReminderStep,
 } from '@snapbite/core';
-import {
-  Bell,
-  CalendarRange,
-  CheckCircle2,
-  MessageSquare,
-  Pencil,
-  ShieldCheck,
-  Target,
-  Trash2,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { CheckCircle2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { AccountCard } from './AccountCard.js';
 import { CreditsCard } from './CreditsCard.js';
@@ -65,19 +58,7 @@ interface SettingsScreenProps {
   onProfileSaved?: () => void;
 }
 
-const GOAL_LABEL: Record<string, string> = {
-  lose: 'Lose weight',
-  maintain: 'Maintain',
-  gain: 'Gain',
-};
-
-const PROVIDERS = Object.values(PROVIDER_PRESETS);
-
-/** Human label for a stored provider id (incl. 'custom'). */
-function providerLabel(id: string): string {
-  if (id === 'custom') return 'Custom';
-  return id === 'gemini' || id === 'openai' || id === 'deepseek' ? PROVIDER_PRESETS[id].label : id;
-}
+const GROUPS = ['Today’s targets', 'Logging and AI', 'One-tap logging', 'Account and data'];
 
 /** Builds a ProviderConfig from stored settings fields. */
 function cfgFromSettings(
@@ -147,6 +128,7 @@ function KeyGuide({ provider }: { provider: ProviderId }) {
 
 export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps) {
   const [settings, setSettings] = useState<SettingsView | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [primaryCfg, setPrimaryCfg] = useState<ProviderConfig>({
     provider: 'gemini',
     model: PROVIDER_PRESETS.gemini.defaultModel,
@@ -186,6 +168,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [savingAdaptive, setSavingAdaptive] = useState(false);
   const [latestWeightKg, setLatestWeightKg] = useState<number | null>(null);
   const [weightInput, setWeightInput] = useState('');
+  const [weightError, setWeightError] = useState('');
   const [savingWeight, setSavingWeight] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -208,6 +191,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [fbKey, setFbKey] = useState('');
   const [savingFb, setSavingFb] = useState(false);
   const [fbEnabled, setFbEnabled] = useState(false);
+
+  const apiKeyRef = useRef<HTMLInputElement>(null);
+  const fbKeyRef = useRef<HTMLInputElement>(null);
+  const feedbackRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const apply = (s: SettingsView) => {
@@ -235,14 +222,18 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     const cached = getCached<SettingsView>(cacheKey.settings());
     if (cached) apply(cached);
     revalidate<SettingsView>(cacheKey.settings(), () => backend.getSettings())
-      .then(apply)
-      .catch((e: unknown) => {
-        if (!cached) toast.error(e instanceof Error ? e.message : 'Failed to load settings');
+      .then((s) => {
+        setLoadFailed(false);
+        apply(s);
+      })
+      .catch(() => {
+        if (!cached) setLoadFailed(true);
       });
   }, [backend]);
 
   const isLocal = backend.mode === 'local';
   const primaryConnected = Boolean(settings?.connected);
+  const loading = settings == null && !loadFailed;
 
   async function handleToggleFallback(on: boolean) {
     setFbEnabled(on);
@@ -264,7 +255,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
   async function handleSave() {
     const key = apiKey.trim();
-    if (!key) return;
+    if (!key) {
+      apiKeyRef.current?.focus();
+      return;
+    }
     if (primaryCfg.provider === 'custom' && !/^https:\/\/.+/i.test(primaryCfg.baseUrl.trim())) {
       toast.error('Enter a valid https base URL for the custom provider');
       return;
@@ -293,7 +287,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
   async function handleSaveFallback() {
     const key = fbKey.trim();
-    if (!key) return;
+    if (!key) {
+      fbKeyRef.current?.focus();
+      return;
+    }
     if (fbCfg.provider === 'custom' && !/^https:\/\/.+/i.test(fbCfg.baseUrl.trim())) {
       toast.error('Enter a valid https base URL for the custom provider');
       return;
@@ -355,8 +352,14 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     try {
       await backend.deleteAccount();
       setConfirmDelete(false);
-      setSettings(null);
       setApiKey('');
+      // The account is gone; read the fresh (anonymous) settings so the screen
+      // keeps rendering instead of falling back to its loading state.
+      try {
+        setSettings(await backend.getSettings());
+      } catch {
+        // Keep the last settings on screen if the refresh fails.
+      }
       toast.success('Account deleted');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not delete account');
@@ -448,9 +451,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   async function submitWeight() {
     const kg = Number.parseFloat(weightInput.replace(/[^\d.]/g, ''));
     if (!Number.isFinite(kg) || kg < 25 || kg > 400) {
-      toast.error('Enter a weight in kg (25–400).');
+      setWeightError('Enter a weight in kg (25–400).');
       return;
     }
+    setWeightError('');
     setSavingWeight(true);
     try {
       const updated = await backend.logWeight(kg);
@@ -475,13 +479,16 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
   async function handleSendFeedback() {
     const message = feedbackText.trim();
-    if (!message) return;
+    if (!message) {
+      feedbackRef.current?.focus();
+      return;
+    }
     setSendingFeedback(true);
     try {
       await backend.sendFeedback(message);
       setFeedbackText('');
       setFeedbackOpen(false);
-      toast.success('Thanks — your feedback was sent.');
+      toast.success('Feedback sent. Thank you.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not send feedback');
     } finally {
@@ -490,420 +497,390 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <h1 className="text-title">Settings</h1>
 
-      <h2 className="text-caption text-muted-foreground mt-1 font-medium uppercase tracking-wide">
-        Today&rsquo;s targets
-      </h2>
+      {loadFailed && (
+        <p role="alert" className="text-destructive text-caption">
+          Could not load settings. Check the connection and open Settings again.
+        </p>
+      )}
 
-      <Card>
-        <CardContent className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <Target className="text-primary-text size-5" />
-            <span className="font-medium">Your goal &amp; targets</span>
-          </div>
+      {!loadFailed && loading && (
+        <div className="flex flex-col gap-5">
+          {GROUPS.map((group) => (
+            <div key={group} className="flex flex-col gap-4">
+              <h2 className="text-muted-foreground text-caption font-medium">{group}</h2>
+              <Skeleton className="h-24 w-full rounded-control" />
+            </div>
+          ))}
+        </div>
+      )}
 
-          {editingProfile ? (
-            <ProfileForm
-              initial={settings?.profile ?? null}
-              submitLabel="Save goal"
-              saving={savingProfile}
-              onSubmit={handleSaveProfile}
-            />
-          ) : settings?.profile && settings?.targets ? (
-            <>
-              <p className="text-muted-foreground text-sm">
-                {GOAL_LABEL[settings.profile.goal] ?? settings.profile.goal} ·{' '}
-                {settings.profile.sex}, {profileAge(settings.profile)}y
-              </p>
-              <MacroLine
-                energyKcal={settings.targets.energyKcal}
-                proteinG={settings.targets.proteinG}
-                carbsG={settings.targets.carbsG}
-                fatG={settings.targets.fatG}
-              />
-              <Button variant="secondary" className="gap-2" onClick={() => setEditingProfile(true)}>
-                <Pencil className="size-4" /> Edit goal
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button onClick={() => setEditingProfile(true)}>Set your goal</Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
+      {!loadFailed && !loading && settings && (
+        <>
+          <div className="flex flex-col gap-4">
+            <h2 className="text-muted-foreground text-caption font-medium">Today’s targets</h2>
 
-      <Card>
-        <CardContent className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <Bell className="text-primary-text size-5" />
-            <span className="font-medium">Meal reminders</span>
-          </div>
-          <p className="text-muted-foreground text-caption">
-            Once per slot, in your device&rsquo;s timezone. Times snap to the nearest{' '}
-            {REMINDER_STEP_MINUTES} minutes.
-          </p>
-          {!isLocal && <PushReminders push={settings?.push} />}
-          <div className="flex flex-col gap-2 pt-1">
-            {(['breakfast', 'lunch', 'dinner'] as const).map((label) => (
-              <div key={label} className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    aria-label={`Enable ${label} reminder`}
-                    checked={Boolean(slotOn[label])}
-                    disabled={savingReminders}
-                    onCheckedChange={(on) => handleToggleSlot(label, on)}
-                  />
-                  <Label htmlFor={`reminder-${label}`} className="capitalize">
-                    {label}
-                  </Label>
-                </div>
-                <Input
-                  id={`reminder-${label}`}
-                  type="time"
-                  // Reminders are checked by a 15-min cron, so only :00/:15/:30/:45
-                  // are meaningful. step=900s hints native pickers to 15-min
-                  // increments; onBlur snaps whatever was chosen to the grid.
-                  step={REMINDER_STEP_MINUTES * 60}
-                  className="w-32"
-                  value={reminderTimes[label] ?? DEFAULT_REMINDER_TIMES[label]}
-                  disabled={savingReminders || !slotOn[label]}
-                  onChange={(e) => handleReminderTimeChange(label, e.target.value)}
-                  onBlur={(e) => handleReminderTimeChange(label, e.target.value)}
+            <Section title="Goal and targets" level={3}>
+              {editingProfile ? (
+                <ProfileForm
+                  initial={settings.profile ?? null}
+                  submitLabel="Save goal"
+                  saving={savingProfile}
+                  onSubmit={handleSaveProfile}
                 />
-              </div>
-            ))}
-          </div>
-          {remindersDirty && (
-            <Button
-              className="mt-1"
-              disabled={savingReminders}
-              onClick={() => void saveReminders()}
-            >
-              {savingReminders ? 'Saving…' : 'Save changes'}
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+              ) : settings.profile && settings.targets ? (
+                <>
+                  <p className="text-muted-foreground text-caption">
+                    {GOAL_LABELS[settings.profile.goal]} · {settings.profile.sex},{' '}
+                    {profileAge(settings.profile)}y
+                  </p>
+                  <MacroLine
+                    energyKcal={settings.targets.energyKcal}
+                    proteinG={settings.targets.proteinG}
+                    carbsG={settings.targets.carbsG}
+                    fatG={settings.targets.fatG}
+                  />
+                  <Button variant="secondary" onClick={() => setEditingProfile(true)}>
+                    Edit goal
+                  </Button>
+                </>
+              ) : (
+                <Button onClick={() => setEditingProfile(true)}>Set your goal</Button>
+              )}
+            </Section>
 
-      <Card>
-        <CardContent className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Target className="text-primary-text size-5" />
-              <span className="font-medium">Adaptive targets</span>
-            </div>
-            <Switch
-              aria-label="Enable adaptive targets"
-              checked={adaptiveOn}
-              disabled={savingAdaptive}
-              onCheckedChange={(on) => void toggleAdaptive(on)}
-            />
-          </div>
-          <p className="text-muted-foreground text-xs">
-            Log your weight weekly. SnapBite adjusts your calorie goal once a week from your weight
-            trend, and the goal stays editable.
-          </p>
-          <div className="flex items-end gap-2 pt-1">
-            <div className="flex flex-1 flex-col gap-1.5">
-              <Label htmlFor="weight-input">Log weight (kg)</Label>
-              <Input
-                id="weight-input"
-                type="number"
-                inputMode="decimal"
-                step="0.1"
-                placeholder={latestWeightKg != null ? String(latestWeightKg) : 'e.g. 72.5'}
-                value={weightInput}
-                disabled={savingWeight}
-                onChange={(e) => setWeightInput(e.target.value)}
-              />
-            </div>
-            <Button
-              variant="secondary"
-              disabled={savingWeight || !weightInput.trim()}
-              onClick={() => void submitWeight()}
-            >
-              {savingWeight ? 'Saving…' : 'Log'}
-            </Button>
-          </div>
-          {latestWeightKg != null && (
-            <p className="text-muted-foreground text-xs">Last logged: {latestWeightKg} kg</p>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <CalendarRange className="text-primary-text size-5" />
-            <span className="font-medium">Weekly view</span>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label>Week is</Label>
-            <ToggleGroup
-              type="single"
-              value={weekPrefs.mode}
-              onValueChange={(v) => v && updateWeekPrefs({ mode: v as WeekMode })}
-              block
-              aria-label="How a week is counted"
-            >
-              <ToggleGroupItem value="rolling">Last 7 days</ToggleGroupItem>
-              <ToggleGroupItem value="calendar">Calendar week</ToggleGroupItem>
-            </ToggleGroup>
-            <p className="text-muted-foreground text-xs">
-              {weekPrefs.mode === 'rolling'
-                ? 'Today and the previous 6 days.'
-                : 'The calendar week that contains the selected day.'}
-            </p>
-          </div>
-
-          {weekPrefs.mode === 'calendar' && (
-            <div className="flex flex-col gap-1.5">
-              <Label>Week starts on</Label>
-              <div className="bg-muted flex gap-1 rounded-control p-1">
-                {(
-                  [
-                    { value: 'monday', label: 'Monday' },
-                    { value: 'sunday', label: 'Sunday' },
-                  ] as Array<{ value: WeekStart; label: string }>
-                ).map((o) => (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={() => updateWeekPrefs({ weekStart: o.value })}
-                    className={cn(
-                      'min-h-9 flex-1 rounded-control px-2 py-1.5 text-sm font-medium transition-[transform,background-color,color,box-shadow] duration-[160ms] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100',
-                      weekPrefs.weekStart === o.value
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground',
-                    )}
-                  >
-                    {o.label}
-                  </button>
+            <Section title="Meal reminders" level={3}>
+              <p className="text-muted-foreground text-caption">
+                Once per slot, in your device’s timezone. Times snap to the nearest{' '}
+                {REMINDER_STEP_MINUTES} minutes.
+              </p>
+              {!isLocal && <PushReminders push={settings.push} />}
+              <div className="flex flex-col gap-2">
+                {(['breakfast', 'lunch', 'dinner'] as const).map((label) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <Label htmlFor={`reminder-${label}`} className="min-w-0 flex-1 capitalize">
+                      {label}
+                    </Label>
+                    <Input
+                      id={`reminder-${label}`}
+                      type="time"
+                      // Reminders are checked by a 15-min cron, so only :00/:15/:30/:45
+                      // are meaningful. step=900s hints native pickers to 15-min
+                      // increments; onBlur snaps whatever was chosen to the grid.
+                      step={REMINDER_STEP_MINUTES * 60}
+                      className="w-28 shrink-0"
+                      value={reminderTimes[label] ?? DEFAULT_REMINDER_TIMES[label]}
+                      disabled={savingReminders || !slotOn[label]}
+                      onChange={(e) => handleReminderTimeChange(label, e.target.value)}
+                      onBlur={(e) => handleReminderTimeChange(label, e.target.value)}
+                    />
+                    <Switch
+                      aria-label={`Enable ${label} reminder`}
+                      checked={Boolean(slotOn[label])}
+                      disabled={savingReminders}
+                      onCheckedChange={(on) => handleToggleSlot(label, on)}
+                    />
+                  </div>
                 ))}
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <h2 className="text-caption text-muted-foreground mt-2 font-medium uppercase tracking-wide">
-        Logging &amp; AI
-      </h2>
-
-      {isLocal ? (
-        <Card>
-          <CardContent>
-            <p className="text-muted-foreground text-sm">
-              Demo mode: meals are analyzed by a demo model, so no key is needed.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          <Card>
-            <CardContent className="flex items-center justify-between">
-              <span className="font-medium">Status</span>
-              {settings?.connected ? (
-                <span className="text-primary-text flex items-center gap-1 text-sm">
-                  <CheckCircle2 className="size-4" />
-                  {providerLabel(settings.aiProvider)}
-                  {settings.keyLast4 ? ` · …${settings.keyLast4}` : ''}
-                </span>
-              ) : (
-                <span className="text-destructive text-sm">Not connected</span>
+              {remindersDirty && (
+                <Button disabled={savingReminders} onClick={() => void saveReminders()}>
+                  {savingReminders ? 'Saving…' : 'Save changes'}
+                </Button>
               )}
-            </CardContent>
-          </Card>
+            </Section>
 
-          <Card>
-            <CardContent className="flex flex-col gap-3">
-              <ProviderPicker idPrefix="primary" value={primaryCfg} onChange={setPrimaryCfg} />
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="apikey">API key</Label>
-                <Input
-                  id="apikey"
-                  type="password"
-                  autoComplete="off"
-                  placeholder="paste your key"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
-                {primaryCfg.provider !== 'custom' && (
-                  <LinkifiedHint
-                    text={PROVIDER_PRESETS[primaryCfg.provider].keyHint}
-                    className="text-muted-foreground text-xs"
-                  />
-                )}
-              </div>
-
-              {primaryCfg.provider !== 'custom' && <KeyGuide provider={primaryCfg.provider} />}
-
-              <Button disabled={!apiKey.trim() || saving} onClick={handleSave}>
-                {saving ? 'Saving…' : 'Save'}
-              </Button>
-              <p className="text-muted-foreground text-xs">
-                Your key is sent over HTTPS, encrypted on our servers, and never shown again or
-                logged.
-              </p>
-              <p className="text-muted-foreground text-caption">
-                Free keys stop at about 20 requests a day and return a &ldquo;quota exceeded&rdquo;
-                error. Add billing, or set a fallback below.
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="flex flex-col gap-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-col">
-                  <span className="font-medium">Fallback provider</span>
-                  <span className="text-muted-foreground text-xs">
-                    {!primaryConnected
-                      ? 'Connect your main provider first'
-                      : settings?.fallbackConnected
-                        ? `${settings.fallbackProvider}${settings.fallbackKeyLast4 ? ` · …${settings.fallbackKeyLast4}` : ''}${settings.fallbackEnabled ? '' : ' · saved (off)'}`
-                        : 'Off'}
-                  </span>
-                </div>
+            <Section title="Adaptive targets" level={3}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-body font-medium">Use adaptive targets</span>
                 <Switch
-                  aria-label="Enable fallback provider"
-                  checked={fbEnabled}
-                  disabled={!primaryConnected || savingFb}
-                  onCheckedChange={handleToggleFallback}
+                  aria-label="Enable adaptive targets"
+                  checked={adaptiveOn}
+                  disabled={savingAdaptive}
+                  onCheckedChange={(on) => void toggleAdaptive(on)}
                 />
               </div>
-
-              {/* Always-visible "why" so users understand the benefit before enabling. */}
-              <p className="text-muted-foreground text-xs">
-                Free AI tiers get busy — your provider can hit a rate limit, be temporarily
-                overloaded, or run out of credit, and a photo won't log. Add a second provider here
-                and SnapBite switches to it automatically when that happens, so your meals keep
-                logging without you resending the photo.
+              <p className="text-muted-foreground text-caption">
+                Log your weight weekly. SnapBite adjusts your calorie goal once a week from your
+                weight trend, and the goal stays editable.
               </p>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="weight-input">Log weight (kg)</Label>
+                <div className="flex items-start gap-2">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <Input
+                      id="weight-input"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      placeholder={latestWeightKg != null ? String(latestWeightKg) : 'e.g. 72.5'}
+                      value={weightInput}
+                      disabled={savingWeight}
+                      aria-invalid={weightError ? true : undefined}
+                      aria-describedby={weightError ? 'weight-error' : undefined}
+                      onChange={(e) => {
+                        setWeightInput(e.target.value);
+                        if (weightError) setWeightError('');
+                      }}
+                    />
+                    {weightError && (
+                      <p id="weight-error" className="text-destructive text-caption">
+                        {weightError}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="secondary"
+                    disabled={savingWeight}
+                    onClick={() => void submitWeight()}
+                  >
+                    {savingWeight ? 'Saving…' : 'Log weight'}
+                  </Button>
+                </div>
+              </div>
+              {latestWeightKg != null && (
+                <p className="text-muted-foreground text-caption">
+                  Last logged: {latestWeightKg} kg
+                </p>
+              )}
+            </Section>
 
-              <Collapsible open={fbEnabled && primaryConnected}>
-                <div className="flex flex-col gap-3 pt-1">
-                  <p className="text-muted-foreground text-xs">
-                    OpenAI (gpt-4o-mini) is recommended.
-                  </p>
+            <Section title="Weekly view" level={3}>
+              <div className="flex flex-col gap-1.5">
+                <Label>Week is</Label>
+                <ToggleGroup
+                  type="single"
+                  value={weekPrefs.mode}
+                  onValueChange={(v) => v && updateWeekPrefs({ mode: v as WeekMode })}
+                  block
+                  aria-label="How a week is counted"
+                >
+                  <ToggleGroupItem value="rolling">Last 7 days</ToggleGroupItem>
+                  <ToggleGroupItem value="calendar">Calendar week</ToggleGroupItem>
+                </ToggleGroup>
+                <p className="text-muted-foreground text-caption">
+                  {weekPrefs.mode === 'rolling'
+                    ? 'Today and the previous 6 days.'
+                    : 'The calendar week that contains the selected day.'}
+                </p>
+              </div>
 
-                  <ProviderPicker idPrefix="fb" value={fbCfg} onChange={setFbCfg} />
+              {weekPrefs.mode === 'calendar' && (
+                <div className="flex flex-col gap-1.5">
+                  <Label>Week starts on</Label>
+                  <ToggleGroup
+                    type="single"
+                    value={weekPrefs.weekStart}
+                    onValueChange={(v) => v && updateWeekPrefs({ weekStart: v as WeekStart })}
+                    block
+                    aria-label="Week starts on"
+                  >
+                    <ToggleGroupItem value="monday">Monday</ToggleGroupItem>
+                    <ToggleGroupItem value="sunday">Sunday</ToggleGroupItem>
+                  </ToggleGroup>
+                </div>
+              )}
+            </Section>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <h2 className="text-muted-foreground text-caption font-medium">Logging and AI</h2>
+
+            <Section title="AI key" level={3}>
+              {isLocal ? (
+                <p className="text-muted-foreground text-caption">
+                  Demo mode: meals are analyzed by a demo model, so no key is needed.
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-body font-medium">Status</span>
+                    {settings.connected ? (
+                      <span className="flex items-center gap-1 text-caption font-medium">
+                        <CheckCircle2 className="size-4" />
+                        Connected
+                      </span>
+                    ) : (
+                      <span className="text-destructive text-caption font-medium">
+                        Not connected
+                      </span>
+                    )}
+                  </div>
+
+                  <ProviderPicker idPrefix="primary" value={primaryCfg} onChange={setPrimaryCfg} />
 
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="fb-key">Fallback API key</Label>
+                    <Label htmlFor="apikey">API key</Label>
                     <Input
-                      id="fb-key"
+                      id="apikey"
+                      ref={apiKeyRef}
                       type="password"
                       autoComplete="off"
-                      placeholder={
-                        settings?.fallbackConnected
-                          ? 'saved — paste to replace'
-                          : 'paste your fallback key'
-                      }
-                      value={fbKey}
-                      onChange={(e) => setFbKey(e.target.value)}
+                      placeholder="paste your key"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
                     />
-                    {fbCfg.provider !== 'custom' && (
+                    {primaryCfg.provider !== 'custom' && (
                       <LinkifiedHint
-                        text={PROVIDER_PRESETS[fbCfg.provider].keyHint}
-                        className="text-muted-foreground text-xs"
+                        text={PROVIDER_PRESETS[primaryCfg.provider].keyHint}
+                        className="text-muted-foreground text-caption"
                       />
                     )}
                   </div>
 
-                  {fbCfg.provider !== 'custom' && <KeyGuide provider={fbCfg.provider} />}
+                  {primaryCfg.provider !== 'custom' && <KeyGuide provider={primaryCfg.provider} />}
 
-                  <div className="flex gap-2">
-                    <Button
-                      className="flex-1"
-                      disabled={!fbKey.trim() || savingFb}
-                      onClick={handleSaveFallback}
-                    >
-                      {savingFb
-                        ? 'Saving…'
-                        : settings?.fallbackConnected
-                          ? 'Replace key'
-                          : 'Save fallback'}
+                  <Button disabled={saving} onClick={handleSave}>
+                    {saving ? 'Saving…' : 'Save key'}
+                  </Button>
+                  <p className="text-muted-foreground text-caption">
+                    Your key is sent over HTTPS, encrypted on SnapBite&apos;s servers, and never
+                    shown again or logged.
+                  </p>
+                  <p className="text-muted-foreground text-caption">
+                    Free keys stop at about 20 requests a day and return a &ldquo;quota
+                    exceeded&rdquo; error. Add billing, or set a fallback below.
+                  </p>
+                </>
+              )}
+            </Section>
+
+            {!isLocal && (
+              <Section title="Fallback provider" level={3}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col">
+                    <span className="text-body font-medium">Use a fallback provider</span>
+                    <span className="text-muted-foreground text-caption">
+                      {!primaryConnected
+                        ? 'Connect your main provider first'
+                        : settings.fallbackConnected
+                          ? `${settings.fallbackProvider}${settings.fallbackKeyLast4 ? ` · …${settings.fallbackKeyLast4}` : ''}${settings.fallbackEnabled ? '' : ' · saved (off)'}`
+                          : 'Off'}
+                    </span>
+                  </div>
+                  <Switch
+                    aria-label="Enable fallback provider"
+                    checked={fbEnabled}
+                    disabled={!primaryConnected || savingFb}
+                    onCheckedChange={handleToggleFallback}
+                  />
+                </div>
+
+                {/* Always-visible "why" so users understand the benefit before enabling. */}
+                <p className="text-muted-foreground text-caption">
+                  Free AI tiers get busy. Your provider can hit a rate limit, be overloaded, or run
+                  out of credit, and a photo won&apos;t log. Add a second provider and SnapBite
+                  switches to it when that happens.
+                </p>
+
+                <Collapsible open={fbEnabled && primaryConnected}>
+                  <div className="flex flex-col gap-3 pt-1">
+                    <p className="text-muted-foreground text-caption">
+                      OpenAI (gpt-4o-mini) is recommended.
+                    </p>
+
+                    <ProviderPicker idPrefix="fb" value={fbCfg} onChange={setFbCfg} />
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="fb-key">Fallback API key</Label>
+                      <Input
+                        id="fb-key"
+                        ref={fbKeyRef}
+                        type="password"
+                        autoComplete="off"
+                        placeholder={
+                          settings.fallbackConnected
+                            ? 'Saved. Paste a new key to replace it.'
+                            : 'paste your fallback key'
+                        }
+                        value={fbKey}
+                        onChange={(e) => setFbKey(e.target.value)}
+                      />
+                      {fbCfg.provider !== 'custom' && (
+                        <LinkifiedHint
+                          text={PROVIDER_PRESETS[fbCfg.provider].keyHint}
+                          className="text-muted-foreground text-caption"
+                        />
+                      )}
+                    </div>
+
+                    {fbCfg.provider !== 'custom' && <KeyGuide provider={fbCfg.provider} />}
+
+                    <Button variant="secondary" disabled={savingFb} onClick={handleSaveFallback}>
+                      {savingFb ? 'Saving…' : 'Save fallback'}
                     </Button>
-                    {settings?.fallbackConnected && (
+                    {settings.fallbackConnected && (
                       <Button
-                        variant="secondary"
+                        variant="link"
+                        className="w-full"
                         disabled={savingFb}
                         onClick={handleRemoveFallback}
                       >
-                        Remove
+                        Remove fallback
                       </Button>
                     )}
                   </div>
-                </div>
-              </Collapsible>
-            </CardContent>
-          </Card>
+                </Collapsible>
+              </Section>
+            )}
+          </div>
+
+          {!isLocal && (
+            <div className="flex flex-col gap-4">
+              <h2 className="text-muted-foreground text-caption font-medium">One-tap logging</h2>
+              <ShortcutCard backend={backend} />
+            </div>
+          )}
+
+          <div className="flex flex-col gap-4">
+            <h2 className="text-muted-foreground text-caption font-medium">Account and data</h2>
+
+            {!isLocal && (
+              <Section title="Account" level={3}>
+                <AccountCard onSignedIn={() => setAccountVersion((version) => version + 1)} />
+              </Section>
+            )}
+
+            {/* Paid features need a verified identity, so this is worker-only. */}
+            {!isLocal && (
+              <Section title="Credits and supporter" level={3}>
+                <CreditsCard backend={backend} refreshSignal={accountVersion} />
+              </Section>
+            )}
+
+            <Section title="Privacy and your data" level={3}>
+              <ul className="text-muted-foreground flex list-disc flex-col gap-1 pl-5 text-caption">
+                <li>SnapBite stores your logged meals: foods, nutrition, notes, and timestamps.</li>
+                <li>
+                  Meal photos are only kept for meals you send to the Telegram bot, and are served
+                  back only to you.
+                </li>
+                <li>
+                  Your AI API key is encrypted on SnapBite&apos;s servers and never included in
+                  exports or logs.
+                </li>
+              </ul>
+
+              <ExportData backend={backend} />
+              <Button
+                variant="link"
+                className="text-destructive w-full"
+                onClick={() => setConfirmDelete(true)}
+              >
+                Delete account
+              </Button>
+            </Section>
+
+            <Section title="Feedback and support" level={3}>
+              <Button variant="secondary" onClick={() => setFeedbackOpen(true)}>
+                Send feedback
+              </Button>
+            </Section>
+          </div>
         </>
       )}
-
-      {!isLocal && (
-        <>
-          <h2 className="text-caption text-muted-foreground mt-2 font-medium uppercase tracking-wide">
-            One-tap logging
-          </h2>
-
-          <ShortcutCard backend={backend} />
-        </>
-      )}
-
-      <h2 className="text-caption text-muted-foreground mt-2 font-medium uppercase tracking-wide">
-        Account &amp; data
-      </h2>
-
-      <AccountCard onSignedIn={() => setAccountVersion((version) => version + 1)} />
-
-      {/* Paid features need a verified identity, so this is worker-only. */}
-      {!isLocal && <CreditsCard backend={backend} refreshSignal={accountVersion} />}
-
-      <Card>
-        <CardContent className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="text-primary-text size-5" />
-            <span className="font-medium">Privacy &amp; your data</span>
-          </div>
-          <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
-            <li>We store your logged meals: foods, nutrition, notes, and timestamps.</li>
-            <li>
-              Meal photos are only kept for meals you send to the Telegram bot, and are served back
-              only to you.
-            </li>
-            <li>
-              Your AI API key is encrypted on our servers and never included in exports or logs.
-            </li>
-          </ul>
-
-          <div className="flex flex-col gap-2 pt-1 sm:flex-row">
-            <ExportData backend={backend} />
-            <Button variant="destructive" className="gap-2" onClick={() => setConfirmDelete(true)}>
-              <Trash2 className="size-4" />
-              Delete account
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="text-primary-text size-5" />
-            <span className="font-medium">Feedback &amp; support</span>
-          </div>
-          <Button variant="secondary" className="gap-2" onClick={() => setFeedbackOpen(true)}>
-            <MessageSquare className="size-4" /> Send feedback
-          </Button>
-        </CardContent>
-      </Card>
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>
@@ -914,11 +891,11 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="secondary" disabled={deleting} onClick={() => setConfirmDelete(false)}>
-              Cancel
-            </Button>
             <Button variant="destructive" disabled={deleting} onClick={handleDeleteAccount}>
               {deleting ? 'Deleting…' : 'Delete everything'}
+            </Button>
+            <Button variant="secondary" disabled={deleting} onClick={() => setConfirmDelete(false)}>
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -929,35 +906,37 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           <DialogHeader>
             <DialogTitle>Send feedback</DialogTitle>
             <DialogDescription>
-              Tell us what went wrong or what you'd like improved. This goes straight to the
-              maintainer.
+              Say what went wrong or what should be better. This goes straight to the maintainer.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
+            <Label htmlFor="feedback">Feedback</Label>
             <Textarea
-              aria-label="Your feedback"
+              id="feedback"
+              ref={feedbackRef}
               placeholder="e.g. the analysis was off for my salad, or I'd love a weekly summary…"
               maxLength={FEEDBACK_MAX_LEN}
               rows={5}
               value={feedbackText}
               onChange={(e) => setFeedbackText(e.target.value)}
             />
-            <p className="text-muted-foreground text-right text-xs">
+            <p className="text-muted-foreground text-caption text-right">
               {feedbackText.length}/{FEEDBACK_MAX_LEN}
             </p>
           </div>
-          <DialogFooter>
+          <DialogActions>
+            <Button className="h-12" disabled={sendingFeedback} onClick={handleSendFeedback}>
+              {sendingFeedback ? 'Sending…' : 'Send feedback'}
+            </Button>
             <Button
-              variant="secondary"
+              variant="link"
+              className="w-full"
               disabled={sendingFeedback}
               onClick={() => setFeedbackOpen(false)}
             >
               Cancel
             </Button>
-            <Button disabled={!feedbackText.trim() || sendingFeedback} onClick={handleSendFeedback}>
-              {sendingFeedback ? 'Sending…' : 'Send'}
-            </Button>
-          </DialogFooter>
+          </DialogActions>
         </DialogContent>
       </Dialog>
     </div>

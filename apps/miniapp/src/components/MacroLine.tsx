@@ -26,10 +26,10 @@ export function MacroLine({
   compact = false,
 }: MacroLineProps) {
   if (compact) {
-    return <span className="text-muted-foreground text-sm">{fmt(energyKcal)} kcal</span>;
+    return <span className="text-muted-foreground text-caption">{fmt(energyKcal)} kcal</span>;
   }
   return (
-    <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+    <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
       <span className="whitespace-nowrap">{fmt(energyKcal)} kcal</span>
       <span className="whitespace-nowrap">
         <span className="sr-only">protein </span>P {fmt(proteinG)}g
@@ -41,11 +41,7 @@ export function MacroLine({
         <span className="sr-only">fat </span>F {fmt(fatG)}g
       </span>
       {fiberG != null ? <span className="whitespace-nowrap">Fiber {fmt(fiberG)}g</span> : null}
-      {sourceLabel ? (
-        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-          {sourceLabel}
-        </Badge>
-      ) : null}
+      {sourceLabel ? <Badge variant="outline">{sourceLabel}</Badge> : null}
     </div>
   );
 }

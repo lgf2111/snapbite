@@ -47,8 +47,8 @@ describe('CreditsCard', () => {
     });
     render(<CreditsCard backend={backend} />);
 
-    expect(await screen.findByText('Credits and supporter')).toBeInTheDocument();
-    expect(screen.getByText(/sign in with a verified email/i)).toBeInTheDocument();
+    expect(await screen.findByText(/sign in with a verified email/i)).toBeInTheDocument();
+    expect(document.querySelector('[data-slot="card"]')).toBeNull();
     expect(screen.getByRole('button', { name: 'Buy Starter' })).toBeDisabled();
     // The per-credit price is shown for every pack.
     expect(screen.getByText(/0\.050 \/ credit/)).toBeInTheDocument();
