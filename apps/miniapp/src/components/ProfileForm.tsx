@@ -216,7 +216,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
           // empty gap on iOS); `dob-input` centers the native date text.
           className="dob-input w-40"
         />
-        <span className="text-muted-foreground text-xs">
+        <span className="text-muted-foreground text-caption">
           {birthDateValid ? `Age ${derivedAge} · stays up to date` : 'Used to compute your age'}
         </span>
       </div>
@@ -247,7 +247,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
                 onCommit={(v) => setHeightCm(feetInchesToCm(Math.round(v), inches))}
                 className="w-20"
               />
-              <span className="text-muted-foreground text-sm">ft</span>
+              <span className="text-muted-foreground text-caption">ft</span>
             </div>
             <div className="flex items-center gap-1">
               <NumberField
@@ -259,7 +259,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
                 onCommit={(v) => setHeightCm(feetInchesToCm(feet, Math.round(v)))}
                 className="w-20"
               />
-              <span className="text-muted-foreground text-sm">in</span>
+              <span className="text-muted-foreground text-caption">in</span>
             </div>
           </div>
         ) : (
@@ -273,7 +273,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
               onCommit={(v) => setHeightCm(v)}
               className="w-28"
             />
-            <span className="text-muted-foreground text-sm">cm</span>
+            <span className="text-muted-foreground text-caption">cm</span>
           </div>
         )}
       </div>
@@ -288,7 +288,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
           <Label htmlFor="activity">Activity</Label>
           <span
             key={activityLabel}
-            className="text-primary-text animate-in text-sm font-medium fade-in-0 slide-in-from-bottom-1 duration-200"
+            className="text-primary-text animate-in text-caption font-medium fade-in-0 slide-in-from-bottom-1 duration-200"
           >
             {activityLabel}
           </span>
@@ -310,7 +310,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
             } as React.CSSProperties
           }
         />
-        <div className="text-muted-foreground flex justify-between text-[10px]">
+        <div className="text-muted-foreground flex justify-between text-caption">
           <span>Sedentary</span>
           <span>Very active</span>
         </div>
@@ -319,7 +319,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="goal">Goal</Label>
-          <span className="text-primary-text text-sm font-medium">{GOAL_LABELS[goal]}</span>
+          <span className="text-primary-text text-caption font-medium">{GOAL_LABELS[goal]}</span>
         </div>
         <input
           id="goal"
@@ -337,7 +337,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
             } as React.CSSProperties
           }
         />
-        <div className="text-muted-foreground flex justify-between text-[10px]">
+        <div className="text-muted-foreground flex justify-between text-caption">
           <span>Lose</span>
           <span>Maintain</span>
           <span>Gain</span>
@@ -362,7 +362,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
               onChange={(e) => setCalOverride(e.target.value)}
             />
           </div>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-muted-foreground text-caption">
             Leave macros blank to auto-calculate. Fill all three to override.
           </p>
           <div className="grid grid-cols-3 gap-2">
@@ -400,8 +400,8 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
         </div>
       </Collapsible>
 
-      <div className="bg-muted/50 flex flex-col gap-1 rounded-control p-3">
-        <span className="text-muted-foreground text-xs">Your daily targets</span>
+      <div className="bg-muted flex flex-col gap-1 rounded-control p-3">
+        <span className="text-muted-foreground text-caption">Your daily targets</span>
         <MacroLine
           energyKcal={targets.energyKcal}
           proteinG={targets.proteinG}
@@ -411,7 +411,7 @@ export function ProfileForm({ initial, submitLabel, saving, onSubmit }: ProfileF
       </div>
 
       <InfoDisclosure title="How are these calculated?">
-        <p>Estimates from your details — not medical advice. Editable in Advanced mode.</p>
+        <p>Estimates from your details, not medical advice. Editable in Advanced mode.</p>
         <p>
           <strong>Calories:</strong> BMR (Mifflin–St Jeor) × activity, then adjusted for your goal
           (Lose fast −25% · Lose steady −12% · Maintain · Lean gain +10% · Gain fast +20%), floored

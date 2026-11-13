@@ -1,11 +1,10 @@
-import { Mail } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Me } from '../lib/account.js';
 import { readConfig } from '../lib/config.js';
 import { GoogleIcon } from './icons/GoogleIcon.js';
 import { Button } from './ui/button.js';
-import { Card, CardContent } from './ui/card.js';
 import { Input } from './ui/input.js';
+import { Label } from './ui/label.js';
 
 interface Providers {
   email: boolean;
@@ -33,6 +32,7 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
   // `onSignedIn` fires on a signed-out -> signed-in change seen after mount, not
   // for someone who was already signed in when the card opened.
   const wasSignedIn = useRef<boolean | null>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
   const signedInCb = useRef(onSignedIn);
   signedInCb.current = onSignedIn;
 
@@ -78,6 +78,10 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
 
   async function requestLink() {
     if (!hasBackend) return;
+    if (!email.trim()) {
+      emailRef.current?.focus();
+      return;
+    }
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -123,83 +127,78 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
   if (!hasBackend) return null;
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3">
-        <span className="font-medium">Account</span>
-
-        {me === null ? (
-          loadFailed ? (
-            <>
-              <p className="text-muted-foreground text-caption">
-                Could not check your account right now.
-              </p>
-              <Button variant="secondary" onClick={() => void load()}>
-                Try again
-              </Button>
-            </>
-          ) : (
-            <p className="text-muted-foreground text-caption" aria-busy="true">
-              Checking your account…
-            </p>
-          )
-        ) : me.signedIn ? (
+    <div className="flex flex-col gap-3">
+      {me === null ? (
+        loadFailed ? (
           <>
-            <div className="flex flex-col gap-0.5">
-              <p className="text-body font-medium break-all">{me.email ?? 'Your account'}</p>
-              <p className="text-muted-foreground text-caption">
-                {me.method === 'google'
-                  ? 'Signed in with Google'
-                  : me.method === 'email'
-                    ? 'Signed in with an email link'
-                    : 'Signed in'}
-              </p>
-            </div>
-            <Button variant="secondary" disabled={busy} onClick={() => void signOut()}>
-              Sign out
+            <p className="text-muted-foreground text-caption">
+              Could not check your account right now.
+            </p>
+            <Button variant="secondary" onClick={() => void load()}>
+              Try again
             </Button>
           </>
         ) : (
-          <>
+          <p className="text-muted-foreground text-caption" aria-busy="true">
+            Checking your account…
+          </p>
+        )
+      ) : me.signedIn ? (
+        <>
+          <div className="flex flex-col gap-0.5">
+            <p className="text-body font-medium break-all">{me.email ?? 'Your account'}</p>
             <p className="text-muted-foreground text-caption">
-              Optional — signing in keeps your meals when you change phone or clear your browser.
+              {me.method === 'google'
+                ? 'Signed in with Google'
+                : me.method === 'email'
+                  ? 'Signed in with an email link'
+                  : 'Signed in'}
             </p>
+          </div>
+          <Button variant="secondary" disabled={busy} onClick={() => void signOut()}>
+            Sign out
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="text-muted-foreground text-caption">
+            Optional. Signing in keeps your meals when you change phone or clear your browser.
+          </p>
 
-            {providers.google && (
-              <Button asChild variant="secondary">
-                <a href={`${apiBase}/api/auth/start/google`}>
-                  <GoogleIcon />
-                  Continue with Google
-                </a>
-              </Button>
-            )}
+          {providers.google && (
+            <Button asChild variant="secondary">
+              <a href={`${apiBase}/api/auth/start/google`}>
+                <GoogleIcon />
+                Continue with Google
+              </a>
+            </Button>
+          )}
 
-            {providers.email && (
-              <>
+          {providers.email && (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="account-email">Email address</Label>
                 <Input
+                  id="account-email"
+                  ref={emailRef}
                   type="email"
                   inputMode="email"
                   autoComplete="email"
                   placeholder="you@example.com"
-                  aria-label="Email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
-                <Button
-                  variant="secondary"
-                  disabled={busy || !email.trim()}
-                  onClick={() => void requestLink()}
-                >
-                  <Mail className="size-4" aria-hidden />
-                  {busy ? 'Sending…' : 'Email me a sign-in link'}
-                </Button>
-              </>
-            )}
-          </>
-        )}
+              </div>
+              <Button variant="secondary" disabled={busy} onClick={() => void requestLink()}>
+                {busy ? 'Sending…' : 'Email me a sign-in link'}
+              </Button>
+            </>
+          )}
+        </>
+      )}
 
-        {notice && <p className="text-caption text-[var(--success)]">{notice}</p>}
-        {error && <p className="text-caption text-destructive">{error}</p>}
-      </CardContent>
-    </Card>
+      {notice && <p className="text-caption text-success">{notice}</p>}
+      {error && <p className="text-caption text-destructive">{error}</p>}
+    </div>
   );
 }

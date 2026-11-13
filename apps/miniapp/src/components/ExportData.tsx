@@ -18,7 +18,7 @@ import {
   shareExport,
 } from '@/lib/exportFile';
 import { downloadViaTelegram, getRawInitData } from '@/lib/telegram';
-import { Check, Copy, Download, Loader2, Share2 } from 'lucide-react';
+import { Check, Copy, Loader2, Share2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -107,8 +107,8 @@ export function ExportData({ backend }: { backend: Backend }) {
 
   return (
     <>
-      <Button variant="secondary" className="gap-2" disabled={busy} onClick={() => void run()}>
-        {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+      <Button variant="secondary" disabled={busy} onClick={() => void run()}>
+        {busy && <Loader2 className="size-4 animate-spin" />}
         {busy ? 'Exporting…' : 'Export my data'}
       </Button>
 
@@ -124,7 +124,7 @@ export function ExportData({ backend }: { backend: Backend }) {
           <pre
             ref={pre}
             data-testid="export-json"
-            className="bg-background border-border max-h-64 min-w-0 overflow-auto rounded-control border p-3 font-mono text-xs whitespace-pre"
+            className="bg-background border-border max-h-64 min-w-0 overflow-auto rounded-control border p-3 font-mono text-caption whitespace-pre"
           >
             {sheet?.text}
           </pre>

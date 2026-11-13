@@ -66,7 +66,7 @@ describe('ShortcutCard', () => {
     const { backend, spies } = stub();
     render(<ShortcutCard backend={backend} />);
 
-    expect(screen.getByText('One-tap photo logging')).toBeInTheDocument();
+    expect(document.querySelector('[data-slot="card"]')).toBeNull();
     expect(screen.queryByText(RAW)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Create Shortcut token' }));
@@ -383,16 +383,16 @@ describe('ShortcutCard: revoke confirmation', () => {
     expect(target.className).not.toContain('truncate');
 
     expect(dialog.className).toContain('w-[calc(100%-2rem)]');
-    expect(dialog.className).toContain('p-6');
+    expect(dialog.className).toContain('p-5');
     expect(dialog.className).toContain('overflow-y-auto');
     expect(dialog.className).toContain('max-h-[calc(100svh-');
   });
 
-  it('puts Cancel before Revoke in the DOM, both full width and 44px tall, Revoke destructive', async () => {
+  it('puts Revoke before Cancel in the DOM, both full width and 44px tall, Revoke destructive', async () => {
     const { dialog } = await openOne();
     const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
     const revoke = within(dialog).getByRole('button', { name: 'Revoke' });
-    expect(cancel.compareDocumentPosition(revoke) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(revoke.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     for (const b of [cancel, revoke]) {
       expect(b.className).toContain('w-full');
       expect(b.className).toContain('h-11');
@@ -400,7 +400,7 @@ describe('ShortcutCard: revoke confirmation', () => {
     expect(revoke.className).toContain('bg-destructive');
     expect(revoke.className).toContain('text-destructive-foreground');
     expect(cancel.className).toContain('bg-secondary');
-    // Rendered top to bottom as the DOM reads: Cancel above the destructive action.
+    // Primary first in the DOM and on top, per the dialog contract.
     const footer = dialog.querySelector('[data-slot=dialog-footer]') as HTMLElement;
     expect(footer.className).toContain('flex-col');
     expect(footer.className).not.toContain('flex-col-reverse');
@@ -491,13 +491,13 @@ describe('ShortcutCard: the pre-flight dialog', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('Cancel closes it without navigating, and is before Continue in the DOM, and focused', async () => {
+  it('Cancel closes it without navigating, and Continue is before it in the DOM, and Cancel is focused', async () => {
     await start();
     await userEvent.click(add());
     const dialog = await screen.findByRole('dialog');
     const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
     const cont = within(dialog).getByRole('button', { name: 'Continue' });
-    expect(cancel.compareDocumentPosition(cont) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cont.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await waitFor(() => expect(document.activeElement).toBe(cancel));
 
     await userEvent.click(cancel);
@@ -505,13 +505,13 @@ describe('ShortcutCard: the pre-flight dialog', () => {
     expect(nav.to).not.toHaveBeenCalled();
   });
 
-  it('is built on the dialog primitive: scrim, 16px insets, 24px padding', async () => {
+  it('is built on the dialog primitive: scrim, 16px insets, standard padding', async () => {
     await start();
     await userEvent.click(add());
     const dialog = await screen.findByRole('dialog');
     expect(document.querySelector('[data-slot=dialog-overlay]')).toBeTruthy();
     expect(dialog.className).toContain('w-[calc(100%-2rem)]');
-    expect(dialog.className).toContain('p-6');
+    expect(dialog.className).toContain('p-5');
   });
 
   /** Whether the click on "Add the Shortcut" was cancelled by the time it reached the document. */

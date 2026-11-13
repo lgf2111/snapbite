@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, KeyRound } from 'lucide-react';
+import { Check, ChevronDown, Copy } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { CreatedDeviceToken, DeviceTokenInfo } from '../lib/api.js';
 import type { Backend } from '../lib/backend.js';
@@ -13,7 +13,6 @@ import {
   SHORTCUT_TOKEN_PLACEHOLDER,
 } from '../lib/shortcut.js';
 import { Button } from './ui/button.js';
-import { Card, CardContent } from './ui/card.js';
 import {
   Dialog,
   DialogContent,
@@ -50,7 +49,7 @@ function AccordionRow({
 }) {
   const id = useId();
   return (
-    <div className="rounded-surface border border-border">
+    <div className="rounded-control border border-border">
       <button
         type="button"
         aria-expanded={open}
@@ -269,191 +268,183 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
   );
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <KeyRound className="text-primary-text size-5" aria-hidden />
-          <span className="font-medium">One-tap photo logging</span>
-        </div>
-        <p className="text-muted-foreground text-caption">
-          Log a meal from the Action Button or Lock Screen — no app to open.
+    <div className="flex flex-col gap-3">
+      <p className="text-muted-foreground text-caption">
+        Log a meal from the Action Button or Lock Screen — no app to open.
+      </p>
+
+      {installPlatform() === 'android' && (
+        <p className="text-caption">
+          On Android there is no Action Button. Long-press the SnapBite icon and pick Take a photo,
+          or share a photo to SnapBite from your gallery.
         </p>
+      )}
 
-        {installPlatform() === 'android' && (
-          <p className="text-caption">
-            On Android there is no Action Button. Long-press the SnapBite icon and pick Take a
-            photo, or share a photo to SnapBite from your gallery.
-          </p>
-        )}
+      {!standalone && (
+        <p className="text-muted-foreground text-caption">
+          Add SnapBite to your Home Screen first — the shortcut works without it, but the
+          notification is easier to reach.
+        </p>
+      )}
 
-        {!standalone && (
-          <p className="text-muted-foreground text-caption">
-            Add SnapBite to your Home Screen first — the shortcut works without it, but the
-            notification is easier to reach.
-          </p>
-        )}
-
-        {/* The token comes first: both ways below end by pasting it. */}
-        {fresh ? (
-          <div className="flex flex-col gap-2 rounded-control border border-border p-3">
-            <code
-              ref={tokenRef}
-              className="tabular text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
-              data-testid="new-token"
-            >
-              {fresh.token}
-            </code>
-            <div className="flex items-center justify-between gap-2">
-              <CopyButton text={fresh.token} target={tokenRef} label="Copy token" />
-              <Button type="button" variant="ghost" size="sm" onClick={() => setFresh(null)}>
-                Done
-              </Button>
-            </div>
-            <p className="text-destructive text-caption" role="alert">
-              Copy it now — it will not be shown again.
-            </p>
-          </div>
-        ) : (
-          <Button
-            type="button"
-            variant={hasToken ? 'secondary' : 'default'}
-            disabled={busy}
-            onClick={() => void create()}
+      {/* The token comes first: both ways below end by pasting it. */}
+      {fresh ? (
+        <div className="flex flex-col gap-2 rounded-control border border-border p-3">
+          <code
+            ref={tokenRef}
+            className="tabular text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
+            data-testid="new-token"
           >
-            Create Shortcut token
-          </Button>
-        )}
-
-        <AccordionRow
-          title="Set up with Shortcut app"
-          badge="iOS only"
-          open={panel === 'easy'}
-          onToggle={() => setPanel(panel === 'easy' ? null : 'easy')}
-        >
-          <p className="text-caption">
-            SnapBite gives you a ready-made shortcut. You only add your token.
-          </p>
-          {Add}
-          <div className="flex flex-col gap-1">
-            <code
-              ref={fileRef}
-              data-testid="shortcut-file-url"
-              className="text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
-            >
-              {addHref}
-            </code>
-            {/* For anyone whose preview gets stuck: paste it into Safari by hand. */}
-            <CopyButton text={addHref} target={fileRef} label="Copy link" />
-            {icloud && (
-              <a
-                href={SHORTCUT_FILE_URL}
-                className="text-primary-text text-caption underline-offset-4 hover:underline"
-              >
-                Use the file link instead
-              </a>
-            )}
-          </div>
-          <ol className="text-caption flex list-decimal flex-col gap-1.5 pl-5">
-            <li>Add the Shortcut.</li>
-            <li>
-              {icloud
-                ? 'Tap Get Shortcut, then Add Shortcut.'
-                : 'Tap Open in Shortcuts, then Add Shortcut.'}
-            </li>
-            <li>
-              Open the shortcut, tap {SHORTCUT_TOKEN_FIELD}, replace{' '}
-              <code className="font-mono">{SHORTCUT_TOKEN_PLACEHOLDER}</code> with your token from
-              above, keeping the word Bearer and one space.
-            </li>
-            <li>Settings → Action Button → Shortcut → SnapBite Log Meal.</li>
-          </ol>
-          <p className="text-muted-foreground text-caption">
-            Hold the Action Button, take a photo, the notification tells you what was logged.
-          </p>
-        </AccordionRow>
-
-        <AccordionRow
-          title="Set up manually"
-          open={panel === 'hand'}
-          onToggle={() => setPanel(panel === 'hand' ? null : 'hand')}
-        >
-          <ol className="text-caption flex list-decimal flex-col gap-2 pl-5">
-            <li>Take Photo — turn on Show Camera Preview.</li>
-            <li>Convert Image → JPEG, quality 0.6.</li>
-            <li>
-              Get Contents of URL:
-              <ul className="mt-1 flex list-disc flex-col gap-0.5 pl-4">
-                <li className="break-words [overflow-wrap:anywhere]">
-                  URL{' '}
-                  <code ref={urlRef} className="font-mono">
-                    {SHORTCUT_LOG_URL}
-                  </code>
-                </li>
-                <li>Method POST, Request Body Form.</li>
-                <li>
-                  New field <code className="font-mono">photo</code>, type File, value Converted
-                  Image.
-                </li>
-                <li>
-                  Header <code className="font-mono">{SHORTCUT_TOKEN_FIELD}</code> = Bearer, a
-                  space, then your token.
-                </li>
-              </ul>
-              <CopyButton text={SHORTCUT_LOG_URL} target={urlRef} label="Copy URL" />
-            </li>
-            <li>
-              Show Notification → Title Meal logged, Body Contents of URL, Attachment Converted
-              Image.
-            </li>
-          </ol>
-          <p className="text-muted-foreground text-caption">
-            Convert Image is not optional: iPhones shoot HEIC and the server only accepts JPEG.
-          </p>
-        </AccordionRow>
-
-        {error && (
-          <p className="text-destructive text-caption" role="alert">
-            {error}
-          </p>
-        )}
-
-        {tokens && tokens.length > 0 && (
-          <div className="flex flex-col gap-2 border-t border-border pt-3">
-            <ul className="flex flex-col gap-2">
-              {tokens.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground text-caption min-w-0">
-                    {tokenName(t)} · {fmtDate(t.createdAt)} ·{' '}
-                    {t.lastUsedAt ? `used ${fmtDate(t.lastUsedAt)}` : 'never used'}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Revoke ${tokenName(t)} from ${fmtDate(t.createdAt)}`}
-                    onClick={() => setConfirm({ kind: 'one', token: t })}
-                  >
-                    Revoke
-                  </Button>
-                </li>
-              ))}
-            </ul>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-destructive self-start"
-              onClick={() => setConfirm({ kind: 'all' })}
-            >
-              Revoke all
+            {fresh.token}
+          </code>
+          <div className="flex items-center justify-between gap-2">
+            <CopyButton text={fresh.token} target={tokenRef} label="Copy token" />
+            <Button type="button" variant="ghost" size="sm" onClick={() => setFresh(null)}>
+              Done
             </Button>
           </div>
-        )}
-      </CardContent>
+          <p className="text-destructive text-caption" role="alert">
+            Copy it now — it will not be shown again.
+          </p>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant={hasToken ? 'secondary' : 'default'}
+          disabled={busy}
+          onClick={() => void create()}
+        >
+          Create Shortcut token
+        </Button>
+      )}
+
+      <AccordionRow
+        title="Set up with Shortcut app"
+        badge="iOS only"
+        open={panel === 'easy'}
+        onToggle={() => setPanel(panel === 'easy' ? null : 'easy')}
+      >
+        <p className="text-caption">
+          SnapBite gives you a ready-made shortcut. You only add your token.
+        </p>
+        {Add}
+        <div className="flex flex-col gap-1">
+          <code
+            ref={fileRef}
+            data-testid="shortcut-file-url"
+            className="text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
+          >
+            {addHref}
+          </code>
+          {/* For anyone whose preview gets stuck: paste it into Safari by hand. */}
+          <CopyButton text={addHref} target={fileRef} label="Copy link" />
+          {icloud && (
+            <a
+              href={SHORTCUT_FILE_URL}
+              className="text-primary-text text-caption underline-offset-4 hover:underline"
+            >
+              Use the file link instead
+            </a>
+          )}
+        </div>
+        <ol className="text-caption flex list-decimal flex-col gap-1.5 pl-5">
+          <li>Add the Shortcut.</li>
+          <li>
+            {icloud
+              ? 'Tap Get Shortcut, then Add Shortcut.'
+              : 'Tap Open in Shortcuts, then Add Shortcut.'}
+          </li>
+          <li>
+            Open the shortcut, tap {SHORTCUT_TOKEN_FIELD}, replace{' '}
+            <code className="font-mono">{SHORTCUT_TOKEN_PLACEHOLDER}</code> with your token from
+            above, keeping the word Bearer and one space.
+          </li>
+          <li>Settings → Action Button → Shortcut → SnapBite Log Meal.</li>
+        </ol>
+        <p className="text-muted-foreground text-caption">
+          Hold the Action Button, take a photo, the notification tells you what was logged.
+        </p>
+      </AccordionRow>
+
+      <AccordionRow
+        title="Set up manually"
+        open={panel === 'hand'}
+        onToggle={() => setPanel(panel === 'hand' ? null : 'hand')}
+      >
+        <ol className="text-caption flex list-decimal flex-col gap-2 pl-5">
+          <li>Take Photo — turn on Show Camera Preview.</li>
+          <li>Convert Image → JPEG, quality 0.6.</li>
+          <li>
+            Get Contents of URL:
+            <ul className="mt-1 flex list-disc flex-col gap-0.5 pl-4">
+              <li className="break-words [overflow-wrap:anywhere]">
+                URL{' '}
+                <code ref={urlRef} className="font-mono">
+                  {SHORTCUT_LOG_URL}
+                </code>
+              </li>
+              <li>Method POST, Request Body Form.</li>
+              <li>
+                New field <code className="font-mono">photo</code>, type File, value Converted
+                Image.
+              </li>
+              <li>
+                Header <code className="font-mono">{SHORTCUT_TOKEN_FIELD}</code> = Bearer, a space,
+                then your token.
+              </li>
+            </ul>
+            <CopyButton text={SHORTCUT_LOG_URL} target={urlRef} label="Copy URL" />
+          </li>
+          <li>
+            Show Notification → Title Meal logged, Body Contents of URL, Attachment Converted Image.
+          </li>
+        </ol>
+        <p className="text-muted-foreground text-caption">
+          Convert Image is not optional: iPhones shoot HEIC and the server only accepts JPEG.
+        </p>
+      </AccordionRow>
+
+      {error && (
+        <p className="text-destructive text-caption" role="alert">
+          {error}
+        </p>
+      )}
+
+      {tokens && tokens.length > 0 && (
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
+          <ul className="flex flex-col gap-2">
+            {tokens.map((t) => (
+              <li key={t.id} className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground text-caption min-w-0">
+                  {tokenName(t)} · {fmtDate(t.createdAt)} ·{' '}
+                  {t.lastUsedAt ? `used ${fmtDate(t.lastUsedAt)}` : 'never used'}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Revoke ${tokenName(t)} from ${fmtDate(t.createdAt)}`}
+                  onClick={() => setConfirm({ kind: 'one', token: t })}
+                >
+                  Revoke
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-destructive self-start"
+            onClick={() => setConfirm({ kind: 'all' })}
+          >
+            Revoke all
+          </Button>
+        </div>
+      )}
 
       <Dialog open={preflight} onOpenChange={setPreflight}>
         <DialogContent
-          className="p-6"
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             preflightCancelRef.current?.focus();
@@ -471,16 +462,7 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
               <p>Come back here and paste your token into the {SHORTCUT_TOKEN_FIELD} field.</p>
             </div>
           </DialogDescription>
-          {/* Cancel first in the DOM; Continue below it, the primary action. */}
-          <DialogFooter className="-mx-6 -mb-6 flex-col px-6 pb-6">
-            <Button
-              ref={preflightCancelRef}
-              variant="secondary"
-              className="w-full"
-              onClick={() => setPreflight(false)}
-            >
-              Cancel
-            </Button>
+          <DialogFooter>
             <Button
               className="w-full"
               onClick={() => {
@@ -491,15 +473,20 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
             >
               Continue
             </Button>
+            <Button
+              ref={preflightCancelRef}
+              variant="secondary"
+              className="w-full"
+              onClick={() => setPreflight(false)}
+            >
+              Cancel
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={confirm !== null} onOpenChange={(open) => !open && !busy && setConfirm(null)}>
         <DialogContent
-          // 24px of padding; the footer's negative margins follow it so its pinned
-          // background still reaches the panel's edges.
-          className="p-6"
           onOpenAutoFocus={(e) => {
             // The safe choice is the one that has focus.
             e.preventDefault();
@@ -524,9 +511,15 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
               {tokenName(confirm.token)} · {fmtDate(confirm.token.createdAt)}
             </p>
           )}
-          {/* Cancel first in the DOM (and so in the tab order and to a screen reader),
-              and above the destructive action on screen: the iOS order. */}
-          <DialogFooter className="-mx-6 -mb-6 flex-col px-6 pb-6">
+          <DialogFooter>
+            <Button
+              variant="destructive"
+              className="w-full"
+              disabled={busy}
+              onClick={() => void runConfirmed()}
+            >
+              {busy ? 'Revoking…' : 'Revoke'}
+            </Button>
             <Button
               ref={cancelRef}
               variant="secondary"
@@ -536,17 +529,9 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
             >
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              className="w-full"
-              disabled={busy}
-              onClick={() => void runConfirmed()}
-            >
-              {busy ? 'Revoking…' : 'Revoke'}
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }

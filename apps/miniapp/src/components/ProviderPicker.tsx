@@ -53,7 +53,7 @@ export function ProviderPicker({ idPrefix, value, onChange }: ProviderPickerProp
             const model = provider === 'custom' ? '' : PROVIDER_PRESETS[provider].defaultModel;
             onChange({ ...value, provider, model });
           }}
-          className="border-input focus-visible:ring-ring/50 h-9 rounded-control border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
+          className="border-input h-11 rounded-control border bg-transparent px-3 text-body transition-colors focus-visible:border-ring focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
         >
           {PROVIDERS.map((p) => (
             <option key={p.id} value={p.id}>
@@ -74,7 +74,7 @@ export function ProviderPicker({ idPrefix, value, onChange }: ProviderPickerProp
               value={value.baseUrl}
               onChange={(e) => onChange({ ...value, baseUrl: e.target.value })}
             />
-            <p className="text-muted-foreground text-xs">
+            <p className="text-muted-foreground text-caption">
               Any OpenAI-compatible Chat Completions endpoint (https). The path
               <code> /chat/completions</code> is appended automatically.
             </p>
@@ -110,7 +110,7 @@ export function ProviderPicker({ idPrefix, value, onChange }: ProviderPickerProp
                 model: v === CUSTOM_MODEL ? '' : v,
               });
             }}
-            className="border-input focus-visible:ring-ring/50 h-9 rounded-control border bg-transparent px-3 text-sm outline-none focus-visible:ring-[3px]"
+            className="border-input h-11 rounded-control border bg-transparent px-3 text-body transition-colors focus-visible:border-ring focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
           >
             {presetModels.map((m) => (
               <option key={m} value={m}>
