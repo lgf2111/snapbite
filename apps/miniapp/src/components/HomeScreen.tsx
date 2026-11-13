@@ -14,7 +14,7 @@ import {
   weekRange,
 } from '@/lib/weekPrefs';
 import type { DailyTargets, MealResult } from '@snapbite/core';
-import { ChevronRight, RefreshCw } from 'lucide-react';
+import { ChevronRight, Flame, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DateSelector } from './DateSelector.js';
@@ -361,9 +361,11 @@ export function HomeScreen({
           <button
             type="button"
             onClick={() => setStreakOpen(true)}
-            className="bg-secondary text-foreground text-caption inline-flex min-h-11 shrink-0 items-center rounded-control px-3 font-medium transition-transform duration-[120ms] hover:bg-accent active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="bg-secondary text-foreground text-caption inline-flex min-h-11 shrink-0 items-center gap-1 rounded-control px-3 font-medium transition-transform duration-[120ms] hover:bg-accent active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
-            <span className="tabular">{streak}-day streak</span>
+            <Flame data-testid="streak-flame" className="size-4 stroke-[1.75]" aria-hidden />
+            <span className="tabular">{streak}</span>
+            <span className="sr-only"> day streak</span>
           </button>
         )}
         <Button
@@ -419,14 +421,14 @@ export function HomeScreen({
               <dl className="mt-3 flex flex-col gap-3">
                 {(
                   [
-                    ['Protein', consumed.proteinG, viewTargets.proteinG],
-                    ['Carbs', consumed.carbsG, viewTargets.carbsG],
-                    ['Fat', consumed.fatG, viewTargets.fatG],
+                    ['protein', consumed.proteinG, viewTargets.proteinG],
+                    ['carbs', consumed.carbsG, viewTargets.carbsG],
+                    ['fat', consumed.fatG, viewTargets.fatG],
                   ] as const
-                ).map(([label, have, target]) => (
+                ).map(([macro, have, target]) => (
                   <MacroRow
-                    key={label}
-                    label={label}
+                    key={macro}
+                    macro={macro}
                     have={have}
                     target={target}
                     unit="g"

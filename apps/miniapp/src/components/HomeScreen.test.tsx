@@ -124,15 +124,21 @@ describe('HomeScreen', () => {
     expect(primary()).toHaveLength(0);
   });
 
-  it('shows the current logging streak as visible text on the chip', async () => {
+  it('shows the streak as a flame and its number, with the words for screen readers', async () => {
     const backend = stubBackend({
       mealDates: vi.fn(async () => ({ dates: ['2026-09-15'], streak: 5 })),
     });
     render(<HomeScreen {...props(backend)} />);
 
-    const badge = await screen.findByRole('button', { name: '5-day streak' });
-    expect(badge.querySelector('svg')).toBeNull();
-    expect(within(badge).getByText('5-day streak')).toBeInTheDocument();
+    const badge = await screen.findByRole('button', { name: '5 day streak' });
+    const flame = within(badge).getByTestId('streak-flame');
+    expect(flame.tagName.toLowerCase()).toBe('svg');
+    expect(flame.getAttribute('aria-hidden')).toBe('true');
+    expect(flame.getAttribute('class')).toContain('size-4');
+    expect(flame.getAttribute('class')).toContain('stroke-[1.75]');
+    // The glyph and the number are the visible pill; the noun is spoken.
+    expect(within(badge).getByText('5')).toBeInTheDocument();
+    expect(within(badge).getByText('day streak')).toBeInTheDocument();
   });
 
   it.each([0, null])('hides the streak badge when the streak is %s', async (value) => {
@@ -151,7 +157,7 @@ describe('HomeScreen', () => {
     });
     render(<HomeScreen {...props(backend)} />);
 
-    await userEvent.click(await screen.findByRole('button', { name: '5-day streak' }));
+    await userEvent.click(await screen.findByRole('button', { name: '5 day streak' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('Logging streak')).toBeInTheDocument();
     expect(within(dialog).getByText(/at least one meal/i)).toBeInTheDocument();
@@ -172,7 +178,7 @@ describe('HomeScreen', () => {
     });
     render(<HomeScreen {...props(backend)} />);
 
-    const badge = await screen.findByRole('button', { name: '5-day streak' });
+    const badge = await screen.findByRole('button', { name: '5 day streak' });
     for (const cls of [
       'min-h-11',
       'rounded-control',
@@ -238,6 +244,48 @@ describe('HomeScreen', () => {
       (el) => (el as HTMLElement).style.transform,
     );
     expect(fills).toEqual(['scaleX(0.5)', 'scaleX(1)', 'scaleX(0)']);
+  });
+
+  it('puts one glyph in each macro row, in a fixed 16px column', async () => {
+    const backend = stubBackend({
+      mealsByDate: vi.fn(async () => [meal({ proteinG: 32, carbsG: 41, fatG: 12 })]),
+    });
+    const { container } = render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    await screen.findByText('Chicken rice');
+    const rows = [...container.querySelectorAll<HTMLElement>('[data-slot="macro-row"]')];
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.dataset.macro)).toEqual(['protein', 'carbs', 'fat']);
+
+    const expected = [
+      ['protein', 'Protein', 'lucide-beef'],
+      ['carbs', 'Carbs', 'lucide-wheat'],
+      ['fat', 'Fat', 'lucide-droplet'],
+    ] as const;
+    for (const [macro, label, glyph] of expected) {
+      const row = container.querySelector<HTMLElement>(
+        `[data-slot="macro-row"][data-macro="${macro}"]`,
+      );
+      expect(row).not.toBeNull();
+      // Exactly one icon per fact, and it is the chosen Lucide glyph.
+      expect(row?.querySelectorAll('svg')).toHaveLength(1);
+      const icon = screen.getByTestId(`macro-bar-icon-${macro}`);
+      expect(icon.tagName.toLowerCase()).toBe('svg');
+      expect(icon.getAttribute('aria-hidden')).toBe('true');
+      expect(icon.getAttribute('class')).toContain('size-4');
+      expect(icon.getAttribute('class')).toContain('stroke-[1.75]');
+      expect(icon.getAttribute('class')).toContain(glyph);
+      // The word the icon replaces is still there for screen readers.
+      expect(icon.closest('dt')?.textContent).toContain(label);
+      // The 16px column is what keeps every icon, value and bar aligned.
+      expect(row?.className).toContain('grid-cols-[1rem_1fr]');
+    }
+
+    // No glyph is reused for a second fact on this screen.
+    const ids = [...container.querySelectorAll('[data-slot="macro-row"] svg')].map((el) =>
+      el.getAttribute('data-testid'),
+    );
+    expect(ids).toEqual(['macro-bar-icon-protein', 'macro-bar-icon-carbs', 'macro-bar-icon-fat']);
   });
 
   it('tones each macro bar and value by its share of the target', async () => {

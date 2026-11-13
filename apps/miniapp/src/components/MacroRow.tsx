@@ -1,9 +1,10 @@
+import { MACRO_ICONS, MACRO_LABELS, type MacroKey } from '@/lib/macroIcons';
 import { cn } from '@/lib/utils';
 
 export type MacroTone = 'primary' | 'warning' | 'destructive';
 
 interface MacroRowProps {
-  label: string;
+  macro: MacroKey;
   have: number;
   target: number;
   unit: string;
@@ -27,17 +28,34 @@ const FILL_TONE: Record<MacroTone, string> = {
 };
 
 /**
- * One macro under the verdict: label, `120 / 150g`, and a 3px bar.
+ * One macro under the verdict: a 16 px glyph column, the value, then a 3 px bar.
+ *
+ * The fixed first column is what makes the three rows line up: every icon sits
+ * at the same x, every value starts at the same x, and every bar spans the full
+ * row from the same left edge. The glyph carries the macro's identity, so the
+ * name is screen-reader-only and the old P/C/F initials are gone.
  *
  * The value text carries the state with a `+` and a screen-reader phrase once
  * over target, so the tone colour is never the only signal; the bar is the
  * length cue and is hidden from assistive tech.
  */
-export function MacroRow({ label, have, target, unit, tone }: MacroRowProps) {
+export function MacroRow({ macro, have, target, unit, tone }: MacroRowProps) {
   const over = tone !== 'primary';
+  const Icon = MACRO_ICONS[macro];
   return (
-    <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-1">
-      <dt className="text-muted-foreground text-caption">{label}</dt>
+    <div
+      data-slot="macro-row"
+      data-macro={macro}
+      className="grid grid-cols-[1rem_1fr] items-center gap-x-2 gap-y-1"
+    >
+      <dt className="flex items-center">
+        <Icon
+          data-testid={`macro-bar-icon-${macro}`}
+          className="size-4 stroke-[1.75]"
+          aria-hidden
+        />
+        <span className="sr-only">{MACRO_LABELS[macro]}</span>
+      </dt>
       <dd
         data-slot="macro-value"
         data-tone={tone}
