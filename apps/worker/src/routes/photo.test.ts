@@ -204,16 +204,71 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
     const thumb = await app.request(`/api/meal-photo/${id}?w=240`, { headers: { cookie } }, env);
     expect(thumb.status).toBe(200);
     expect(thumb.headers.get('content-type')).toBe('image/jpeg');
-    expect(thumb.headers.get('cache-control')).toBe('private, max-age=86400');
+    expect(thumb.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
+    const etag = thumb.headers.get('etag');
+    expect(etag).toMatch(/^"[^"]+"$/);
     const thumbBytes = new Uint8Array(await thumb.arrayBuffer());
+    // The length is declared, not left to chunked transfer.
+    expect(thumb.headers.get('content-length')).toBe(String(thumbBytes.length));
     const dims = jpegDimensions(thumbBytes);
     expect(Math.max(dims.width, dims.height)).toBe(240);
     expect(thumbBytes.length).toBeLessThan(original.length);
 
     // No `?w=` means the stored original, byte for byte: the detail screen is
-    // never silently downscaled.
+    // never silently downscaled. It keeps the shorter life and its own ETag.
     const full = await app.request(`/api/meal-photo/${id}`, { headers: { cookie } }, env);
+    expect(full.headers.get('cache-control')).toBe('private, max-age=86400');
+    expect(full.headers.get('etag')).toBeTruthy();
     expect(new Uint8Array(await full.arrayBuffer())).toEqual(original);
+  });
+
+  it('answers a matching if-none-match with 304 and no body', async () => {
+    const app = createApp();
+    const cookie = await signIn(app, 'photo-304@example.com');
+    const id = await mealWithPhoto(app, cookie, photoJpeg(1600, 1200));
+
+    const first = await app.request(`/api/meal-photo/${id}?w=240`, { headers: { cookie } }, env);
+    expect(first.status).toBe(200);
+    const etag = first.headers.get('etag');
+    expect(etag).toBeTruthy();
+    await first.arrayBuffer();
+
+    const second = await app.request(
+      `/api/meal-photo/${id}?w=240`,
+      { headers: { cookie, 'if-none-match': etag as string } },
+      env,
+    );
+    expect(second.status).toBe(304);
+    expect(second.headers.get('etag')).toBe(etag);
+    expect(second.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
+    expect((await second.arrayBuffer()).byteLength).toBe(0);
+
+    // A different validator is a miss: the bytes still come back.
+    const third = await app.request(
+      `/api/meal-photo/${id}?w=240`,
+      { headers: { cookie, 'if-none-match': '"not-the-one"' } },
+      env,
+    );
+    expect(third.status).toBe(200);
+    expect((await third.arrayBuffer()).byteLength).toBeGreaterThan(0);
+  });
+
+  it('answers HEAD with the same validators and no body (the curl -I path)', async () => {
+    const app = createApp();
+    const cookie = await signIn(app, 'photo-head@example.com');
+    const id = await mealWithPhoto(app, cookie, photoJpeg(1600, 1200));
+
+    const res = await app.request(
+      `/api/meal-photo/${id}?w=240`,
+      { method: 'HEAD', headers: { cookie } },
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/jpeg');
+    expect(res.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
+    expect(res.headers.get('etag')).toMatch(/^"[^"]+"$/);
+    expect(res.headers.get('content-length')).toBeTruthy();
+    expect((await res.arrayBuffer()).byteLength).toBe(0);
   });
 
   it('lists a stored-photo meal as hasPhoto (no Telegram file id), and a manual one as not', async () => {
