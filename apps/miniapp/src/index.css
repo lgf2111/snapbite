@@ -26,7 +26,7 @@
 
   --card: #edf2fb;
   --card-foreground: #0f172a;
-  --popover: #ffffff;
+  --popover: #edf2fb;
   --popover-foreground: #0f172a;
 
   /* The logo blue — the only brand colour, never used to mean "bad". */
@@ -54,8 +54,12 @@
   --primary-text: #024cc5;
 
   --border: #b6c7e3;
-  --input: #b6c7e3;
+  /* Editable-field outline and the off switch track: 3:1 on the page, unlike the hairline. */
+  --input: #7485a8;
   --ring: #024cc5;
+
+  --scrim: rgb(15 23 42 / 0.45);
+  --lift: 0 8px 24px -8px rgb(15 23 42 / 0.28);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -90,8 +94,11 @@
     --primary-text: #7fa9ff;
 
     --border: #2c3b55;
-    --input: #2c3b55;
+    --input: #5b6d90;
     --ring: #7fa9ff;
+
+    --scrim: rgb(0 0 0 / 0.6);
+    --lift: 0 8px 24px -8px rgb(0 0 0 / 0.6);
   }
 }
 
@@ -146,6 +153,9 @@
   --text-display: 2.75rem;
   --text-display--line-height: 1.02;
   --text-display--letter-spacing: -0.02em;
+  --text-numeral: 1.75rem;
+  --text-numeral--line-height: 1;
+  --text-numeral--letter-spacing: -0.01em;
   --text-title: 1.375rem;
   --text-title--line-height: 1.2;
   --text-title--letter-spacing: -0.01em;
@@ -153,6 +163,9 @@
   --text-body--line-height: 1.45;
   --text-caption: 0.8125rem;
   --text-caption--line-height: 1.35;
+
+  /* Level-2 elevation. The names differ on purpose: a self-reference would not resolve. */
+  --shadow-lift: var(--lift);
 
   /* Bottom bar height, shared by the bar and the scroll reserve. */
   --spacing-bar: 4.5rem;
@@ -182,7 +195,7 @@ body {
 
 /*
  * Range inputs (goal, activity). The native thumb is small and its transition is
- * abrupt; a slightly larger thumb with a shadow reads as a control you can grab,
+ * abrupt; a slightly larger thumb reads as a control you can grab,
  * and the track fills with the accent so the value is legible at a glance.
  */
 .range {
@@ -195,7 +208,7 @@ body {
 }
 .range::-webkit-slider-runnable-track {
   height: 6px;
-  border-radius: 999px;
+  border-radius: 0;
   background: linear-gradient(
     to right,
     var(--primary) 0%,
@@ -207,12 +220,12 @@ body {
 }
 .range::-moz-range-track {
   height: 6px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--muted);
 }
 .range::-moz-range-progress {
   height: 6px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--primary);
 }
 .range::-webkit-slider-thumb {
@@ -224,13 +237,10 @@ body {
   border-radius: 50%;
   background: var(--background);
   border: 2px solid var(--primary);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
-  transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast)
-    var(--ease-out-quint);
+  transition: transform var(--dur-fast) var(--ease-spring);
 }
 .range:active::-webkit-slider-thumb {
   transform: scale(1.12);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 0.35);
 }
 .range::-moz-range-thumb {
   width: 22px;
@@ -243,7 +253,12 @@ body {
   outline: none;
 }
 .range:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--ring) 40%, transparent);
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.range:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 /* Numerals must not shift as they change: the totals and rings rely on it. */
