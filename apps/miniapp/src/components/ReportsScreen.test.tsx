@@ -72,6 +72,10 @@ describe('ReportsScreen', () => {
     const { onSeeCredits } = renderScreen(backend);
 
     expect(await screen.findByText('Reports are part of the supporter tag')).toBeInTheDocument();
+    const primaries = [...document.querySelectorAll<HTMLElement>('[data-slot="button"]')].filter(
+      (b) => b.className.includes('bg-primary'),
+    );
+    expect(primaries).toHaveLength(1);
     expect(screen.getByText(/any credit pack once/i)).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Check again after buying a pack' }),
@@ -89,6 +93,17 @@ describe('ReportsScreen', () => {
 
     expect(await screen.findByText(LOAD_FAILED_MESSAGE)).toBeInTheDocument();
     expect(screen.queryByText(/HTTP 503/)).not.toBeInTheDocument();
+  });
+
+  it('has no primary action once the report is ready', async () => {
+    const backend = stubBackend(async (range) => reportFor(range));
+    renderScreen(backend);
+
+    expect(await screen.findByText('Report card · last 7 days')).toBeInTheDocument();
+    const primaries = [...document.querySelectorAll<HTMLElement>('[data-slot="button"]')].filter(
+      (b) => b.className.includes('bg-primary'),
+    );
+    expect(primaries).toHaveLength(0);
   });
 
   it('renders the report card and every section for a ready report', async () => {

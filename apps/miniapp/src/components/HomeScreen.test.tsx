@@ -108,6 +108,22 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(screen.getByText('Nothing logged yet')).toBeInTheDocument());
   });
 
+  it('keeps exactly one primary in the no-goal state and none with a goal', async () => {
+    const primary = () =>
+      [...document.querySelectorAll<HTMLElement>('[data-slot="button"]')].filter((b) =>
+        b.className.includes('bg-primary'),
+      );
+
+    const first = render(<HomeScreen {...props(stubBackend())} />);
+    expect(await screen.findByRole('button', { name: 'Set goal' })).toBeInTheDocument();
+    expect(primary()).toHaveLength(1);
+    first.unmount();
+
+    render(<HomeScreen {...props(stubBackend(), { targets: TARGETS })} />);
+    await screen.findByText('Nothing logged yet');
+    expect(primary()).toHaveLength(0);
+  });
+
   it('shows the current logging streak as visible text on the chip', async () => {
     const backend = stubBackend({
       mealDates: vi.fn(async () => ({ dates: ['2026-09-15'], streak: 5 })),

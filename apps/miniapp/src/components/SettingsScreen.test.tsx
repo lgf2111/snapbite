@@ -51,6 +51,14 @@ describe('SettingsScreen', () => {
     for (const title of ['Meal reminders', 'Adaptive targets', 'Weekly view', 'AI key']) {
       expect(screen.getByRole('heading', { level: 3, name: title })).toBeTruthy();
     }
+
+    // Each ruled section carries at most one primary action.
+    for (const section of document.querySelectorAll('section')) {
+      const primaries = [...section.querySelectorAll<HTMLElement>('[data-slot="button"]')].filter(
+        (b) => b.className.includes('bg-primary'),
+      );
+      expect(primaries.length).toBeLessThanOrEqual(1);
+    }
   });
 
   it('draws one skeleton per group while settings load', () => {
