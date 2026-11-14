@@ -97,25 +97,31 @@ describe('metrics helpers', () => {
 describe('user_started counter via /start', () => {
   it('counts a NEW user once and does NOT recount on a second /start', async () => {
     const tgId = 50001;
-    const app = createApp();
-    const before = await counterToday('user_started');
+    // No real bot: `createApp()` would await a real HTTPS call to Telegram,
+    // which is slow and nondeterministic. And `user_started` is a suite-global
+    // row, so a read-before/read-after delta also depends on what every other
+    // /start in the run does. Assert on this handler's decision instead.
+    const app = createApp({ botClientFactory: () => fakeBot([]) });
+    const bump = vi.spyOn(metricsModule, 'bumpCounter');
+    const startedBumps = () => bump.mock.calls.filter(([, name]) => name === 'user_started');
+    try {
+      await app.request(
+        '/webhook',
+        post({ message: { text: '/start', chat: { id: tgId }, from: { id: tgId } } }),
+        env,
+      );
+      expect(startedBumps()).toHaveLength(1);
 
-    await app.request(
-      '/webhook',
-      post({ message: { text: '/start', chat: { id: tgId }, from: { id: tgId } } }),
-      env,
-    );
-    const afterFirst = await counterToday('user_started');
-    expect(afterFirst).toBe(before + 1);
-
-    // Same user presses /start again — the row already exists, so no new count.
-    await app.request(
-      '/webhook',
-      post({ message: { text: '/start', chat: { id: tgId }, from: { id: tgId } } }),
-      env,
-    );
-    const afterSecond = await counterToday('user_started');
-    expect(afterSecond).toBe(afterFirst);
+      // Same user presses /start again — the row already exists, so no new count.
+      await app.request(
+        '/webhook',
+        post({ message: { text: '/start', chat: { id: tgId }, from: { id: tgId } } }),
+        env,
+      );
+      expect(startedBumps()).toHaveLength(1);
+    } finally {
+      bump.mockRestore();
+    }
   });
 });
 

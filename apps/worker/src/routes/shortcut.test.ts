@@ -11,7 +11,7 @@ import {
   revokeAllDeviceTokens,
 } from '../db/deviceTokens.js';
 import { recentErrors } from '../db/errors.js';
-import { MAX_PHOTO_BYTES_PER_USER } from '../db/meals.js';
+import { MAX_PHOTOS_PER_USER, MAX_PHOTO_BYTES_PER_USER } from '../db/meals.js';
 import type { ErrorLogRow } from '../db/schema.js';
 import { createDb, upsertUser } from '../db/users.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
@@ -388,6 +388,54 @@ describe('POST /api/shortcut/log', () => {
       // The meal is saved, but the quota check stopped the R2 write.
       expect(row?.photoKey).toBeNull();
       expect(await env.PHOTOS.get(photoKey(row?.id as string))).toBeNull();
+    });
+
+    it('stores a photo just under the photo cap and skips R2 at the cap', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const tgId = 9626;
+      const token = await tokenFor(app, tgId);
+      const user = await upsertUser(createDb(env.DB), { id: tgId });
+      const now = Date.now();
+      // Seed the accounting rows at one below the count cap. The per-row byte
+      // value is derived from the byte cap, so both limits come from constants.
+      const perPhotoBytes = Math.ceil(MAX_PHOTO_BYTES_PER_USER / MAX_PHOTOS_PER_USER);
+      await env.DB.prepare(
+        `WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < ?)
+         INSERT INTO meals (id, user_id, photo_key, photo_mime, photo_bytes, created_at, logged_at)
+         SELECT 'seed-' || ? || '-' || n, ?, 'photos/seed-' || ? || '-' || n, 'image/jpeg', ?, ?, ?
+         FROM seq`,
+      )
+        .bind(MAX_PHOTOS_PER_USER - 1, user.id, user.id, user.id, perPhotoBytes, now, now)
+        .run();
+
+      const newest = async () => {
+        const row = await env.DB.prepare(
+          `SELECT id, photo_key AS photoKey FROM meals
+            WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+        )
+          .bind(user.id)
+          .first<{ id: string; photoKey: string | null }>();
+        expect(row).toBeTruthy();
+        return row as { id: string; photoKey: string | null };
+      };
+
+      // One photo under the cap: stored normally.
+      const first = await app.request('/api/shortcut/log', post(token), env);
+      expect(first.status).toBe(200);
+      expect(await first.text()).toMatch(/^\d+ kcal — /);
+      const firstMeal = await newest();
+      expect(firstMeal.photoKey).not.toBeNull();
+      expect(await env.PHOTOS.get(photoKey(firstMeal.id))).not.toBeNull();
+
+      // The stored photo filled the count to the cap. The next request still
+      // logs a meal and answers with a success line, but writes no R2 object.
+      const second = await app.request('/api/shortcut/log', post(token), env);
+      expect(second.status).toBe(200);
+      expect(await second.text()).toMatch(/^\d+ kcal — /);
+      const secondMeal = await newest();
+      expect(secondMeal.id).not.toBe(firstMeal.id);
+      expect(secondMeal.photoKey).toBeNull();
+      expect(await env.PHOTOS.get(photoKey(secondMeal.id))).toBeNull();
     });
 
     it('answers a no-credits account with a sentence, not a 500', async () => {
