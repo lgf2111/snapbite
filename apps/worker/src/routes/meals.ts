@@ -25,6 +25,7 @@ import {
   createMealsDb,
   deleteMeal,
   getMealDetail,
+  getMealPhotoKey,
   listMeals,
   saveMeal,
   setMealPhoto,
@@ -364,8 +365,19 @@ export function mealsRoutes(
   // DELETE /api/meals/:id — delete an owned meal (cascades to foods+nutrition).
   app.delete('/:id', async (c) => {
     const db = createMealsDb(c.env.DB);
-    const ok = await deleteMeal(db, c.req.param('id'), c.get('userId'));
+    const id = c.req.param('id');
+    const userId = c.get('userId');
+    const key = await getMealPhotoKey(db, id, userId);
+    const ok = await deleteMeal(db, id, userId);
     if (!ok) return c.json({ error: 'Not found' }, 404);
+    // Drop the bytes too, otherwise deleting rows would free quota while R2
+    // kept growing (a simple way around the per-user photo cap).
+    const store = r2Store(c.env.PHOTOS);
+    if (store && key) {
+      await store.delete(key).catch((err) => {
+        console.error('[meals] photo delete failed', err);
+      });
+    }
     return c.json({ ok: true });
   });
 
