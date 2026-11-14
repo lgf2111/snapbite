@@ -1,27 +1,25 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { deviceTokens, loginTokens, sessions, settings, users } from './schema.js';
+import { deviceTokens, sessions, settings, users } from './schema.js';
 
 /**
- * Email magic-link accounts + server sessions.
+ * Accounts + server sessions.
  *
  * One `users` row per person (unchanged): `email` is a credential attached to
- * that row, never a peer identity. A Telegram user who signs in by email keeps
- * the same account and therefore the same meals.
+ * that row, never a peer identity. A Telegram user who signs in with Google
+ * keeps the same account and therefore the same meals.
  *
  * Tokens are stored hashed and never returned after creation.
  */
 
 export function createAuthDb(d1: D1Database) {
-  return drizzle(d1, { schema: { users, settings, sessions, loginTokens, deviceTokens } });
+  return drizzle(d1, { schema: { users, settings, sessions, deviceTokens } });
 }
 
 export type AuthDb = ReturnType<typeof createAuthDb>;
 
 /** Sessions last 30 days; the cookie is refreshed on use. */
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-/** A magic link is valid for 15 minutes. */
-export const LOGIN_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 export function randomToken(bytes = 32): string {
   const buf = crypto.getRandomValues(new Uint8Array(bytes));
@@ -40,7 +38,7 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-/** Loose sanity check — the magic link is the real verification. */
+/** Loose sanity check — Google is the real verification. */
 export function looksLikeEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && email.length <= 254;
 }
@@ -55,73 +53,12 @@ export async function findUserByEmail(db: AuthDb, email: string) {
 }
 
 /**
- * Returns the account for an email, creating one on first sign-in. A new row
- * gets an empty settings row so BYOK/profile writes have somewhere to land.
- * `telegramUserId` is captured by the migration's rebuild as nullable; accounts
- * created here have no Telegram identity.
+ * How a session was opened. `'email'` remains only for sessions opened before
+ * email sign-in was removed.
  */
-export async function ensureUserForEmail(db: AuthDb, email: string) {
-  const normalized = normalizeEmail(email);
-  const existing = await findUserByEmail(db, normalized);
-  if (existing) return { user: existing, created: false };
-
-  const now = Date.now();
-  const row = {
-    id: crypto.randomUUID(),
-    // Raw SQL column default is not available here: telegram ids are required by
-    // the old shape and nullable by the new one. Drizzle's insert omits it.
-    createdAt: now,
-    email: normalized,
-    emailVerifiedAt: now,
-    lastBroadcastChatId: null,
-    lastBroadcastMessageId: null,
-    lastBroadcastAt: null,
-    lastBroadcastVersion: null,
-  };
-  await db.insert(users).values(row as never);
-  await db
-    .insert(settings)
-    .values({ userId: row.id, aiProvider: 'gemini', updatedAt: now })
-    .onConflictDoNothing();
-  return { user: { ...row, telegramUserId: null } as never, created: true };
-}
-
-/** Issues a single-use login token and returns the raw value to put in a link. */
-export async function issueLoginToken(db: AuthDb, email: string): Promise<string> {
-  const raw = randomToken(32);
-  const now = Date.now();
-  await db.insert(loginTokens).values({
-    tokenHash: await sha256Hex(raw),
-    email: normalizeEmail(email),
-    createdAt: now,
-    expiresAt: now + LOGIN_TOKEN_TTL_MS,
-  });
-  return raw;
-}
-
-/**
- * Consumes a login token exactly once. Returns the email it was issued for, or
- * null when it is unknown, already used, or expired.
- */
-export async function consumeLoginToken(db: AuthDb, raw: string): Promise<string | null> {
-  const hash = await sha256Hex(raw);
-  const rows = await db
-    .select()
-    .from(loginTokens)
-    .where(and(eq(loginTokens.tokenHash, hash), isNull(loginTokens.consumedAt)))
-    .limit(1);
-  const row = rows[0];
-  if (!row || row.expiresAt < Date.now()) return null;
-  await db
-    .update(loginTokens)
-    .set({ consumedAt: Date.now() })
-    .where(eq(loginTokens.tokenHash, hash));
-  return row.email;
-}
-
-/** Creates a session row and returns the raw cookie token. */
 export type SessionMethod = 'google' | 'email';
 
+/** Creates a session row and returns the raw cookie token. */
 export async function createSession(
   db: AuthDb,
   userId: string,

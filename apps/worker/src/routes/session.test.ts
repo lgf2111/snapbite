@@ -1,15 +1,12 @@
 import { env } from 'cloudflare:test';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import mergeSql from '../../scripts/merge-users.sql?raw';
 import { createApp } from '../app.js';
 import { cookies } from '../auth/cookies.js';
 import { orphanTelegramAccounts } from '../db/auth.js';
+import { googleSignIn } from '../test/googleSignIn.js';
 
-/** The `name=value` pair of one cookie out of a Set-Cookie header. */
-function pair(setCookie: string | null, name: string): string {
-  const hit = (setCookie ?? '').split(/,(?=[^;]+=)/).find((p) => p.trim().startsWith(`${name}=`));
-  return hit?.trim().split(';')[0] ?? '';
-}
+afterEach(() => vi.unstubAllGlobals());
 
 const profile = {
   sex: 'female',
@@ -51,44 +48,18 @@ describe('the session cookie', () => {
 
   it('is what sign-in actually sets', async () => {
     const app = createApp();
-    const login = (await (
-      await app.request(
-        '/api/auth/login',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email: 'persist@example.com' }),
-        },
-        env,
-      )
-    ).json()) as { link: string };
-    const token = new URL(login.link).searchParams.get('token') as string;
-    const res = await app.request(`/api/auth/verify?token=${token}`, {}, env);
-    const set = res.headers.get('set-cookie') ?? '';
-    expect(set).toMatch(/sb_session=[^;]+/);
-    expect(set).toContain('Max-Age=2592000');
-    expect(set).toContain('Expires=');
-    expect(set).toContain('Path=/');
+    const { setCookie } = await googleSignIn(app, 'persist@example.com');
+    expect(setCookie).toMatch(/sb_session=[^;]+/);
+    expect(setCookie).toContain('Max-Age=2592000');
+    expect(setCookie).toContain('Expires=');
+    expect(setCookie).toContain('Path=/');
   });
 });
 
 describe('a later launch with only the session cookie', () => {
   it('is still signed in and the server reports the saved profile', async () => {
     const app = createApp();
-    const login = (await (
-      await app.request(
-        '/api/auth/login',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email: 'relaunch@example.com' }),
-        },
-        env,
-      )
-    ).json()) as { link: string };
-    const token = new URL(login.link).searchParams.get('token') as string;
-    const verify = await app.request(`/api/auth/verify?token=${token}`, {}, env);
-    const session = pair(verify.headers.get('set-cookie'), 'sb_session');
+    const { cookie: session } = await googleSignIn(app, 'relaunch@example.com');
 
     // Onboarding: the profile is saved under the signed-in account.
     const saved = await app.request(

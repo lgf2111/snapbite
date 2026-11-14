@@ -3,6 +3,7 @@ import { signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { createAccountDb, exportUser } from '../db/account.js';
+import { createAuthDb, createSession } from '../db/auth.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
 
 const BOT_TOKEN = '123456:LOCAL-DEV-BOT-TOKEN';
@@ -233,20 +234,14 @@ describe('GET /api/account/export streams byte-identical JSON', () => {
 describe('GET /api/account/export with only the session cookie (the installed app)', () => {
   it('returns the signed-in account as an attachment, not a 401', async () => {
     const app = createApp();
-    const login = (await (
-      await app.request(
-        '/api/auth/login',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email: 'export-cookie@example.com' }),
-        },
-        env,
-      )
-    ).json()) as { link: string };
-    const token = new URL(login.link).searchParams.get('token') as string;
-    const verify = await app.request(`/api/auth/verify?token=${token}`, {}, env);
-    const cookie = (verify.headers.get('set-cookie') ?? '').split(';')[0] as string;
+    const userId = crypto.randomUUID();
+    const now = Date.now();
+    await env.DB.prepare(
+      'INSERT INTO users (id, email, email_verified_at, created_at) VALUES (?, ?, ?, ?)',
+    )
+      .bind(userId, 'export-cookie@example.com', now, now)
+      .run();
+    const cookie = `sb_session=${await createSession(createAuthDb(env.DB), userId, 'google')}`;
 
     const res = await app.request('/api/account/export', { headers: { cookie } }, env);
     expect(res.status).toBe(200);

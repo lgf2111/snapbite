@@ -10,9 +10,8 @@
  *   /meal/:id         one meal's detail
  *   /reports          advanced reports
  *   /settings         settings
- *   /verify           magic-link landing (handled in main.tsx)
  *
- * Deliberately hand-rolled: the surface is six routes, and pulling in a router
+ * Deliberately hand-rolled: the surface is five routes, and pulling in a router
  * for that would be more code to keep current than the parser itself. If the
  * app grows nested screens or code-split layouts, replace this file wholesale.
  */

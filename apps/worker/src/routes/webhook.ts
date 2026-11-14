@@ -649,9 +649,8 @@ function round1(n: number): number {
 /** `/weight [value]` — record a bodyweight check-in (value may omit the unit → kg). */
 /**
  * `/linkemail you@example.com` — attaches an email to THIS Telegram account, so
- * the same person can sign in on the web and see these meals. The address is
- * only trusted once the sign-in link has been followed, which is why the command
- * just records the intent and the token carries the address.
+ * the same person can sign in with Google on the web and see these meals. Google
+ * is the only sign-in method; the address must match the Google account.
  */
 async function handleLinkEmailCommand(
   c: Context<AppBindings>,
@@ -661,7 +660,7 @@ async function handleLinkEmailCommand(
   const email = normalizeEmail(parsed.args.trim());
   if (!looksLikeEmail(email)) {
     await bot.sendMessage(parsed.chatId, {
-      text: 'Send it like this: /linkemail you@example.com — then open the sign-in link I send to that address.',
+      text: 'Send it like this: /linkemail you@example.com — then sign in with Google using that address.',
     });
     return;
   }
@@ -672,13 +671,13 @@ async function handleLinkEmailCommand(
     await bot.sendMessage(parsed.chatId, {
       text:
         'That address is already used by a different account, so I did not link it.\n\n' +
-        'Sign in on the web with that address to reach that account instead, or pick another email.',
+        'Sign in with Google using that address to reach that account instead, or pick another email.',
     });
     return;
   }
 
-  // Store the claim on the row now; the magic link is what proves the person
-  // owns the mailbox. Signing in later finds this row by email.
+  // Record the address now; a later Google sign-in with the same address joins
+  // this row. Google verifies the address at sign-in, not this command.
   const linked = await attachEmailToUser(createAuthDb(c.env.DB), user.id, email);
   if (!linked.ok) {
     await bot.sendMessage(parsed.chatId, { text: 'Could not link that address. Try another one.' });
@@ -689,8 +688,8 @@ async function handleLinkEmailCommand(
   await bot.sendMessage(parsed.chatId, {
     text: `✅ ${email} is now linked to this SnapBite account.\n\n${
       base
-        ? `Open ${base} and sign in with that address to see your meals on the web.`
-        : 'Sign in with that address on the web app to see your meals there.'
+        ? `Open ${base} and sign in with Google using that address to see your meals on the web.`
+        : 'Sign in with Google using that address on the web app to see your meals there.'
     }`,
   });
 }

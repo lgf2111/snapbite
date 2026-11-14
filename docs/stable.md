@@ -75,9 +75,6 @@ not get them, even though the settings screens exist in the app.
   migration `0017_push_subscriptions.sql` applied and the three `PUSH_VAPID_*`
   Worker secrets (both done by the owner at deploy), and the Pages deploy for
   `public/sw.js`.
-- **Magic-link email is not configured in production.** There is no email
-  provider, so the email sign-in option is hidden (`/api/auth/providers` reports
-  `email: false`). Until it is set up, Google is the only way to sign in.
 - **Google's consent screen is in Testing.** Only accounts listed as Test users
   can sign in; anyone else is stopped by Google with `access_denied`. That is
   console configuration, not code. Moving the app to production is a separate
@@ -89,8 +86,8 @@ not get them, even though the settings screens exist in the app.
   card only gives instructions there.
 - **Anonymous accounts are per browser storage.** Safari and the installed Home
   Screen app keep separate cookies, so they are separate anonymous accounts until
-  you sign in. A magic link opened from an email lands in Safari, not in the
-  installed app.
+  you sign in. A Google sign-in in Safari lands in Safari, not in the installed
+  app.
 - **Photo logging depends on your own AI key**, and the Worker has no shared key.
 
 ## Build note: production must be same-origin
@@ -103,16 +100,6 @@ third-party again (Google's account chooser even named `lgf2111.workers.dev`).
 if a `workers.dev` address is in the bundle. A production build with no Worker URL
 is the same-origin HTTP backend, not local mode; empty means local mode only in
 dev and tests. This takes effect on the next Pages deploy.
-
-## Security note: magic-link login (fixed in code, needs a Worker deploy)
-
-Until this fix is deployed, the production Worker's `POST /api/auth/login`
-answers with the sign-in link itself whenever no email provider is configured,
-which is production's current state. That link signs in as whatever address was
-typed, including an address that already owns a Google account. The fix returns
-the link only when `DEV_LOGIN_LINKS=1` is set (local development and tests) and
-otherwise answers `{ ok: true, delivered: false }`. It takes effect when the
-Worker is next deployed. Nothing on production was tested against this hole.
 
 ## What was checked against production, and what was not
 

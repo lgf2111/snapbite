@@ -3,19 +3,16 @@ import type { Me } from '../lib/account.js';
 import { readConfig } from '../lib/config.js';
 import { GoogleIcon } from './icons/GoogleIcon.js';
 import { Button } from './ui/button.js';
-import { Input } from './ui/input.js';
-import { Label } from './ui/label.js';
 
 interface Providers {
-  email: boolean;
   google: boolean;
 }
 
 /**
  * Optional account section. The app works without signing in — an anonymous
  * account is created on first use — so this never blocks anything; it only
- * offers to attach an email/Google identity so the account survives a cleared
- * browser and works on a second device.
+ * offers to attach a Google identity so the account survives a cleared browser
+ * and works on a second device.
  */
 export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = {}) {
   const { apiBase, hasBackend } = readConfig();
@@ -23,16 +20,13 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
   // not be shown the sign-in buttons while we are still asking, or if we fail to.
   const [me, setMe] = useState<Me | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [providers, setProviders] = useState<Providers>({ email: false, google: false });
-  const [email, setEmail] = useState('');
+  const [providers, setProviders] = useState<Providers>({ google: false });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   // `onSignedIn` fires on a signed-out -> signed-in change seen after mount, not
   // for someone who was already signed in when the card opened.
   const wasSignedIn = useRef<boolean | null>(null);
-  const emailRef = useRef<HTMLInputElement>(null);
   const signedInCb = useRef(onSignedIn);
   signedInCb.current = onSignedIn;
 
@@ -61,8 +55,8 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
     void load();
   }, [load]);
 
-  // A magic link opened in another tab, or a Google round trip that left this
-  // page open, finishes while we are in the background: look again on return.
+  // A Google round trip that left this page open finishes while we are in the
+  // background: look again on return.
   useEffect(() => {
     if (!onSignedIn) return;
     const again = () => {
@@ -75,41 +69,6 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
       window.removeEventListener('focus', again);
     };
   }, [load, onSignedIn]);
-
-  async function requestLink() {
-    if (!hasBackend) return;
-    if (!email.trim()) {
-      emailRef.current?.focus();
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await fetch(`${apiBase}/api/auth/login`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const body = (await res.json()) as { delivered?: boolean; link?: string; detail?: string };
-      if (!res.ok) {
-        setError(body.detail ?? 'Could not send a link.');
-      } else if (body.delivered) {
-        setNotice(`Check ${email} for the sign-in link. It expires in 15 minutes.`);
-      } else if (body.link) {
-        // Development only: the Worker returns the link when DEV_LOGIN_LINKS=1.
-        setNotice('Email is not configured, so here is the link: ');
-        window.location.href = body.link;
-      } else {
-        setError('Could not send the sign-in email right now. Try again later.');
-      }
-    } catch {
-      setError('Could not reach the server.');
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function signOut() {
     if (!hasBackend) return;
@@ -148,11 +107,7 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
           <div className="flex flex-col gap-0.5">
             <p className="text-body font-medium break-all">{me.email ?? 'Your account'}</p>
             <p className="text-muted-foreground text-caption">
-              {me.method === 'google'
-                ? 'Signed in with Google'
-                : me.method === 'email'
-                  ? 'Signed in with an email link'
-                  : 'Signed in'}
+              {me.method === 'google' ? 'Signed in with Google' : 'Signed in'}
             </p>
           </div>
           <Button variant="secondary" disabled={busy} onClick={() => void signOut()}>
@@ -173,32 +128,10 @@ export function AccountCard({ onSignedIn }: { onSignedIn?: (me: Me) => void } = 
               </a>
             </Button>
           )}
-
-          {providers.email && (
-            <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="account-email">Email address</Label>
-                <Input
-                  id="account-email"
-                  ref={emailRef}
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <Button variant="secondary" disabled={busy} onClick={() => void requestLink()}>
-                {busy ? 'Sending…' : 'Email me a sign-in link'}
-              </Button>
-            </>
-          )}
         </>
       )}
 
       {notice && <p className="text-caption text-success">{notice}</p>}
-      {error && <p className="text-caption text-destructive">{error}</p>}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 export interface Me {
   signedIn: boolean;
   via: string | null;
-  /** How the session was opened; null for sessions older than that being recorded. */
+  /** How the session was opened; `'email'` only for historical sessions. */
   method?: 'google' | 'email' | null;
   email: string | null;
   userId: string | null;
@@ -67,14 +67,8 @@ export function authNotice(status: string | null, me: Me | null): AuthNotice | n
         ? { kind: 'success', message: `Signed in${me.email ? ` as ${me.email}` : ''}` }
         : {
             kind: 'error',
-            message:
-              'We signed you in, but this browser did not keep the session. Try again, or use the email link.',
+            message: 'We signed you in, but this browser did not keep the session. Try again.',
           };
-    case 'expired':
-      return {
-        kind: 'error',
-        message: 'That sign-in link expired or was already used. Request a new one.',
-      };
     case 'state':
       return { kind: 'error', message: 'The sign-in was interrupted. Please try again.' };
     case 'unverified':

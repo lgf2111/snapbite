@@ -4,21 +4,13 @@ import { createApp } from '../app.js';
 import { getAccount } from '../billing/accounts.js';
 import { PACKS } from '../billing/packs.js';
 import { createAuthDb, createSession } from '../db/auth.js';
+import { googleSignIn } from '../test/googleSignIn.js';
 
 const ADMIN_TOKEN = 'stage-3-admin-token';
 const WEBHOOK_SECRET = 'whsec_stage3_test';
 
 const app = () => createApp();
 const email = () => `${crypto.randomUUID()}@example.com`;
-
-function cookieOf(setCookie: string | null, name: string): string | null {
-  if (!setCookie) return null;
-  for (const part of setCookie.split(/,(?=[^;]+=)/)) {
-    const trimmed = part.trim();
-    if (trimmed.startsWith(`${name}=`)) return trimmed.split(';')[0] ?? null;
-  }
-  return null;
-}
 
 /** A verified user with a real session row, without going through sign-in. */
 async function verifiedSession(address = email()) {
@@ -28,31 +20,8 @@ async function verifiedSession(address = email()) {
   )
     .bind(userId, address, Date.now(), Date.now())
     .run();
-  const raw = await createSession(createAuthDb(env.DB), userId, 'email');
+  const raw = await createSession(createAuthDb(env.DB), userId, 'google');
   return { userId, email: address, cookie: `sb_session=${raw}` };
-}
-
-/** Full magic-link sign-in, the path that grants the trial. */
-async function signedInWithMagicLink(address: string): Promise<string> {
-  const login = await app().request(
-    '/api/auth/login',
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: address }),
-    },
-    env,
-  );
-  const body = (await login.json()) as { link: string };
-  const token = new URL(body.link).searchParams.get('token') as string;
-  const verify = await app().request(
-    `/api/auth/verify?token=${encodeURIComponent(token)}`,
-    {},
-    env,
-  );
-  const cookie = cookieOf(verify.headers.get('set-cookie'), 'sb_session');
-  if (!cookie) throw new Error('sign-in did not set a session');
-  return cookie;
 }
 
 async function json(
@@ -140,12 +109,15 @@ async function eventCount(id: string): Promise<number> {
   return row?.n ?? 0;
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('trial on verified sign-in', () => {
   it('grants 20 credits and the supporter tag exactly once per email', async () => {
     const address = email();
-    const cookie = await signedInWithMagicLink(address);
+    const { cookie } = await googleSignIn(app(), address);
 
     const account = await getAccount(env.DB, address);
     expect(account?.credits).toBe(20);
@@ -178,7 +150,7 @@ describe('trial on verified sign-in', () => {
     expect((await getAccount(env.DB, address))?.credits).toBe(20);
 
     // A second sign-in with the same verified address is still the same trial.
-    await signedInWithMagicLink(address);
+    await googleSignIn(app(), address);
     expect((await getAccount(env.DB, address))?.credits).toBe(20);
 
     const me = (await (await json('/api/me', { method: 'GET' }, cookie)).json()) as {

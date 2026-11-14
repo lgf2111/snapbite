@@ -327,14 +327,6 @@ export class ApiClient {
     return this.#request('/api/auth/me');
   }
 
-  /** Requests a sign-in link. Returns the link only when email is unconfigured. */
-  requestLogin(email: string): Promise<{ ok: boolean; delivered: boolean; link?: string }> {
-    return this.#request('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-  }
-
   logout(): Promise<{ ok: boolean }> {
     return this.#request('/api/auth/logout', { method: 'POST' });
   }

@@ -210,9 +210,9 @@ Estimates are for one developer who already knows this codebase.
    list is the real scope.
 3. **Accounts and sessions (1–2 weeks).** New `accounts` table with a nullable
    `telegram_user_id`; session middleware beside the `initData` middleware;
-   every owner-scoped query moves from Telegram id to account id; magic-link
-   email (Resend/Postmark) or passkey; account-linking deep link the bot can
-   send ("claim your account"); deletion and export updated.
+   every owner-scoped query moves from Telegram id to account id; Google OAuth
+   (the shipped choice; passkeys can replace it later); account-linking deep link
+   the bot can send ("claim your account"); deletion and export updated.
 4. **Photo storage (3–5 days).** R2 bucket, upload endpoint, signed read URLs or
    an authenticated proxy, backfill policy for existing `file_id` meals (they
    keep working only while the bot exists, so decide: migrate on read, or accept
@@ -236,7 +236,7 @@ Estimates are for one developer who already knows this codebase.
 10. **Dual-run rollout (1 week + observation).** Bot keeps working. Measure
     install rate, push opt-in rate, day-7 retention, meals per user. Only after
     those numbers decide whether the bot is retired.
-11. **Ongoing costs.** Domain, email provider, R2 storage and egress, possibly
+11. **Ongoing costs.** Domain, R2 storage and egress, possibly
     analytics. Push itself is free. The recurring engineering cost is the second
     auth path and the service-worker update discipline.
 
@@ -255,8 +255,8 @@ Estimates are for one developer who already knows this codebase.
 
 ## Recurring costs (PWA-only, minimal stack)
 
-Checked against Cloudflare and Resend pricing pages on 2026-11-09. The stack is the
-one already in use, plus object storage and an email sender.
+Checked against Cloudflare pricing pages on 2026-11-09. The stack is the one
+already in use, plus object storage.
 
 | Item | Free allowance | Cost past it | At 100 users | At 1,000 users |
 | --- | --- | --- | --- | --- |
@@ -266,7 +266,6 @@ one already in use, plus object storage and an email sender.
 | D1 | 5M rows read/day, 100k written/day, 5 GB | $5/mo plan: 25B read, 50M written, 5 GB then $0.75/GB-mo | $0 | $0–5 |
 | R2 | 10 GB stored, 1M Class A, 10M Class B, **egress free** | $0.015/GB-mo + $4.50/M writes | $0 | $0.00–0.10 |
 | Web Push | none — VAPID is free | — | $0 | $0 |
-| Magic-link email | Resend free: 3,000/mo, 100/day | $20/mo | $0 | $0 |
 | Analytics | Cloudflare Web Analytics | — | $0 | $0 |
 | Error tracking | Sentry free 5k events/mo (optional) | — | $0 | $0 |
 | Apple Developer | **not required for a PWA** | $99/yr only for native | $0 | $0 |
@@ -305,8 +304,8 @@ choice:
   survives only as an iOS Shortcut posting to the same Worker, and can be kept alongside
   the PWA at no infrastructure cost.
 * **Cost envelope:** $0/month target; one $5/month Workers Paid plan when D1 write limits
-  are reached. Originals are not stored; a compressed copy is. Magic-link email stays
-  inside the Resend free tier, or is replaced by passkeys to remove the dependency.
+  are reached. Originals are not stored; a compressed copy is. Sign-in is Google OAuth, so
+  there is no email-sender dependency; passkeys can replace it later.
 * Auth is one session middleware beside the existing `initData` verifier; `users` stays
   the account table (UUID key) and `telegram_user_id` becomes nullable.
 * Push and offline are later slices, not part of the first cutover.
