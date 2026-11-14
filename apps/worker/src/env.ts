@@ -55,16 +55,9 @@ export interface Env {
   /** Forum Topic for broadcast records in the admin group. */
   BROADCAST_THREAD_ID?: string;
   /**
-   * Local development only: '1' makes /api/auth/login hand the magic link back in
-   * the response when no email can be sent. Never set it in production: the link
-   * signs in as whatever address was typed.
+   * Public origin of the app, used to build the Google sign-in redirect and the
+   * cookie posture behind the Pages proxy.
    */
-  DEV_LOGIN_LINKS?: string;
-  /** Resend API key for sign-in emails. Unset => no email is sent (and no link is returned). */
-  RESEND_API_KEY?: string;
-  /** From address for sign-in emails, e.g. "SnapBite <login@example.com>". */
-  EMAIL_FROM?: string;
-  /** Public origin of the app, used to build magic links. */
   APP_ORIGIN?: string;
   /** Web push (VAPID): the public key, base64url, a 65-byte uncompressed P-256 point. */
   PUSH_VAPID_PUBLIC_KEY?: string;
@@ -109,7 +102,7 @@ export function parseThreadId(raw: string | undefined): number | null {
 
 /** Variables attached to the Hono context after auth. */
 export interface Variables {
-  /** Null for email/device accounts that never touched the bot. */
+  /** Null for browser-only accounts that never touched the bot. */
   telegramUser: TelegramUser | null;
   /** The resolved application user id (row id in `users`). */
   userId: string;

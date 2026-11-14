@@ -13,12 +13,12 @@ export const users = sqliteTable(
   'users',
   {
     id: text('id').primaryKey(),
-    /** Null for accounts created by email sign-in (they never touch the bot). */
+    /** Null for browser-only accounts (Google sign-in with no Telegram id). */
     telegramUserId: integer('telegram_user_id'),
     /**
-     * Optional sign-in credential. A Telegram user can attach an email and keep
-     * the same row (same meals); a browser user gets a row with no Telegram id.
-     * Null means "no email credential for this person".
+     * Retained for historical rows and billing. Email sign-in was removed —
+     * Google is the only sign-in method now — but these columns still hold the
+     * verified address of existing accounts and the billing join key.
      */
     email: text('email'),
     emailVerifiedAt: integer('email_verified_at'),
@@ -301,7 +301,10 @@ export const sessions = sqliteTable(
     createdAt: integer('created_at').notNull(),
     expiresAt: integer('expires_at').notNull(),
     lastUsedAt: integer('last_used_at'),
-    /** 'google' | 'email'; null for sessions opened before this was recorded. */
+    /**
+     * 'google'; 'email' only on sessions opened before email sign-in was
+     * removed; null for sessions older than the column.
+     */
     method: text('method'),
   },
   (t) => ({
@@ -310,7 +313,7 @@ export const sessions = sqliteTable(
   }),
 );
 
-/** Single-use magic-link tokens (hashed, 15-minute TTL). */
+/** Unused since email sign-in was removed; retained to avoid a destructive migration. */
 export const loginTokens = sqliteTable(
   'login_tokens',
   {

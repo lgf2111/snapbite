@@ -6,8 +6,8 @@
  * been fetched directly from Google's token endpoint over TLS with our client
  * secret, so signature verification is unnecessary (OAuth 2.0 spec, §3.1.3.7).
  *
- * The email from the provider is the same join key the magic link uses, so a
- * Google account lands on the account that already owns that address.
+ * The email from the provider is the join key, so a Google account lands on the
+ * account that already owns that address.
  */
 import type { AppBindings } from '../env.js';
 

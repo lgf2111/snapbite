@@ -19,12 +19,10 @@ describe('social sign-in (Google)', () => {
   it('reports which providers are configured', async () => {
     const app = createApp();
     const body = (await (await app.request('/api/auth/providers', {}, env)).json()) as {
-      email: boolean;
       google: boolean;
     };
     // No Google client id in the test environment.
     expect(body.google).toBe(false);
-    expect(typeof body.email).toBe('boolean');
   });
 
   it('refuses to start a flow that is not configured', async () => {

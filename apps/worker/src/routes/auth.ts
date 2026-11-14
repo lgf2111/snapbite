@@ -1,11 +1,5 @@
 import { type Context, Hono } from 'hono';
-import {
-  cookies,
-  deviceLookupHash,
-  hashDeviceToken,
-  mintDeviceToken,
-  readCookies,
-} from '../auth/cookies.js';
+import { cookies, deviceLookupHash, mintDeviceToken, readCookies } from '../auth/cookies.js';
 import {
   google,
   newState,
@@ -17,24 +11,16 @@ import { grantTrial } from '../billing/accounts.js';
 import {
   type AuthDb,
   attachEmailToUser,
-  consumeLoginToken,
   createAuthDb,
   createSession,
   deleteSession,
   findOrCreateDeviceUser,
   findSession,
   findUserByEmail,
-  issueLoginToken,
-  looksLikeEmail,
   normalizeEmail,
   orphanTelegramAccounts,
 } from '../db/auth.js';
 import type { AppBindings } from '../env.js';
-
-/** A magic link is useless without somewhere to send it. */
-function canSendEmail(env: AppBindings['Bindings']): boolean {
-  return Boolean(env.RESEND_API_KEY && env.EMAIL_FROM && env.APP_ORIGIN);
-}
 
 /**
  * Grants the one-time registration trial to a verified email. Best-effort on
@@ -49,42 +35,9 @@ async function grantSignInTrial(db: D1Database, email: string): Promise<void> {
 }
 
 /**
- * Emails a magic link through Resend's HTTP API (no SDK, one fetch).
- * Returns false when delivery is not configured or the API rejects it, so the
- * caller can answer honestly instead of pretending.
- */
-async function sendMagicLink(
-  env: AppBindings['Bindings'],
-  to: string,
-  link: string,
-): Promise<boolean> {
-  if (!canSendEmail(env)) return false;
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${env.RESEND_API_KEY}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: env.EMAIL_FROM,
-        to,
-        subject: 'Your SnapBite sign-in link',
-        text: `Tap to sign in to SnapBite (valid for 15 minutes):\n\n${link}\n\nIf you didn't ask for this, ignore this email.`,
-      }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Auth routes. Sign-in is optional; these only exist so a person can attach an
- * email credential to the account they already have, or open it on a new device.
+ * Auth routes. Sign-in is optional; these only exist so a person can attach a
+ * Google identity to the account they already have, or open it on a new device.
  *
- *   POST /api/auth/login   { email }  -> { ok, delivered, link? }
- *   GET  /api/auth/verify?token=...   -> sets the session cookie, redirects
  *   POST /api/auth/logout             -> clears the session cookie
  *   GET  /api/auth/me                 -> { signedIn, email, userId }
  *
@@ -106,10 +59,7 @@ export function authRoutes() {
 
   /** Which sign-in methods this deployment can actually offer. */
   app.get('/providers', (c) => {
-    return c.json({
-      email: canSendEmail(c.env),
-      google: google.configured(c.env),
-    });
+    return c.json({ google: google.configured(c.env) });
   });
 
   /**
@@ -142,8 +92,8 @@ export function authRoutes() {
 
   /**
    * Google's callback. Verifies state, exchanges the code, then resolves the
-   * account by email — the same join key the magic link uses — and issues a
-   * session cookie before bouncing back to the app.
+   * account by the verified email — the join key — and issues a session cookie
+   * before bouncing back to the app.
    */
   app.get('/callback/google', async (c) => {
     const appOrigin = c.env.APP_ORIGIN ?? new URL(c.req.url).origin;
@@ -218,96 +168,13 @@ export function authRoutes() {
     return c.json({
       signedIn: via === 'session',
       via,
-      // 'google' | 'email' | null (null for sessions opened before it was recorded).
+      // 'google', or 'email' for sessions opened before email sign-in was removed;
+      // null for sessions older than the column itself.
       method,
       email: user.email ?? null,
       userId: user.id,
       telegramLinked: user.telegramUserId != null,
     });
-  });
-
-  app.post('/login', async (c) => {
-    let email = '';
-    try {
-      const body = (await c.req.json()) as { email?: unknown };
-      email = typeof body.email === 'string' ? normalizeEmail(body.email) : '';
-    } catch {
-      return c.json({ error: 'Bad request', detail: 'Invalid JSON' }, 400);
-    }
-    if (!looksLikeEmail(email)) {
-      return c.json({ error: 'Bad request', detail: 'Enter a valid email address' }, 400);
-    }
-
-    const token = await issueLoginToken(db(c), email);
-    const base = c.env.APP_ORIGIN ?? new URL(c.req.url).origin;
-    // Lands on the app so the browser ends up signed in *there*, not on the API origin.
-    const link = `${base}/verify?token=${encodeURIComponent(token)}`;
-
-    const delivered = await sendMagicLink(c.env, email, link);
-    // The link is a password for that address's account, so the only place it may
-    // go is the inbox. Handing it back to whoever asked would let anyone sign in as
-    // any email address, including one that already owns a Google account. A
-    // developer can opt in (DEV_LOGIN_LINKS=1, in .dev.vars or tests); production
-    // never sets it, and a failed or unconfigured send just reports delivered:false.
-    const devLink = !delivered && c.env.DEV_LOGIN_LINKS === '1' ? link : undefined;
-
-    // Same answer whether or not the address has an account — no enumeration.
-    return c.json({ ok: true, delivered, ...(devLink ? { link: devLink } : {}) });
-  });
-
-  app.get('/verify', async (c) => {
-    const raw = c.req.query('token') ?? '';
-    const email = await consumeLoginToken(db(c), raw);
-    const appOrigin = c.env.APP_ORIGIN ?? new URL(c.req.url).origin;
-
-    if (!email) {
-      return c.redirect(`${appOrigin}/?auth=expired`, 302);
-    }
-
-    // Prefer the account this browser already uses, so an anonymous visitor's
-    // meals stay with them after signing in.
-    const jar = readCookies(c.req.header('cookie'));
-    let userId: string | null = null;
-    const deviceRaw = jar[cookies.device] ?? '';
-
-    const existingOwner = await findUserByEmail(db(c), email);
-    if (!existingOwner && deviceRaw) {
-      // No account owns this address yet -> adopt this browser's account.
-      const deviceHash = await deviceLookupHash(deviceRaw);
-      const { user } = await findOrCreateDeviceUser(db(c), deviceHash);
-      if (user) {
-        const attached = await attachEmailToUser(db(c), user.id, email);
-        if (attached.ok) userId = user.id;
-      }
-    }
-
-    // Email is the join key: if this address already owns an account (e.g. one
-    // created by the bot), sign in to THAT row so its meals show up here.
-    if (!userId) {
-      const owner = await findUserByEmail(db(c), email);
-      if (owner) userId = owner.id;
-    }
-
-    // Nothing owns it and this browser has no account to adopt: make one.
-    if (!userId) {
-      const deviceHash = await deviceLookupHash(mintDeviceToken());
-      const { user } = await findOrCreateDeviceUser(db(c), deviceHash);
-      if (!user) return c.redirect(`${appOrigin}/?auth=error`, 302);
-      const attached = await attachEmailToUser(db(c), user.id, email);
-      if (!attached.ok) return c.redirect(`${appOrigin}/?auth=conflict`, 302);
-      userId = user.id;
-    }
-
-    // Verified identity: grant the once-per-email trial before the session.
-    await grantSignInTrial(c.env.DB, email);
-
-    const sessionRaw = await createSession(db(c), userId, 'email');
-    const opts = cookieOptionsFor(c);
-    c.header(
-      'set-cookie',
-      cookies.serialise(cookies.session, sessionRaw, opts, cookies.sessionMaxAge),
-    );
-    return c.redirect(`${appOrigin}/?auth=ok`, 302);
   });
 
   app.post('/logout', async (c) => {
@@ -327,10 +194,6 @@ export function authRoutes() {
       path: '/',
     };
   }
-
-  // Kept for the device-token helpers used above.
-  void hashDeviceToken;
-  void createSession;
 
   return app;
 }

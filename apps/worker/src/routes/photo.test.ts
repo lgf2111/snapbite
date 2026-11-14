@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test';
 import { type BotReply, signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
+import { createAuthDb, createSession } from '../db/auth.js';
 import { createMealsDb, setMealPhoto } from '../db/meals.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
 import { photoKey } from '../storage/photos.js';
@@ -130,21 +131,15 @@ describe('GET /api/meal-photo/:id', () => {
 describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => {
   const BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
 
-  async function signIn(app: ReturnType<typeof createApp>, email: string) {
-    const login = (await (
-      await app.request(
-        '/api/auth/login',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email }),
-        },
-        env,
-      )
-    ).json()) as { link: string };
-    const token = new URL(login.link).searchParams.get('token') as string;
-    const res = await app.request(`/api/auth/verify?token=${token}`, {}, env);
-    return (res.headers.get('set-cookie') ?? '').split(';')[0] as string;
+  async function signIn(email: string) {
+    const userId = crypto.randomUUID();
+    const now = Date.now();
+    await env.DB.prepare(
+      'INSERT INTO users (id, email, email_verified_at, created_at) VALUES (?, ?, ?, ?)',
+    )
+      .bind(userId, email, now, now)
+      .run();
+    return `sb_session=${await createSession(createAuthDb(env.DB), userId, 'google')}`;
   }
 
   /** A meal with a stored photo, owned by whoever `cookie` is. */
@@ -193,7 +188,7 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
 
   it('gives the owner their bytes, not a 401', async () => {
     const app = createApp();
-    const cookie = await signIn(app, 'photo-owner@example.com');
+    const cookie = await signIn('photo-owner@example.com');
     const id = await mealWithPhoto(app, cookie);
 
     const res = await app.request(`/api/meal-photo/${id}`, { headers: { cookie } }, env);
@@ -204,7 +199,7 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
 
   it('serves a ≤240 px JPEG for ?w=240, while the detail URL stays the original', async () => {
     const app = createApp();
-    const cookie = await signIn(app, 'photo-thumb@example.com');
+    const cookie = await signIn('photo-thumb@example.com');
     const original = photoJpeg(1600, 1200);
     const id = await mealWithPhoto(app, cookie, original);
 
@@ -231,7 +226,7 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
 
   it('answers a matching if-none-match with 304 and no body', async () => {
     const app = createApp();
-    const cookie = await signIn(app, 'photo-304@example.com');
+    const cookie = await signIn('photo-304@example.com');
     const id = await mealWithPhoto(app, cookie, photoJpeg(1600, 1200));
 
     const first = await app.request(`/api/meal-photo/${id}?w=240`, { headers: { cookie } }, env);
@@ -262,7 +257,7 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
 
   it('answers HEAD with the same validators and no body (the curl -I path)', async () => {
     const app = createApp();
-    const cookie = await signIn(app, 'photo-head@example.com');
+    const cookie = await signIn('photo-head@example.com');
     const id = await mealWithPhoto(app, cookie, photoJpeg(1600, 1200));
 
     const res = await app.request(
@@ -280,7 +275,7 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
 
   it('lists a stored-photo meal as hasPhoto (no Telegram file id), and a manual one as not', async () => {
     const app = createApp();
-    const cookie = await signIn(app, 'photo-list@example.com');
+    const cookie = await signIn('photo-list@example.com');
     const withPhoto = await mealWithPhoto(app, cookie);
     const manual = (await (
       await app.request(
@@ -316,8 +311,8 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
 
   it('still 401s with no credentials, and 404s for someone else’s meal', async () => {
     const app = createApp();
-    const owner = await signIn(app, 'photo-owner2@example.com');
-    const other = await signIn(app, 'photo-other@example.com');
+    const owner = await signIn('photo-owner2@example.com');
+    const other = await signIn('photo-other@example.com');
     const id = await mealWithPhoto(app, owner);
 
     expect((await app.request(`/api/meal-photo/${id}`, {}, env)).status).toBe(401);

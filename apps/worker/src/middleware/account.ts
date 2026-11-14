@@ -11,7 +11,7 @@ import { INIT_DATA_HEADER } from './auth.js';
  *
  *   1. Telegram `initData` (header or query) — the Mini App and the Shortcut.
  *   2. `Authorization: Bearer sb_…` — a handheld device token (Shortcut).
- *   3. Session cookie — an email sign-in.
+ *   3. Session cookie — a Google sign-in.
  *   4. Device cookie — an anonymous account, created on first sight.
  *
  * Signing in is optional, so step 4 means a plain browser gets a working account
