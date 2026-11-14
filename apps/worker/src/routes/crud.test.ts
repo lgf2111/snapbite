@@ -3,6 +3,8 @@ import { signInitData } from '@snapbite/core';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
+import { base64FromBytes } from '../storage/images.js';
+import { photoKey } from '../storage/photos.js';
 
 const BOT_TOKEN = '123456:LOCAL-DEV-BOT-TOKEN';
 
@@ -131,6 +133,35 @@ describe('DELETE /api/meals/:id', () => {
       await app.request('/api/meals', { headers: await headers(tgId) }, env)
     ).json()) as { meals: Array<{ id: string }> };
     expect(list.meals.find((m) => m.id === id)).toBeUndefined();
+  });
+
+  it('deletes the stored photo bytes too, so the quota cannot be recycled', async () => {
+    const app = createApp();
+    const tgId = 7205;
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
+    const res = await app.request(
+      '/api/meals',
+      {
+        method: 'POST',
+        headers: await headers(tgId),
+        body: JSON.stringify({
+          meal: meal('with photo'),
+          photo: { base64: base64FromBytes(jpeg), mimeType: 'image/jpeg' },
+        }),
+      },
+      env,
+    );
+    expect(res.status).toBe(201);
+    const id = ((await res.json()) as { id: string }).id;
+    expect(await env.PHOTOS.get(photoKey(id))).not.toBeNull();
+
+    const del = await app.request(
+      `/api/meals/${id}`,
+      { method: 'DELETE', headers: await headers(tgId) },
+      env,
+    );
+    expect(del.status).toBe(200);
+    expect(await env.PHOTOS.get(photoKey(id))).toBeNull();
   });
 
   it("returns 404 when deleting another user's meal", async () => {

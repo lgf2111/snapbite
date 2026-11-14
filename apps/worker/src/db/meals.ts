@@ -396,6 +396,20 @@ export function detailToMealResult(detail: MealDetail): MealResult {
   } as MealResult;
 }
 
+/** The R2 key of a meal's stored photo, owner-scoped. Null when none. */
+export async function getMealPhotoKey(
+  db: MealsDb,
+  mealId: string,
+  userId: string,
+): Promise<string | null> {
+  const rows = await db
+    .select({ photoKey: meals.photoKey })
+    .from(meals)
+    .where(and(eq(meals.id, mealId), eq(meals.userId, userId)))
+    .limit(1);
+  return rows[0]?.photoKey ?? null;
+}
+
 /**
  * Deletes a meal (and its food_items + nutrition via ON DELETE CASCADE), if it
  * belongs to the user. Returns false when not owned/found.
