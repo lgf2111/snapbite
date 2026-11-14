@@ -252,6 +252,7 @@ export async function attachEmailToUser(
  */
 export interface PhotoBackfillRow {
   id: string;
+  userId: string;
   telegramFileId: string;
 }
 
@@ -261,7 +262,7 @@ export async function mealsNeedingPhotoBackfill(
 ): Promise<PhotoBackfillRow[]> {
   const rows = await d1
     .prepare(
-      `SELECT id, telegram_file_id AS telegramFileId
+      `SELECT id, user_id AS userId, telegram_file_id AS telegramFileId
          FROM meals
         WHERE telegram_file_id IS NOT NULL AND photo_key IS NULL
         ORDER BY logged_at DESC

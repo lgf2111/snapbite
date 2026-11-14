@@ -180,7 +180,14 @@ describe('GET /api/meal-photo/:id with only a cookie (the browser case)', () => 
     const owner = (await (await app.request('/api/me', { headers: { cookie } }, env)).json()) as {
       userId: string;
     };
-    await setMealPhoto(createMealsDb(env.DB), id, owner.userId, key, 'image/jpeg');
+    await setMealPhoto(
+      createMealsDb(env.DB),
+      id,
+      owner.userId,
+      key,
+      'image/jpeg',
+      bytes.byteLength,
+    );
     return id;
   }
 

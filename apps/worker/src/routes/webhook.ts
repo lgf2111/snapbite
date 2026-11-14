@@ -81,6 +81,7 @@ import { recentFeedback, storeFeedback } from '../db/feedback.js';
 import { setMealPhoto, setMealPhotoById } from '../db/meals.js';
 import {
   type MealTelegramRef,
+  canStorePhoto,
   countMealsSince,
   createMealsDb,
   detailToMealResult,
@@ -1196,9 +1197,13 @@ async function handleBackfillPhotosCommand(
         continue;
       }
       const bytes = Uint8Array.from(atob(file.base64), (ch) => ch.charCodeAt(0));
+      if (!(await canStorePhoto(db, row.userId, bytes.byteLength))) {
+        failed++;
+        continue;
+      }
       const key = photoKey(row.id);
       await store.put(key, bytes, file.mimeType);
-      await setMealPhotoById(c.env.DB, row.id, key, file.mimeType);
+      await setMealPhotoById(c.env.DB, row.id, key, file.mimeType, bytes.byteLength);
       moved++;
     } catch (err) {
       failed++;
@@ -2351,9 +2356,11 @@ async function handlePhoto(
   const photoStore = r2Store(c.env.PHOTOS);
   if (photoStore) {
     try {
-      const key = photoKey(mealId);
-      await photoStore.put(key, photoBytes, photoMime);
-      await setMealPhoto(mealsDb, mealId, user.id, key, photoMime);
+      if (await canStorePhoto(mealsDb, user.id, photoBytes.byteLength)) {
+        const key = photoKey(mealId);
+        await photoStore.put(key, photoBytes, photoMime);
+        await setMealPhoto(mealsDb, mealId, user.id, key, photoMime, photoBytes.byteLength);
+      }
     } catch (err) {
       console.error('[webhook] photo archive failed', err);
     }

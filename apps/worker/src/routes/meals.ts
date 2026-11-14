@@ -20,6 +20,7 @@ import { createAuthDb, findDeviceUser, findSessionUser } from '../db/auth.js';
 import { describeError, logError } from '../db/errors.js';
 import {
   type MealDetail,
+  canStorePhoto,
   countMealsSince,
   createMealsDb,
   deleteMeal,
@@ -237,14 +238,18 @@ export function mealsRoutes(
     });
 
     // Optional photo captured in the app: store the compressed bytes as sent.
-    // Best effort — a storage failure must not lose the meal.
+    // Best effort — a storage failure must not lose the meal, and a user past
+    // the R2 quota still gets the meal (just no stored photo).
     if (photoInput) {
       const store = r2Store(c.env.PHOTOS);
       if (store) {
         try {
-          const key = photoKey(id);
-          await store.put(key, base64ToBytes(photoInput.base64), photoInput.mimeType);
-          await setMealPhoto(db, id, userId, key, photoInput.mimeType);
+          const bytes = base64ToBytes(photoInput.base64);
+          if (await canStorePhoto(db, userId, bytes.byteLength)) {
+            const key = photoKey(id);
+            await store.put(key, bytes, photoInput.mimeType);
+            await setMealPhoto(db, id, userId, key, photoInput.mimeType, bytes.byteLength);
+          }
         } catch (err) {
           console.error('[meals] photo store failed', err);
         }

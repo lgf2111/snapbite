@@ -1,6 +1,7 @@
 import { runAdaptiveCheckins } from './adaptive.js';
 import { createApp } from './app.js';
 import { ERROR_LOG_RETENTION_MS, pruneErrorsOlderThan } from './db/errors.js';
+import { hourBucket, pruneTokenUsage } from './db/tokenUsage.js';
 import type { Env } from './env.js';
 import { runPhotoRetries } from './photoRetry.js';
 import { runWeeklyRecaps } from './recap.js';
@@ -22,6 +23,9 @@ export default {
     // Retention sweep: drop error_logs rows older than the window so the table
     // stays small (one indexed DELETE; best-effort, never throws).
     ctx.waitUntil(pruneErrorsOlderThan(env.DB, Date.now() - ERROR_LOG_RETENTION_MS));
+    // Request counters only matter for the current hour; drop older buckets so
+    // the table stays bounded (one indexed DELETE, best-effort).
+    ctx.waitUntil(pruneTokenUsage(env.DB, hourBucket() - 1));
     // Adaptive targets: once per local week per opted-in user, recalibrate the
     // calorie goal from logged intake vs. the weight trend. Best-effort.
     ctx.waitUntil(runAdaptiveCheckins(env));
