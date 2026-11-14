@@ -1,5 +1,5 @@
 import type { MealResult } from '@snapbite/core';
-import { and, count, desc, eq, gte } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { type FoodItemRow, analyticsCache, foodItems, meals, nutrition } from './schema.js';
 
@@ -419,6 +419,38 @@ export async function mealOwnedBy(db: MealsDb, mealId: string, userId: string): 
 }
 
 /**
+ * R2 abuse guard: a runaway account can store at most 500 photos or 200 MB.
+ * A valid 2 MB photo every request would otherwise grow the bucket without
+ * bound. Old rows have `photo_bytes` null, so the byte sum undercounts them;
+ * the photo count still covers every stored object.
+ */
+export const MAX_PHOTOS_PER_USER = 500;
+export const MAX_PHOTO_BYTES_PER_USER = 200 * 1024 * 1024;
+
+export interface PhotoUsage {
+  photos: number;
+  bytes: number;
+}
+
+/** Stored-photo count and bytes for one user (rows with an R2 key). */
+export async function getPhotoUsage(db: MealsDb, userId: string): Promise<PhotoUsage> {
+  const rows = await db
+    .select({
+      photos: count(),
+      bytes: sql<number>`coalesce(sum(${meals.photoBytes}), 0)`,
+    })
+    .from(meals)
+    .where(and(eq(meals.userId, userId), isNotNull(meals.photoKey)));
+  return { photos: rows[0]?.photos ?? 0, bytes: Number(rows[0]?.bytes ?? 0) };
+}
+
+/** True while one more stored photo of `bytes` keeps the user under both caps. */
+export async function canStorePhoto(db: MealsDb, userId: string, bytes: number): Promise<boolean> {
+  const usage = await getPhotoUsage(db, userId);
+  return usage.photos < MAX_PHOTOS_PER_USER && usage.bytes + bytes <= MAX_PHOTO_BYTES_PER_USER;
+}
+
+/**
  * Attaches stored photo bytes to an already-saved meal (write-then-analyse
  * ordering means the row exists first). No-op when the row isn't owned.
  */
@@ -428,10 +460,11 @@ export async function setMealPhoto(
   userId: string,
   key: string,
   mime: string,
+  bytes: number,
 ): Promise<void> {
   await db
     .update(meals)
-    .set({ photoKey: key, photoMime: mime })
+    .set({ photoKey: key, photoMime: mime, photoBytes: bytes })
     .where(and(eq(meals.id, mealId), eq(meals.userId, userId)));
 }
 
@@ -441,10 +474,11 @@ export async function setMealPhotoById(
   mealId: string,
   key: string,
   mime: string,
+  bytes: number,
 ): Promise<void> {
   await d1
-    .prepare('UPDATE meals SET photo_key = ?, photo_mime = ? WHERE id = ?')
-    .bind(key, mime, mealId)
+    .prepare('UPDATE meals SET photo_key = ?, photo_mime = ?, photo_bytes = ? WHERE id = ?')
+    .bind(key, mime, bytes, mealId)
     .run();
 }
 

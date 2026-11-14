@@ -11,10 +11,12 @@ import {
   revokeAllDeviceTokens,
 } from '../db/deviceTokens.js';
 import { recentErrors } from '../db/errors.js';
+import { MAX_PHOTO_BYTES_PER_USER } from '../db/meals.js';
 import type { ErrorLogRow } from '../db/schema.js';
 import { createDb, upsertUser } from '../db/users.js';
 import { INIT_DATA_HEADER } from '../middleware/auth.js';
 import { base64FromBytes } from '../storage/images.js';
+import { photoKey } from '../storage/photos.js';
 import { oneLine } from './shortcut.js';
 
 /**
@@ -276,6 +278,140 @@ describe('POST /api/shortcut/log', () => {
       expect(typeof detail.ms_ai).toBe('number');
       expect(typeof detail.ms_total).toBe('number');
       expect(typeof detail.ms_base64).toBe('number');
+    });
+  });
+
+  describe('abuse limits', () => {
+    it('aborts a chunked 5 MB body at 2 MB with 413 and never reads it all', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const token = await tokenFor(app, 9620);
+      const chunkSize = 64 * 1024;
+      const totalChunks = Math.ceil((5 * 1024 * 1024) / chunkSize);
+      let pulled = 0;
+      let cancelled = false;
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (pulled >= totalChunks) {
+            controller.close();
+            return;
+          }
+          const chunk = new Uint8Array(chunkSize);
+          chunk.set([0xff, 0xd8, 0xff]);
+          pulled++;
+          controller.enqueue(chunk);
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+
+      // No Content-Length: the hard reader is the only thing bounding this.
+      const req = new Request('http://localhost/api/shortcut/log', {
+        method: 'POST',
+        headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${token}` },
+        body,
+      });
+      const res = await app.fetch(req, env);
+
+      expect(res.status).toBe(413);
+      expect(await res.text()).toBe(
+        'SnapBite: that photo is too big — set Resize Image to 1024 in the shortcut',
+      );
+      // 33 chunks (2.06 MB) is enough to cross the 2 MB cap; the other 47 never leave.
+      expect(pulled).toBeLessThan(totalChunks);
+      expect(pulled * chunkSize).toBeGreaterThan(2 * 1024 * 1024);
+      expect(pulled * chunkSize).toBeLessThanOrEqual(2 * 1024 * 1024 + chunkSize);
+      expect(cancelled).toBe(true);
+    });
+
+    it('allows 30 requests in an hour and rejects the 31st with a readable 429', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const token = await tokenFor(app, 9621);
+
+      for (let i = 0; i < 29; i++) {
+        const res = await app.request('/api/shortcut/log', post(token), env);
+        expect(res.status).toBe(200);
+      }
+      // The 30th request still succeeds...
+      expect((await app.request('/api/shortcut/log', post(token), env)).status).toBe(200);
+      // ...the 31st is refused, in the same plain-text style.
+      const res = await app.request('/api/shortcut/log', post(token), env);
+      expect(res.status).toBe(429);
+      expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+      expect(await res.text()).toBe('SnapBite: too many requests, try again later');
+    });
+
+    it('does not share a window between two tokens', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const first = await tokenFor(app, 9622);
+      const second = await tokenFor(app, 9623);
+
+      for (let i = 0; i < 30; i++) {
+        expect((await app.request('/api/shortcut/log', post(first), env)).status).toBe(200);
+      }
+      expect((await app.request('/api/shortcut/log', post(first), env)).status).toBe(429);
+      // The second token has its own counter and is unaffected.
+      expect((await app.request('/api/shortcut/log', post(second), env)).status).toBe(200);
+    });
+
+    it('still logs the meal but writes no R2 object past the photo quota', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const token = await tokenFor(app, 9624);
+      const user = await upsertUser(createDb(env.DB), { id: 9624 });
+      const now = Date.now();
+      await env.DB.prepare(
+        `INSERT INTO meals (id, user_id, photo_key, photo_mime, photo_bytes, created_at, logged_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+        .bind(
+          crypto.randomUUID(),
+          user.id,
+          'photos/already-at-quota',
+          'image/jpeg',
+          MAX_PHOTO_BYTES_PER_USER,
+          now,
+          now,
+        )
+        .run();
+
+      const res = await app.request('/api/shortcut/log', post(token), env);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toMatch(/^\d+ kcal — /);
+
+      const row = await env.DB.prepare(
+        `SELECT id, photo_key AS photoKey FROM meals
+          WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      )
+        .bind(user.id)
+        .first<{ id: string; photoKey: string | null }>();
+      expect(row).toBeTruthy();
+      // The meal is saved, but the quota check stopped the R2 write.
+      expect(row?.photoKey).toBeNull();
+      expect(await env.PHOTOS.get(photoKey(row?.id as string))).toBeNull();
+    });
+
+    it('answers a no-credits account with a sentence, not a 500', async () => {
+      const app = createApp({ providerFactory: () => new MockAIProvider() });
+      const user = await upsertUser(createDb(env.DB), { id: 9625 });
+      await env.DB.prepare('UPDATE users SET email = ?, email_verified_at = ? WHERE id = ?')
+        .bind('shortcut-no-credits@example.com', Date.now(), user.id)
+        .run();
+      const raw = mintDeviceToken();
+      await createDeviceToken(createDeviceTokensDb(env.DB), {
+        userId: user.id,
+        tokenHash: await hashDeviceToken(raw),
+      });
+
+      // A hosted key exists, so this is the "signed in, no credits" path.
+      const res = await app.request('/api/shortcut/log', post(raw), {
+        ...env,
+        GEMINI_API_KEY: 'hosted-gemini-key',
+      });
+      expect(res.status).toBe(402);
+      expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+      expect(await res.text()).toBe(
+        "SnapBite: Your AI key hit its limit and you're out of credits. Add credits in Settings, or use a working key.",
+      );
     });
   });
 

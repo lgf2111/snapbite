@@ -15,8 +15,15 @@ import {
   touchDeviceToken,
 } from '../db/deviceTokens.js';
 import { beginErrorLog, describeError, finishErrorLog, logError } from '../db/errors.js';
-import { countMealsSince, createMealsDb, saveMeal, setMealPhoto } from '../db/meals.js';
+import {
+  canStorePhoto,
+  countMealsSince,
+  createMealsDb,
+  saveMeal,
+  setMealPhoto,
+} from '../db/meals.js';
 import { recordMealSave } from '../db/metrics.js';
+import { consumeTokenRequest } from '../db/tokenUsage.js';
 import type { AppBindings } from '../env.js';
 import { base64Bytes, base64FromBytes, base64ToBytes } from '../storage/images.js';
 import { photoKey, r2Store } from '../storage/photos.js';
@@ -36,10 +43,46 @@ const MULTIPART_SLACK_BYTES = 64 * 1024;
 const MAX_JSON_BODY_BYTES = 4 * 1024 * 1024;
 const TOO_BIG = 'that photo is too big — set Resize Image to 1024 in the shortcut';
 
-/** `Content-Length` when the client sent one; 0 when it is absent or invalid. */
-function declaredBytes(c: Context<AppBindings>): number {
-  const n = Number.parseInt(c.req.header('content-length') ?? '', 10);
-  return Number.isFinite(n) ? n : 0;
+/** Thrown by {@link readAtMost} as soon as a body crosses its hard limit. */
+class BodyTooLargeError extends Error {}
+
+/**
+ * Reads a request body with a byte counter, stopping the moment it crosses
+ * `limit`. `Content-Length` is only an early hint: a chunked upload has none and
+ * a malicious client can lie. The reader is cancelled on the offending chunk so
+ * the rest of the body is never pulled into the Worker.
+ */
+async function readAtMost(req: Request, limit: number): Promise<Uint8Array> {
+  const declared = Number.parseInt(req.headers.get('content-length') ?? '', 10);
+  if (Number.isFinite(declared) && declared > limit) throw new BodyTooLargeError();
+  if (!req.body) return new Uint8Array();
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => {});
+        throw new BodyTooLargeError();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 /** Image type from magic bytes — Shortcuts often sends octet-stream. */
@@ -202,6 +245,12 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
     if (!resolved) {
       return fail(c, 'device token is invalid or revoked, create a new one in Settings', 401);
     }
+    // Per-token, not per-IP: carrier NAT makes an IP limit useless on mobile,
+    // and the token already identifies the caller. 30/hour is generous for a
+    // person logging meals and tight for a script.
+    if (!(await consumeTokenRequest(c.env.DB, resolved.tokenId))) {
+      return fail(c, 'too many requests, try again later', 429);
+    }
     await touchDeviceToken(tokensDb, resolved.tokenId);
 
     if (!c.env.ENCRYPTION_KEY) {
@@ -219,8 +268,10 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
     const contentType = c.req.header('content-type') ?? '';
     try {
       if (contentType.includes('multipart/form-data')) {
-        if (declaredBytes(c) > MAX_UPLOAD_BYTES + MULTIPART_SLACK_BYTES) return tooBig(c);
-        const form = await c.req.formData();
+        const bytes = await readAtMost(c.req.raw, MAX_UPLOAD_BYTES + MULTIPART_SLACK_BYTES);
+        const form = await new Response(bytes, {
+          headers: { 'content-type': contentType },
+        }).formData();
         const field = form.get('photo') as unknown;
         if (field == null || typeof field === 'string') {
           return fail(c, 'send the photo as a form field named "photo"', 400);
@@ -236,17 +287,15 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
         if (typeof h === 'string' && h.trim()) hint = h.trim();
       } else if (contentType.startsWith('image/') || contentType.includes('octet-stream')) {
         // Shortcuts' "Request Body: File" sends the bytes directly.
-        if (declaredBytes(c) > MAX_UPLOAD_BYTES) return tooBig(c);
-        const bytes = new Uint8Array(await c.req.arrayBuffer());
-        if (bytes.length > MAX_UPLOAD_BYTES) return tooBig(c);
+        const bytes = await readAtMost(c.req.raw, MAX_UPLOAD_BYTES);
         photoBytes = bytes;
         mimeType = sniffMime(bytes) ?? contentType.split(';')[0] ?? '';
         const b64Start = Date.now();
         base64 = base64FromBytes(bytes);
         msBase64 = Date.now() - b64Start;
       } else if (contentType.includes('application/json') || contentType === '') {
-        if (declaredBytes(c) > MAX_JSON_BODY_BYTES) return tooBig(c);
-        const body = (await c.req.json()) as {
+        const bytes = await readAtMost(c.req.raw, MAX_JSON_BODY_BYTES);
+        const body = JSON.parse(new TextDecoder().decode(bytes)) as {
           base64?: unknown;
           mimeType?: unknown;
           hint?: unknown;
@@ -261,7 +310,8 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
           415,
         );
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof BodyTooLargeError) return tooBig(c);
       return fail(c, 'the photo was not readable, try again', 400);
     }
 
@@ -319,14 +369,17 @@ export function shortcutRoutes(providerFactory: ProviderFactory = defaultProvide
       });
 
       // Store the bytes we were given, so the app can show the photo. Best
-      // effort: a storage failure must not lose an otherwise-logged meal.
+      // effort: a storage failure must not lose an otherwise-logged meal, and
+      // a user past the R2 quota still gets the meal (just no stored photo).
       const store = r2Store(c.env.PHOTOS);
       if (store) {
         try {
-          const key = photoKey(mealId);
           const bytes = photoBytes ?? base64ToBytes(base64);
-          await store.put(key, bytes, mimeType);
-          await setMealPhoto(db, mealId, resolved.userId, key, mimeType);
+          if (await canStorePhoto(db, resolved.userId, bytes.byteLength)) {
+            const key = photoKey(mealId);
+            await store.put(key, bytes, mimeType);
+            await setMealPhoto(db, mealId, resolved.userId, key, mimeType, bytes.byteLength);
+          }
         } catch (err) {
           console.error('[shortcut] photo store failed', err);
         }

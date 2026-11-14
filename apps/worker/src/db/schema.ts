@@ -50,7 +50,7 @@ export const settings = sqliteTable('settings', {
   updatedAt: integer('updated_at').notNull(),
 });
 
-/** A logged meal. Image bytes are never stored — only a Telegram file_id. */
+/** A logged meal. Photo bytes live in R2; the row keeps the key, mime and size. */
 export const meals = sqliteTable(
   'meals',
   {
@@ -63,6 +63,8 @@ export const meals = sqliteTable(
     photoKey: text('photo_key'),
     /** Mime type of the stored photo object. */
     photoMime: text('photo_mime'),
+    /** Stored photo size in bytes, for the per-user R2 quota. Null on older rows. */
+    photoBytes: integer('photo_bytes'),
     /** Short, shareable meal name (2–4 words) for the UI + share card. */
     title: text('title'),
     notes: text('notes'),
@@ -345,6 +347,25 @@ export const deviceTokens = sqliteTable(
 );
 
 export type DeviceTokenRow = typeof deviceTokens.$inferSelect;
+
+/**
+ * One row per token per UTC hour, counting `/api/shortcut/log` requests. The
+ * counter is incremented atomically and stops at the limit, so a rejected
+ * request does not keep writing. Old buckets are pruned by the cron.
+ */
+export const tokenUsage = sqliteTable(
+  'token_usage',
+  {
+    tokenId: text('token_id').notNull(),
+    hourBucket: integer('hour_bucket').notNull(),
+    count: integer('count').notNull().default(0),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.tokenId, t.hourBucket] }),
+  }),
+);
+
+export type TokenUsageRow = typeof tokenUsage.$inferSelect;
 
 export type MetricsRow = typeof metrics.$inferSelect;
 export type AnalyticsCacheRow = typeof analyticsCache.$inferSelect;
