@@ -172,21 +172,14 @@ describe('HomeScreen', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
-  it('gives the chip a 44px quiet pill and leaves the truncation to the date label', async () => {
+  it('gives the chip a quiet pill and leaves the truncation to the date label', async () => {
     const backend = stubBackend({
       mealDates: vi.fn(async () => ({ dates: ['2026-09-15'], streak: 5 })),
     });
     render(<HomeScreen {...props(backend)} />);
 
     const badge = await screen.findByRole('button', { name: '5 day streak' });
-    for (const cls of [
-      'min-h-11',
-      'rounded-control',
-      'bg-secondary',
-      'text-foreground',
-      'px-3',
-      'shrink-0',
-    ]) {
+    for (const cls of ['rounded-control', 'bg-secondary', 'text-foreground', 'px-3', 'shrink-0']) {
       expect(badge.className).toContain(cls);
     }
 
@@ -195,6 +188,46 @@ describe('HomeScreen', () => {
     expect(heading.className).toContain('min-w-0');
     expect(heading.querySelector('span')?.className).toContain('truncate');
     expect(screen.getByRole('button', { name: 'Refresh' }).className).toContain('shrink-0');
+  });
+
+  it('gives the three controls in the view row one height, inside the gutter', async () => {
+    // jsdom has no layout engine (every rect is 0×0), so equality is asserted on
+    // the resolved height contract: one `--control-h` on the row, the same
+    // `calc()` on all three outer boxes, and a track whose padding is exactly
+    // the 0.5rem that expression adds. Real 430×932 layout was measured in a
+    // browser: 52 / 52 / 52, refresh right edge 414 (16px inside the viewport).
+    const backend = stubBackend({
+      mealDates: vi.fn(async () => ({ dates: ['2026-09-15'], streak: 5 })),
+    });
+    render(<HomeScreen {...props(backend)} />);
+
+    const streak = await screen.findByRole('button', { name: '5 day streak' });
+    const refresh = screen.getByRole('button', { name: 'Refresh' });
+    const toggle = screen.getByRole('radiogroup', { name: 'View' });
+    const row = toggle.parentElement as HTMLElement;
+
+    // The inner item stays at the 44px touch floor; the track adds its own 8px.
+    expect(row.className).toContain('[--control-h:44px]');
+    expect(toggle.className).toContain('p-1');
+    for (const item of within(toggle).getAllByRole('radio')) {
+      expect(item.className).toContain('min-h-[44px]');
+    }
+
+    // One expression, so the three outer boxes cannot drift apart again.
+    const height = 'h-[calc(var(--control-h)+0.5rem)]';
+    expect(toggle.className).toContain(height);
+    expect(streak.className).toContain(height);
+    expect(refresh.className).toContain(height);
+    expect(toggle.className).not.toContain('h-[52px]');
+
+    // The row cannot outgrow the content width: only the toggle gives way.
+    expect(toggle.className).toContain('min-w-0');
+    expect(toggle.className).toContain('flex-1');
+    expect(streak.className).toContain('shrink-0');
+    expect(refresh.className).toContain('shrink-0');
+    // Nothing in the row may be pulled past the page gutter.
+    expect(row.className).not.toMatch(/-mx-|w-screen|min-w-fit|overflow-hidden/);
+    expect(refresh.className).not.toMatch(/-mr-|-mx-/);
   });
 
   it('prompts to set a goal when no targets are configured', async () => {

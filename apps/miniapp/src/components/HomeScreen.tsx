@@ -345,12 +345,21 @@ export function HomeScreen({
         {...(weekly ? { label: range.label } : {})}
       />
 
-      <div className="flex items-center gap-2">
+      {/*
+        One height for the whole row. `--control-h` is the inner item (the iOS
+        touch floor); the segmented track adds its own 8px of padding, so every
+        outer box here is `--control-h + 0.5rem` and the three controls line up
+        instead of the track sitting 8px taller than the pill and the icon.
+        `min-w-0` on the toggle and `shrink-0` on the two fixed controls keep the
+        row inside the page gutter: the refresh button is the manual revalidate
+        affordance, so it must never be pushed off the right edge.
+      */}
+      <div className="flex items-center gap-2 [--control-h:44px]">
         <ToggleGroup
           type="single"
           value={view}
           onValueChange={(v) => v && onViewChange(v as 'daily' | 'weekly')}
-          className="min-w-0 flex-1"
+          className="h-[calc(var(--control-h)+0.5rem)] min-w-0 flex-1"
           aria-label="View"
         >
           <ToggleGroupItem value="daily">Daily</ToggleGroupItem>
@@ -360,7 +369,7 @@ export function HomeScreen({
           <button
             type="button"
             onClick={() => setStreakOpen(true)}
-            className="bg-secondary text-foreground text-caption inline-flex min-h-11 shrink-0 items-center gap-1 rounded-control px-3 font-medium transition-transform duration-[120ms] hover:bg-accent active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="bg-secondary text-foreground text-caption inline-flex h-[calc(var(--control-h)+0.5rem)] shrink-0 items-center gap-1 rounded-control px-3 font-medium transition-transform duration-[120ms] hover:bg-accent active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             <Flame data-testid="streak-flame" className="size-4 stroke-[1.75]" aria-hidden />
             <span className="tabular">{streak}</span>
@@ -373,7 +382,7 @@ export function HomeScreen({
           aria-label="Refresh"
           disabled={refreshing}
           onClick={manualRefresh}
-          className="shrink-0"
+          className="h-[calc(var(--control-h)+0.5rem)] w-11 shrink-0"
         >
           <RefreshCw
             className={cn('size-4', refreshing && 'animate-spin motion-reduce:animate-none')}
