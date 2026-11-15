@@ -4,6 +4,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { Backend, MealDates, RecentMeal } from '@/lib/backend';
 import { cacheKey } from '@/lib/cache';
 import { hapticNotify } from '@/lib/telegram';
+import type { ToastFn } from '@/lib/toast';
 import { useCachedData } from '@/lib/useCachedData';
 import { cn } from '@/lib/utils';
 import {
@@ -32,8 +33,6 @@ import {
   DialogTitle,
 } from './ui/dialog.js';
 
-type ToastKind = 'success' | 'error' | 'info';
-
 /** The undo window after a swipe-delete; the removal is committed when it ends. */
 const UNDO_MS = 6000;
 
@@ -59,7 +58,7 @@ interface HomeScreenProps {
   onSetGoal: () => void;
   /** Setup is covering Home: the install tip must not render behind it. */
   hideInstallGuide?: boolean;
-  onToast?: (kind: ToastKind, message: string) => void;
+  onToast?: ToastFn;
   /** One-line credit trace when a BYOK call overflowed onto our key. */
   creditNotice?: string | null;
   onCreditNotice?: (notice: string) => void;

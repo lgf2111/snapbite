@@ -11,10 +11,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { Backend } from '@/lib/backend';
 import { hapticNotify } from '@/lib/telegram';
+import type { ToastFn } from '@/lib/toast';
 import type { MealResult } from '@snapbite/core';
 import { useEffect, useRef, useState } from 'react';
-
-type ToastKind = 'success' | 'error' | 'info';
 
 interface ReviseWithAiDialogProps {
   open: boolean;
@@ -28,7 +27,7 @@ interface ReviseWithAiDialogProps {
    * editable meal for review; nothing is saved until the user hits Save.
    */
   onDraft: (revised: MealResult) => void;
-  onToast?: (kind: ToastKind, message: string) => void;
+  onToast?: ToastFn;
   /** One-line credit trace when a BYOK call overflowed onto our key. */
   onCreditNotice?: (notice: string) => void;
 }
@@ -51,6 +50,7 @@ export function ReviseWithAiDialog({
   const [text, setText] = useState(initialInstruction);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const instruction = text.trim();
   /** A one-word instruction is not enough to revise a meal. */
@@ -58,7 +58,10 @@ export function ReviseWithAiDialog({
 
   // Reset the input to the initial instruction whenever the dialog opens.
   useEffect(() => {
-    if (open) setText(initialInstruction);
+    if (open) {
+      setText(initialInstruction);
+      setError('');
+    }
   }, [open, initialInstruction]);
 
   // Cycle a status message while the model runs so it visibly progresses.
@@ -89,6 +92,7 @@ export function ReviseWithAiDialog({
       return;
     }
     setBusy(true);
+    setError('');
     try {
       const { notice, ...revised } = await backend.reviseDraft(mealId, instruction);
       if (notice) onCreditNotice?.(notice);
@@ -99,7 +103,12 @@ export function ReviseWithAiDialog({
       setText('');
     } catch (e) {
       hapticNotify('error');
-      onToast?.('error', e instanceof Error ? e.message : 'Could not update');
+      // The server's detail is the useful part (quota, provider, timeout). Keep
+      // it in the dialog as well as the toast, and let the toast retry without
+      // making the person retype the instruction.
+      const message = e instanceof Error && e.message ? e.message : 'Could not update';
+      setError(message);
+      onToast?.('error', message, { label: 'Try again', onClick: () => void submit() });
     } finally {
       setBusy(false);
     }
@@ -137,7 +146,10 @@ export function ReviseWithAiDialog({
               maxLength={500}
               disabled={busy}
               className="min-h-24"
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                setText(e.target.value);
+                if (error) setError('');
+              }}
             />
           </div>
           {busy && (
@@ -145,8 +157,13 @@ export function ReviseWithAiDialog({
               {status}
             </p>
           )}
+          {error && (
+            <p role="alert" className="text-destructive text-caption">
+              {error}
+            </p>
+          )}
           <DialogActions>
-            <Button type="submit" className="h-12 w-full" disabled={busy}>
+            <Button type="submit" className="h-12 w-full" disabled={busy} aria-busy={busy}>
               {busy ? 'Updating…' : 'Update meal'}
             </Button>
             <Button

@@ -21,8 +21,12 @@ function tzOffsetMinutes(): number {
 
 /** Default per-request timeout (ms). */
 const DEFAULT_TIMEOUT_MS = 20_000;
-/** AI calls (analyze/revise) run a model server-side; give them more headroom. */
-const AI_TIMEOUT_MS = 60_000;
+/**
+ * AI calls (analyze/revise) run a model server-side. The Worker aborts revise at
+ * 45s and returns a JSON 504; this must sit above that so the server's readable
+ * error wins the race, with room for a slow mobile link to deliver it.
+ */
+const AI_TIMEOUT_MS = 75_000;
 
 export interface MealSummary {
   id: string;
@@ -300,16 +304,19 @@ export class ApiClient {
       // Keep the numeric status in the log, never on screen. This is also the
       // line that identifies which route failed when Home reports an outage.
       console.error(`[api] ${init.method ?? 'GET'} ${path} failed with HTTP ${res.status}`);
+      // A 4xx/5xx that came with an explanation must reach the person: the
+      // server knows why it failed (quota, provider, timeout) and the dialog
+      // shows that text verbatim. Only a body we cannot read at all — a network
+      // drop, an HTML edge page — falls back to the generic retry sentence.
       let detail: string = LOAD_FAILED_MESSAGE;
       try {
-        const body = (await res.json()) as { detail?: string; error?: string };
-        detail = body.detail ?? body.error ?? detail;
+        const body = (await res.json()) as { detail?: unknown; error?: unknown };
+        const text = (value: unknown): string | null =>
+          typeof value === 'string' && value.trim() ? value.trim() : null;
+        detail = text(body.detail) ?? text(body.error) ?? detail;
       } catch {
         // non-JSON error body
       }
-      // A server may still echo a provider's status text in `detail`; never let
-      // "HTTP 503" reach a person.
-      if (/\bHTTP\s+\d{3}\b/i.test(detail)) detail = LOAD_FAILED_MESSAGE;
       throw new ApiError(res.status, detail);
     }
     return (await res.json()) as T;

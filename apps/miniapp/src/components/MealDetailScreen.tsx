@@ -16,6 +16,7 @@ import { getCached, setCached } from '@/lib/cache';
 import { shareOrSaveImage } from '@/lib/share';
 import { type MealShareCardInput, renderMealShareCard } from '@/lib/shareCard';
 import { hapticImpact } from '@/lib/telegram';
+import type { ToastFn } from '@/lib/toast';
 import { useBackButton, useMainButton } from '@/lib/useTelegramButtons';
 import { cn } from '@/lib/utils';
 import {
@@ -33,8 +34,6 @@ import { SaveMealDialog } from './SaveMealDialog.js';
 import { SharePreviewDialog } from './SharePreviewDialog.js';
 import { ReviseWithAiDialog } from './UpdateWithAi.js';
 
-type ToastKind = 'success' | 'error' | 'info';
-
 interface MealDetailScreenProps {
   backend: Backend;
   mealId: string;
@@ -42,7 +41,7 @@ interface MealDetailScreenProps {
   initialMeal?: RecentMeal | null;
   onBack: () => void;
   onChanged: () => void;
-  onToast?: (kind: ToastKind, message: string) => void;
+  onToast?: ToastFn;
 }
 
 type MacroKey = 'energyKcal' | 'proteinG' | 'carbsG' | 'fatG';

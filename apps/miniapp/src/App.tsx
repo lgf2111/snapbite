@@ -15,6 +15,7 @@ import { readConfig } from './lib/config.js';
 import { takeLaunchIntent } from './lib/launch.js';
 import { markKeyDecision } from './lib/onboarding.js';
 import { type Route, navigate, onRouteChange, parseRoute } from './lib/router.js';
+import type { ToastAction, ToastKind } from './lib/toast.js';
 import { todayKey } from './lib/weekPrefs.js';
 
 // Lazy-loaded so they don't bloat the initial (Home) bundle.
@@ -33,8 +34,8 @@ const ReportsScreen = lazy(() =>
 
 const backend: Backend = createBackend();
 
-const toastFn = (kind: 'success' | 'error' | 'info', msg: string): void => {
-  toast[kind === 'error' ? 'error' : 'success'](msg);
+const toastFn = (kind: ToastKind, msg: string, action?: ToastAction): void => {
+  toast[kind === 'error' ? 'error' : 'success'](msg, action ? { action } : undefined);
 };
 
 function ScreenFallback() {

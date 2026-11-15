@@ -1,3 +1,4 @@
+import { ApiError } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
 import type { MealResult } from '@snapbite/core';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -16,8 +17,11 @@ const DRAFT: MealResult = {
   needsConfirmation: false,
 };
 
-function setup(over: Record<string, unknown> = {}) {
-  const reviseDraft = vi.fn(async () => DRAFT);
+function setup(
+  over: Record<string, unknown> = {},
+  revise: () => Promise<MealResult> = async () => DRAFT,
+) {
+  const reviseDraft = vi.fn(revise);
   const backend = { mode: 'local' as const, reviseDraft } as unknown as Backend;
   const props = {
     open: true,
@@ -117,5 +121,61 @@ describe('Update with AI', () => {
       expect(el.className, el.className).not.toMatch(/\b(sticky|absolute|fixed)\b/);
       expect(el.className, el.className).not.toMatch(/(^|\s)-m[tbyxl]?-/);
     }
+  });
+
+  it('shows a real pending state while the model runs', async () => {
+    let finish!: (meal: MealResult) => void;
+    const pending = new Promise<MealResult>((resolve) => {
+      finish = resolve;
+    });
+    const { props } = setup({}, () => pending);
+
+    fireEvent.change(input(), { target: { value: 'add a can of coke' } });
+    fireEvent.click(apply());
+
+    const busy = screen.getByRole('button', { name: 'Updating…' }) as HTMLButtonElement;
+    expect(busy.disabled).toBe(true);
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(input().disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+
+    finish(DRAFT);
+    await waitFor(() => expect(props.onDraft).toHaveBeenCalledWith(DRAFT));
+  });
+
+  it('surfaces the server detail, keeps the instruction, and retries from the toast', async () => {
+    const quota =
+      "Your AI key hit its limit and you're out of credits. Add credits in Settings, or use a working key.";
+    const revise = vi
+      .fn<() => Promise<MealResult>>()
+      .mockRejectedValueOnce(new ApiError(402, quota))
+      .mockResolvedValueOnce(DRAFT);
+    const { props, reviseDraft } = setup({}, revise);
+
+    fireEvent.change(input(), { target: { value: 'add a can of coke' } });
+    fireEvent.click(apply());
+
+    // The toast carries SnapBite's own words and a retry action.
+    await waitFor(() =>
+      expect(props.onToast).toHaveBeenCalledWith('error', quota, expect.anything()),
+    );
+    expect(props.onToast).toHaveBeenCalledWith(
+      'error',
+      quota,
+      expect.objectContaining({ label: 'Try again' }),
+    );
+    // The detail stays on screen and the dialog does not close or clear the text.
+    expect(screen.getByRole('alert').textContent).toBe(quota);
+    expect(input().value).toBe('add a can of coke');
+    expect(props.onOpenChange).not.toHaveBeenCalledWith(false);
+
+    const action = (props.onToast as ReturnType<typeof vi.fn>).mock.calls[0]?.[2] as {
+      onClick: () => void;
+    };
+    action.onClick();
+
+    await waitFor(() => expect(props.onDraft).toHaveBeenCalledWith(DRAFT));
+    expect(reviseDraft).toHaveBeenCalledTimes(2);
+    expect(props.onOpenChange).toHaveBeenCalledWith(false);
   });
 });

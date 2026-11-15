@@ -93,14 +93,31 @@ describe('ApiClient', () => {
     errorSpy.mockRestore();
   });
 
-  it('replaces a status code echoed in the server detail', async () => {
+  it('keeps a provider status echoed in the server detail (the server explains it)', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const fetchMock = vi.fn(async () => jsonResponse({ detail: 'gemini returned HTTP 503' }, 503));
     const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
 
     await expect(client.analytics('90d')).rejects.toMatchObject({
       status: 503,
-      message: LOAD_FAILED_MESSAGE,
+      message: 'gemini returned HTTP 503',
+    });
+    errorSpy.mockRestore();
+  });
+
+  it("surfaces the server's quota wording, not the raw provider string", async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const quota =
+      "Your AI key hit its limit and you're out of credits. Add credits in Settings, or use a working key.";
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ error: 'Revision failed', detail: quota, kind: 'quota' }, 402),
+    );
+    const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
+
+    await expect(client.reviseMeal('meal-9', 'add a coke')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 402,
+      message: quota,
     });
     errorSpy.mockRestore();
   });
