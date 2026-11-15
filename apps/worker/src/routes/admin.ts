@@ -3,6 +3,7 @@ import { addCredits } from '../billing/accounts.js';
 import { looksLikeEmail, normalizeEmail } from '../db/auth.js';
 import { createDb, listBroadcastTargets } from '../db/users.js';
 import type { AppBindings } from '../env.js';
+import { type BackfillBot, MAX_BACKFILL_BATCH, backfillTelegramPhotos } from '../photoBackfill.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
 import type { BotClientFactory } from './webhook.js';
 
@@ -39,7 +40,14 @@ async function safeEqual(a: string, b: string): Promise<boolean> {
  * Plain text, no parse_mode (a URL is not mangled). Nothing is stored and nobody
  * is de-duplicated: running it twice messages everyone twice.
  */
-export function adminRoutes(opts: { botClientFactory?: BotClientFactory; delayMs?: number } = {}) {
+export function adminRoutes(
+  opts: {
+    botClientFactory?: BotClientFactory;
+    delayMs?: number;
+    /** Fake bot for the photo backfill; production builds one from the env token. */
+    backfillBot?: BackfillBot;
+  } = {},
+) {
   const app = new Hono<AppBindings>();
   const delayMs = opts.delayMs ?? SEND_GAP_MS;
   const makeBot: BotClientFactory = opts.botClientFactory ?? ((t) => new TelegramBotClient(t));
@@ -134,6 +142,49 @@ export function adminRoutes(opts: { botClientFactory?: BotClientFactory; delayMs
 
     const balance = await addCredits(c.env.DB, email, credits, 'topup');
     return c.json({ ok: true, email, credits: balance });
+  });
+
+  // POST /api/admin/backfill-photos — { limit? } -> BackfillResult
+  // Copies Telegram-held meal photos into R2, one bounded batch per call, so it
+  // can be re-run until `remaining` reaches zero. A dead Telegram file is
+  // recorded and skipped rather than aborting the batch.
+  app.post('/backfill-photos', async (c) => {
+    const expected = c.env.ADMIN_TOKEN?.trim();
+    if (!expected) {
+      return c.json({ error: 'Not configured', detail: 'ADMIN_TOKEN is not set' }, 503);
+    }
+    if (!(await safeEqual(c.req.header('x-admin-token') ?? '', expected))) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const body = (await c.req.json().catch(() => null)) as { limit?: unknown } | null;
+    const requested = typeof body?.limit === 'number' ? body.limit : MAX_BACKFILL_BATCH;
+    if (!Number.isInteger(requested) || requested < 1 || requested > MAX_BACKFILL_BATCH) {
+      return c.json(
+        {
+          error: 'Bad request',
+          detail: `limit must be an integer from 1 to ${MAX_BACKFILL_BATCH}`,
+        },
+        400,
+      );
+    }
+
+    try {
+      const bot =
+        opts.backfillBot ??
+        (c.env.TELEGRAM_BOT_TOKEN ? makeBot(c.env.TELEGRAM_BOT_TOKEN) : undefined);
+      return c.json(
+        await backfillTelegramPhotos(c.env, { limit: requested, ...(bot ? { bot } : {}) }),
+      );
+    } catch (err) {
+      return c.json(
+        {
+          error: 'Backfill failed',
+          detail: err instanceof Error ? err.message : String(err),
+        },
+        503,
+      );
+    }
   });
 
   return app;

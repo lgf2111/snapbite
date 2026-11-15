@@ -193,6 +193,9 @@ export interface PhotoBackfillRow {
   telegramFileId: string;
 }
 
+/** The work queue's predicate, shared so the batch and the count cannot drift. */
+const NEEDS_PHOTO_BACKFILL = 'telegram_file_id IS NOT NULL AND photo_key IS NULL';
+
 export async function mealsNeedingPhotoBackfill(
   d1: D1Database,
   limit = 20,
@@ -201,13 +204,21 @@ export async function mealsNeedingPhotoBackfill(
     .prepare(
       `SELECT id, user_id AS userId, telegram_file_id AS telegramFileId
          FROM meals
-        WHERE telegram_file_id IS NOT NULL AND photo_key IS NULL
+        WHERE ${NEEDS_PHOTO_BACKFILL}
         ORDER BY logged_at DESC
         LIMIT ?`,
     )
     .bind(limit)
     .all<PhotoBackfillRow>();
   return rows.results ?? [];
+}
+
+/** How many meals still need the backfill (0 means the queue is drained). */
+export async function countMealsNeedingPhotoBackfill(d1: D1Database): Promise<number> {
+  const row = await d1
+    .prepare(`SELECT COUNT(*) AS n FROM meals WHERE ${NEEDS_PHOTO_BACKFILL}`)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 /**

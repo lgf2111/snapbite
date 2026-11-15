@@ -65,7 +65,6 @@ import {
   createAuthDb,
   findUserByEmail,
   looksLikeEmail,
-  mealsNeedingPhotoBackfill,
   normalizeEmail,
 } from '../db/auth.js';
 import {
@@ -78,7 +77,7 @@ import {
 import { describeError, logError, recentErrors } from '../db/errors.js';
 import { type Favorite, createFavoritesDb, listFavorites } from '../db/favorites.js';
 import { recentFeedback, storeFeedback } from '../db/feedback.js';
-import { setMealPhoto, setMealPhotoById } from '../db/meals.js';
+import { setMealPhoto } from '../db/meals.js';
 import {
   type MealTelegramRef,
   canStorePhoto,
@@ -114,6 +113,11 @@ import {
 } from '../db/users.js';
 import { type AppBindings, parseAdminId, parseChatId } from '../env.js';
 import { lookupBarcode } from '../openfoodfacts.js';
+import {
+  type BackfillResult,
+  MAX_BACKFILL_BATCH,
+  backfillTelegramPhotos,
+} from '../photoBackfill.js';
 import { enqueuePhotoRetry } from '../photoRetry.js';
 import { photoKey, r2Store } from '../storage/photos.js';
 import { TelegramBotClient } from '../telegram/botClient.js';
@@ -1171,47 +1175,28 @@ async function handleBackfillPhotosCommand(
     return;
   }
 
-  const limit = Math.min(Math.max(Number.parseInt(parsed.args.trim(), 10) || 20, 1), 50);
-  const rows = await mealsNeedingPhotoBackfill(c.env.DB, limit);
-  if (rows.length === 0) {
+  const limit = Math.min(
+    Math.max(Number.parseInt(parsed.args.trim(), 10) || MAX_BACKFILL_BATCH, 1),
+    MAX_BACKFILL_BATCH,
+  );
+  let result: BackfillResult;
+  try {
+    result = await backfillTelegramPhotos(c.env, { limit, bot });
+  } catch (err) {
+    await bot.sendMessage(parsed.chatId, {
+      text: err instanceof Error ? err.message : 'Backfill failed.',
+    });
+    return;
+  }
+  if (result.pending === 0) {
     await bot.sendMessage(parsed.chatId, {
       text: 'Nothing to backfill — every meal with a photo is already stored.',
     });
     return;
   }
 
-  const db = createMealsDb(c.env.DB);
-  let moved = 0;
-  let failed = 0;
-  for (const row of rows) {
-    try {
-      const path = await bot.getFilePath(row.telegramFileId);
-      if (!path) {
-        failed++;
-        continue;
-      }
-      const file = await bot.downloadFile(path);
-      if (!file) {
-        failed++;
-        continue;
-      }
-      const bytes = Uint8Array.from(atob(file.base64), (ch) => ch.charCodeAt(0));
-      if (!(await canStorePhoto(db, row.userId, bytes.byteLength))) {
-        failed++;
-        continue;
-      }
-      const key = photoKey(row.id);
-      await store.put(key, bytes, file.mimeType);
-      await setMealPhotoById(c.env.DB, row.id, key, file.mimeType, bytes.byteLength);
-      moved++;
-    } catch (err) {
-      failed++;
-      console.error('[backfill] photo failed', row.id, err);
-    }
-  }
-
   await bot.sendMessage(parsed.chatId, {
-    text: `Backfill: ${moved} photo${moved === 1 ? '' : 's'} stored, ${failed} failed. Run again for the next batch.`,
+    text: `Backfill: ${result.copied} photo${result.copied === 1 ? '' : 's'} stored, ${result.failed} failed. ${result.remaining} left — run again for the next batch.`,
   });
 }
 
