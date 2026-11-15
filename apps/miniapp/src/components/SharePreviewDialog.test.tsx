@@ -34,6 +34,15 @@ function renderDialog(
   return { onShare, onOpenChange };
 }
 
+function parts() {
+  return {
+    sheet: document.querySelector('[data-slot=dialog-content]') as HTMLElement,
+    region: screen.getByTestId('share-card-region'),
+    footer: screen.getByTestId('share-preview-footer'),
+    card: screen.getByTestId('share-card'),
+  };
+}
+
 describe('SharePreviewDialog', () => {
   it('shows the card, a 48 px Share and a text Cancel with a 44 px target', () => {
     const { onShare, onOpenChange } = renderDialog();
@@ -63,7 +72,7 @@ describe('SharePreviewDialog', () => {
 
   it('sits directly on the sheet surface: no second inner card, no padding frame', () => {
     renderDialog();
-    const sheet = document.querySelector('[data-slot=dialog-content]') as HTMLElement;
+    const { sheet, card } = parts();
 
     expect(sheet.className).toContain('p-0');
     expect(sheet.className).toContain('gap-0');
@@ -72,30 +81,92 @@ describe('SharePreviewDialog', () => {
     expect(sheet.className).toContain('border');
     expect(sheet.className).toContain('bg-card');
     // The card itself is flush with the sheet, with no border of its own.
-    const card = screen.getByTestId('share-card');
     expect(card.className).not.toContain('border');
     expect(card.className).not.toMatch(/\brounded\b/);
   });
 
-  it('fits a 430×932 screen above the 72 px tab bar', () => {
+  it('is one column: the card region, then a shrink-0 footer sibling', () => {
     renderDialog();
-    const sheet = document.querySelector('[data-slot=dialog-content]') as HTMLElement;
-    // The sheet can never exceed the viewport, and it is width-bounded.
-    expect(sheet.className).toContain('max-h-');
-    expect(sheet.className).toContain('max-w-md');
-    expect(sheet.className).toContain('w-[calc(100%-2rem)]');
+    const { sheet, region, footer, card } = parts();
 
-    /*
-     * jsdom does no layout, so this pins the arithmetic the CSS encodes:
-     * at 430 px wide the sheet is min(430 - 32, 384) = 384 px, the 4:5 card is
-     * 480 px, and the action block is 2×16 padding + 48 Share + 8 gap + 44
-     * Cancel + 1 hairline = 133 px. 613 px leaves 319 px of the 932 px screen,
-     * so the sheet ends above the 72 px tab bar.
-     */
-    const cardWidth = Math.min(430 - 32, 384);
+    expect(sheet.className).toContain('flex');
+    expect(sheet.className).toContain('flex-col');
+
+    // The card lives inside the only region that may take the leftover height.
+    expect(region.className).toContain('min-h-0');
+    expect(region.className).toContain('flex-1');
+    expect(region.className).toContain('overflow-hidden');
+    expect(region.contains(card)).toBe(true);
+
+    // The footer comes after the region, not inside it: it can never be
+    // interleaved with the card or scrolled out from under the actions.
+    expect(region.contains(footer)).toBe(false);
+    expect(region.nextElementSibling).toBe(footer);
+    expect(footer.className).toContain('shrink-0');
+    expect(footer.contains(screen.getByRole('button', { name: 'Share meal' }))).toBe(true);
+    expect(footer.contains(screen.getByRole('button', { name: 'Cancel' }))).toBe(true);
+  });
+
+  it('caps the sheet above the tab bar and never scrolls it', () => {
+    renderDialog();
+    const { sheet } = parts();
+
+    // The shell is short enough to leave the 72 px bar plus the bottom inset
+    // and a 1 rem gap free, and it sits above the bar instead of behind it.
+    expect(sheet.className).toContain(
+      'max-h-[calc(100svh-var(--spacing-bar)-env(safe-area-inset-bottom)-1rem)]',
+    );
+    expect(sheet.className).toContain(
+      'bottom-[calc(var(--spacing-bar)+env(safe-area-inset-bottom)+1rem)]',
+    );
+    // One surface: the sheet itself is not a scroll container. The card scales
+    // to fit, so no region needs to scroll at all.
+    expect(sheet.className).toContain('overflow-hidden');
+    expect(sheet.className).toContain('overflow-y-hidden');
+    expect(sheet.className).not.toContain('overflow-y-auto');
+  });
+
+  it('sizes the card from the space the footer leaves, not the viewport width', () => {
+    renderDialog();
+    const { sheet } = parts();
+    const sized = sheet.querySelector<HTMLElement>(
+      '[class*="100svh"][class*="8.3125rem"]',
+    ) as HTMLElement;
+
+    expect(sized).toBeTruthy();
+    // Height-driven 4:5 width: min(100%, (max sheet height - 133 px footer -
+    // the 2 px sheet hairline) × 0.8).
+    expect(sized.className).toContain('w-[min(100%,calc((100svh');
+    expect(sized.className).toContain('8.3125rem_-_2px)_*_0.8)');
+    expect(sized.querySelector('[data-testid="share-card"]')).toBeTruthy();
+  });
+
+  it('fits the natural card and footer above the bar on both target screens', () => {
+    // calc(100% - 2rem) at each width, minus the 1 px border on each side.
+    const sheetWidth = { 430: 430 - 32 - 2, 375: 375 - 32 - 2 };
+    // hairline + p-4 + Share + gap + Cancel + p-4
+    const footer = 1 + 16 + 48 + 8 + 44 + 16;
+    for (const [viewport, width] of [
+      [932, sheetWidth[430]],
+      [667, sheetWidth[375]],
+    ] as const) {
+      const cardWidth = Math.min(width, (viewport - 72 - 16 - footer - 2) * (4 / 5));
+      const sheetHeight = cardWidth * (5 / 4) + footer + 2;
+      expect(cardWidth).toBe(width);
+      expect(sheetHeight).toBeLessThanOrEqual(viewport - 72 - 16);
+    }
+  });
+
+  it('scales the card down instead of cropping it when the screen is short', () => {
+    // A 375×568 screen: the natural 341 px card is too tall, so the height term
+    // takes over and the whole card scales to 4:5 of the space above the footer.
+    const viewport = 568;
+    const footer = 133;
+    const naturalWidth = 375 - 32 - 2;
+    const cardWidth = Math.min(naturalWidth, (viewport - 72 - 16 - footer - 2) * (4 / 5));
     const cardHeight = cardWidth * (5 / 4);
-    const actionsHeight = 16 * 2 + 48 + 8 + 44 + 1;
-    expect(cardHeight + actionsHeight).toBeLessThanOrEqual(932 - 72);
+    expect(cardWidth).toBeLessThan(naturalWidth);
+    expect(cardHeight + footer + 2).toBeLessThanOrEqual(viewport - 72 - 16);
   });
 
   it('shows the sharing state and disables both actions', () => {
