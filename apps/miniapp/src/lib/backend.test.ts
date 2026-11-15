@@ -2,6 +2,8 @@
 import type { MealResult } from '@snapbite/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBackend } from './backend.js';
+import type { RecentMeal } from './backend.js';
+import { cacheKey, clearCache, getCached, setCached } from './cache.js';
 import { saveMeal } from './store.js';
 
 function meal(name: string, kcal: number): MealResult {
@@ -21,10 +23,14 @@ function meal(name: string, kcal: number): MealResult {
 describe('local backend (no VITE_WORKER_URL)', () => {
   beforeEach(() => {
     localStorage.clear();
+    clearCache();
     // Force local mode regardless of any ambient VITE_WORKER_URL in the shell.
     vi.stubEnv('VITE_WORKER_URL', '');
   });
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => {
+    clearCache();
+    vi.unstubAllEnvs();
+  });
 
   it('runs in local mode', () => {
     expect(createBackend().mode).toBe('local');
@@ -91,6 +97,22 @@ describe('local backend (no VITE_WORKER_URL)', () => {
     const detail = await backend.detail(id);
     expect(detail.foods[0]?.name).toBe('fried rice');
     expect(detail.total?.energyKcal).toBe(300);
+  });
+
+  it('patches the cached list in place when a meal is updated', async () => {
+    const backend = createBackend();
+    saveMeal(meal('rice', 100));
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const list = await backend.mealsByDate(today);
+    const id = list[0]?.id as string;
+    setCached(cacheKey.mealsByDate(today), list);
+
+    await backend.update(id, meal('fried rice', 300));
+
+    const cached = getCached<RecentMeal[]>(cacheKey.mealsByDate(today));
+    expect(cached).toHaveLength(1);
+    expect(cached?.[0]).toMatchObject({ id, label: 'fried rice', energyKcal: 300 });
   });
 
   it('deletes a saved meal in local mode', async () => {

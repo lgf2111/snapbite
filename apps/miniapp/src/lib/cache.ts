@@ -2,9 +2,12 @@
  * A tiny stale-while-revalidate cache for the Mini App's read data.
  *
  * Goal: the app should feel instant. Reads render immediately from a cached
- * copy (in memory, warmed from localStorage on load), while a background fetch
+ * copy (in memory, warmed from sessionStorage on load), while a background fetch
  * revalidates and only notifies subscribers when the data actually changed.
- * Mutations invalidate the relevant keys so the next read refetches.
+ * Mutations patch or invalidate the relevant keys so the next read is current.
+ *
+ * Storage is sessionStorage, not localStorage: the payload is a screen's last
+ * look for this tab, not a durable offline database. Closing the tab drops it.
  *
  * This is deliberately dependency-free and small (no react-query etc.), in
  * keeping with the project's lightweight principle.
@@ -20,6 +23,7 @@ export const cacheKey = {
   mealsRange: (start: string, end: string) => `meals:range:${start}:${end}`,
   mealDates: () => 'meals:dates',
   favorites: () => 'favorites',
+  reports: (range: string) => `reports:${range}`,
   settings: () => 'settings',
 } as const;
 
@@ -31,19 +35,53 @@ interface Entry {
 
 const MEM = new Map<string, Entry>();
 const STORE_PREFIX = 'snapbite.cache.';
-/** Entries older than this are still shown, but always revalidated. */
-const FRESH_MS = 60_000;
+/**
+ * Payloads are small, but a date stepper can mint a key per day. Keep the most
+ * recent screens and evict the oldest; this is a screen cache, not an archive.
+ */
+const MAX_ENTRIES = 24;
+/** A single entry larger than this is kept in memory but not persisted. */
+const MAX_ENTRY_CHARS = 256_000;
 
 function storageKey(key: string): string {
   return `${STORE_PREFIX}${key}`;
 }
 
-/** Reads an entry from memory, falling back to localStorage (and warming memory). */
+/** Every key currently held in memory or sessionStorage (without the prefix). */
+function allKeys(): Set<string> {
+  const keys = new Set(MEM.keys());
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const full = sessionStorage.key(i);
+      if (full?.startsWith(STORE_PREFIX)) keys.add(full.slice(STORE_PREFIX.length));
+    }
+  } catch {
+    // storage unavailable — memory is the whole cache
+  }
+  return keys;
+}
+
+/** Drops the oldest entries so one more key fits under the cap. */
+function evictOldest(keep: string): void {
+  const keys = [...allKeys()].filter((key) => key !== keep);
+  if (keys.length < MAX_ENTRIES) return;
+  const oldest = keys.map((key) => ({ key, at: read(key)?.at ?? 0 })).sort((a, b) => a.at - b.at);
+  for (const { key } of oldest.slice(0, keys.length - MAX_ENTRIES + 1)) {
+    MEM.delete(key);
+    try {
+      sessionStorage.removeItem(storageKey(key));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/** Reads an entry from memory, falling back to sessionStorage (warming memory). */
 function read(key: string): Entry | undefined {
   const mem = MEM.get(key);
   if (mem) return mem;
   try {
-    const raw = localStorage.getItem(storageKey(key));
+    const raw = sessionStorage.getItem(storageKey(key));
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Entry;
     if (parsed && typeof parsed === 'object' && 'value' in parsed) {
@@ -60,7 +98,14 @@ function write(key: string, value: Json): Entry {
   const entry: Entry = { value, at: Date.now() };
   MEM.set(key, entry);
   try {
-    localStorage.setItem(storageKey(key), JSON.stringify(entry));
+    const serialized = JSON.stringify(entry);
+    if (serialized.length <= MAX_ENTRY_CHARS) {
+      evictOldest(key);
+      sessionStorage.setItem(storageKey(key), serialized);
+    } else {
+      // Too large to persist: never leave an older copy behind to be read.
+      sessionStorage.removeItem(storageKey(key));
+    }
   } catch {
     // storage full/unavailable — memory cache still works for this session
   }
@@ -70,12 +115,6 @@ function write(key: string, value: Json): Entry {
 /** Returns the cached value for a key, or undefined when absent. */
 export function getCached<T>(key: string): T | undefined {
   return read(key)?.value as T | undefined;
-}
-
-/** Whether a cached value exists and is still within the fresh window. */
-export function isFresh(key: string): boolean {
-  const e = read(key);
-  return e != null && Date.now() - e.at < FRESH_MS;
 }
 
 /** Writes a value to the cache (used after mutations to seed a known result). */
@@ -91,11 +130,11 @@ export function invalidate(prefix: string): void {
   try {
     const full = storageKey(prefix);
     const toRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
       if (k?.startsWith(full)) toRemove.push(k);
     }
-    for (const k of toRemove) localStorage.removeItem(k);
+    for (const k of toRemove) sessionStorage.removeItem(k);
   } catch {
     // ignore
   }
@@ -113,8 +152,8 @@ export function removeCachedItem(prefix: string, id: string): void {
   }
   try {
     const full = storageKey(prefix);
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
       if (k?.startsWith(full)) keys.add(k.slice(STORE_PREFIX.length));
     }
   } catch {
@@ -129,16 +168,49 @@ export function removeCachedItem(prefix: string, id: string): void {
   }
 }
 
+/**
+ * Merges `patch` into the item with `id` in every cached list under `prefix`.
+ * Used after an edit so a back-navigation renders the new label/macros instead
+ * of the pre-edit copy (and without dropping the list into a skeleton).
+ */
+export function patchCachedItem(prefix: string, id: string, patch: Record<string, unknown>): void {
+  const keys = new Set<string>();
+  for (const k of MEM.keys()) {
+    if (k.startsWith(prefix)) keys.add(k);
+  }
+  try {
+    const full = storageKey(prefix);
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k?.startsWith(full)) keys.add(k.slice(STORE_PREFIX.length));
+    }
+  } catch {
+    // storage unavailable — memory cache still works
+  }
+  for (const key of keys) {
+    const entry = read(key);
+    if (!entry || !Array.isArray(entry.value)) continue;
+    let changed = false;
+    const value = entry.value as Array<Record<string, unknown>>;
+    const next = value.map((item) => {
+      if (item?.id !== id) return item;
+      changed = true;
+      return { ...item, ...patch };
+    });
+    if (changed) write(key, next);
+  }
+}
+
 /** Clears the entire client cache (e.g. on account deletion). */
 export function clearCache(): void {
   MEM.clear();
   try {
     const toRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
       if (k?.startsWith(STORE_PREFIX)) toRemove.push(k);
     }
-    for (const k of toRemove) localStorage.removeItem(k);
+    for (const k of toRemove) sessionStorage.removeItem(k);
   } catch {
     // ignore
   }

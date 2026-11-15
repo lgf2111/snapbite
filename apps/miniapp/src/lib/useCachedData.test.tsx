@@ -20,23 +20,24 @@ describe('useCachedData', () => {
     await waitFor(() => expect(result.current.data).toBe('hello'));
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
+    expect(result.current.stale).toBe(false);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it('returns a cached value instantly without a loading flash, then revalidates', async () => {
-    // Seed a fresh cached value; a fresh entry should skip the refetch entirely.
+  it('returns a cached value instantly without a loading flash, then always revalidates', async () => {
     setCached('k2', 'cached');
     const fetcher = vi.fn().mockResolvedValue('fresh');
 
     const { result } = renderHook(() => useCachedData('k2', fetcher));
 
-    // Cached value is shown immediately, no spinner.
+    // Cached value is shown immediately, no spinner, while the refetch runs.
     expect(result.current.data).toBe('cached');
     expect(result.current.loading).toBe(false);
+    expect(result.current.stale).toBe(true);
 
-    // Entry is within the fresh window → no background fetch.
-    await Promise.resolve();
-    expect(fetcher).not.toHaveBeenCalled();
+    await waitFor(() => expect(result.current.data).toBe('fresh'));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(result.current.stale).toBe(false);
   });
 
   it('does not fetch when the key is null', async () => {
@@ -49,25 +50,74 @@ describe('useCachedData', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it('surfaces an error when there is nothing cached to show', async () => {
-    const fetcher = vi.fn().mockRejectedValue(new Error('network down'));
+  it('surfaces a first-load error and its HTTP status', async () => {
+    const failure = Object.assign(new Error('network down'), { status: 503 });
+    const fetcher = vi.fn().mockRejectedValue(failure);
     const { result } = renderHook(() => useCachedData('k3', fetcher));
 
     await waitFor(() => expect(result.current.error).toBe('network down'));
+    expect(result.current.errorStatus).toBe(503);
     expect(result.current.loading).toBe(false);
     expect(result.current.data).toBeUndefined();
   });
 
-  it('keeps cached rows but still surfaces a revalidation error', async () => {
+  it('keeps cached rows and stays silent when the background refresh fails', async () => {
     setCached('k3b', 'cached');
-    const fetcher = vi.fn().mockRejectedValue(new Error('network down'));
+    const fetcher = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('network down'), { status: 503 }));
     const { result } = renderHook(() => useCachedData('k3b', fetcher));
 
-    act(() => result.current.refresh());
-
-    await waitFor(() => expect(result.current.error).toBe('network down'));
+    await waitFor(() => expect(result.current.stale).toBe(false));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBeNull();
+    expect(result.current.errorStatus).toBeNull();
     expect(result.current.data).toBe('cached');
     expect(result.current.loading).toBe(false);
+  });
+
+  it('keeps the last rendered value when a new key has no cache, then swaps in place', async () => {
+    let resolveNew: (value: string) => void = () => {};
+    const newFetcher = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveNew = resolve;
+        }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ k, f }: { k: string; f: () => Promise<string> }) => useCachedData(k, f),
+      { initialProps: { k: 'day:1', f: async () => 'day-1' } },
+    );
+    await waitFor(() => expect(result.current.data).toBe('day-1'));
+
+    rerender({ k: 'day:2', f: newFetcher });
+
+    // No cache for the new key: yesterday stays on screen, no skeleton state.
+    expect(result.current.data).toBe('day-1');
+    expect(result.current.loading).toBe(false);
+    expect(result.current.stale).toBe(true);
+
+    act(() => resolveNew('day-2'));
+    await waitFor(() => expect(result.current.data).toBe('day-2'));
+    expect(result.current.stale).toBe(false);
+  });
+
+  it("snaps to a new key's cached value immediately", async () => {
+    setCached('day:2', 'cached-day-2');
+    const newFetcher = vi.fn(() => new Promise<string>(() => {}));
+
+    const { result, rerender } = renderHook(
+      ({ k, f }: { k: string; f: () => Promise<string> }) => useCachedData(k, f),
+      { initialProps: { k: 'day:1', f: async () => 'day-1' } },
+    );
+    await waitFor(() => expect(result.current.data).toBe('day-1'));
+
+    rerender({ k: 'day:2', f: newFetcher });
+
+    expect(result.current.data).toBe('cached-day-2');
+    expect(result.current.loading).toBe(false);
+    expect(result.current.stale).toBe(true);
   });
 
   it('ignores a stale response for a previous key after the key changes', async () => {

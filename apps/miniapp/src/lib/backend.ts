@@ -22,7 +22,14 @@ import {
   type SettingsView,
   type UserExport,
 } from './api.js';
-import { cacheKey, clearCache, invalidate, removeCachedItem, setCached } from './cache.js';
+import {
+  cacheKey,
+  clearCache,
+  invalidate,
+  patchCachedItem,
+  removeCachedItem,
+  setCached,
+} from './cache.js';
 import { type AppConfig, readConfig } from './config.js';
 import {
   type SavedMeal,
@@ -187,7 +194,9 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
       },
       async update(id, meal) {
         await api.updateMeal(id, meal);
-        invalidate(cacheKey.mealsPrefix);
+        // Patch the cached lists in place: a back-navigation must show the new
+        // label/macros, not the pre-edit copy (and no skeleton).
+        patchCachedItem(cacheKey.mealsPrefix, id, recentPatch(meal));
       },
       reviseDraft(id, instruction) {
         return api.reviseMeal(id, instruction);
@@ -353,6 +362,7 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
     },
     async update(id, meal) {
       updateSavedMeal(id, meal);
+      patchCachedItem(cacheKey.mealsPrefix, id, recentPatch(meal));
     },
     async reviseDraft(id) {
       // AI edits need the backend (the user's key + model live server-side).
@@ -645,6 +655,20 @@ function toRecent(m: MealSummary): RecentMeal {
     aiProvider: m.aiProvider,
     when: m.loggedAt,
     ...(m.previewUrl ? { previewUrl: m.previewUrl } : {}),
+  };
+}
+
+/** The list-row fields an edit changes; id, time, provider and preview stay put. */
+function recentPatch(meal: MealResult): Record<string, unknown> {
+  return {
+    label: shortMealTitle(
+      meal.title,
+      meal.foods.map((f) => f.food.name),
+    ),
+    energyKcal: meal.total.energyKcal,
+    proteinG: meal.total.proteinG,
+    carbsG: meal.total.carbsG,
+    fatG: meal.total.fatG,
   };
 }
 

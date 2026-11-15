@@ -1,7 +1,7 @@
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
-import { clearCache } from '@/lib/cache';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cacheKey, clearCache, setCached } from '@/lib/cache';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SettingsScreen } from './SettingsScreen.js';
 
@@ -68,6 +68,28 @@ describe('SettingsScreen', () => {
     const skeletons = document.querySelectorAll('[data-slot="skeleton"]');
     expect(skeletons).toHaveLength(4);
     for (const skeleton of skeletons) expect(skeleton.className).toContain('h-24');
+  });
+
+  it('paints cached settings on first load, with no skeleton, then revalidates', async () => {
+    setCached(cacheKey.settings(), SETTINGS);
+    let resolve!: (settings: SettingsView) => void;
+    const backend = stubBackend(
+      () =>
+        new Promise<SettingsView>((done) => {
+          resolve = done;
+        }),
+    );
+
+    render(<SettingsScreen backend={backend} />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy();
+    expect(screen.getByText('Lose steady · female, 31y')).toBeTruthy();
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0);
+
+    await act(async () => {
+      resolve(SETTINGS);
+      await Promise.resolve();
+    });
   });
 
   it('reports a failed load in place instead of a toast', async () => {

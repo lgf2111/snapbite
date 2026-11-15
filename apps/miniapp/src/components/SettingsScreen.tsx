@@ -127,7 +127,11 @@ function KeyGuide({ provider }: { provider: ProviderId }) {
 }
 
 export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps) {
-  const [settings, setSettings] = useState<SettingsView | null>(null);
+  // Seed synchronously so a warm cache renders the screen on first paint (no
+  // skeleton); the effect below applies the derived state and revalidates.
+  const [settings, setSettings] = useState<SettingsView | null>(
+    () => getCached<SettingsView>(cacheKey.settings()) ?? null,
+  );
   const [loadFailed, setLoadFailed] = useState(false);
   const [primaryCfg, setPrimaryCfg] = useState<ProviderConfig>({
     provider: 'gemini',

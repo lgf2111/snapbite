@@ -186,7 +186,7 @@ describe('first-run onboarding', () => {
 
   it('trusts the server over a cached "no profile" left by another account', async () => {
     // The anonymous account's settings, cached before signing in as someone else.
-    localStorage.setItem(
+    sessionStorage.setItem(
       'snapbite.cache.settings',
       JSON.stringify({
         at: Date.now(),

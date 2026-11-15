@@ -545,13 +545,17 @@ describe('HomeScreen', () => {
     expect(backend.remove).not.toHaveBeenCalled();
   });
 
-  it('shows the empty-state card, not skeletons, for a cached empty day', () => {
+  it('shows the empty-state card, not skeletons, for a cached empty day', async () => {
     setCached(cacheKey.mealsByDate('2026-09-16'), []);
     const backend = stubBackend();
     render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
 
     expect(screen.getByText('Nothing logged yet')).toBeInTheDocument();
     expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0);
+    // Let the mount revalidation settle inside act.
+    await act(async () => {
+      await Promise.resolve();
+    });
   });
 
   it('deletes a cached row in place: one row left, no skeletons, totals in the same commit', async () => {
@@ -563,6 +567,8 @@ describe('HomeScreen', () => {
     setCached(cacheKey.mealsByDate('2026-09-16'), two);
     const backend = stubBackend({ mealsByDate: vi.fn(async () => two) });
     render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+    // The mount revalidation is allowed; a delete must not add another fetch.
+    const fetchesAfterMount = vi.mocked(backend.mealsByDate).mock.calls.length;
 
     // A cached day paints both rows immediately, with no skeleton placeholders.
     expect(screen.getByText('Chicken rice')).toBeInTheDocument();
@@ -592,7 +598,7 @@ describe('HomeScreen', () => {
       await vi.advanceTimersByTimeAsync(6100);
     });
     expect(backend.remove).toHaveBeenCalledWith('a');
-    expect(backend.mealsByDate).not.toHaveBeenCalled();
+    expect(backend.mealsByDate).toHaveBeenCalledTimes(fetchesAfterMount);
     expect(screen.getAllByTestId('swipe-card')).toHaveLength(1);
     expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0);
     expect(numeral()).toBe('1610');

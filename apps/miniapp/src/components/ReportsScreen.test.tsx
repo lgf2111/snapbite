@@ -1,5 +1,6 @@
 import { ApiError, LOAD_FAILED_MESSAGE } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
+import { cacheKey, clearCache, setCached } from '@/lib/cache';
 import {
   type AdvancedReport,
   type ReportMeal,
@@ -7,15 +8,20 @@ import {
   type ReportTarget,
   buildAdvancedReport,
 } from '@snapbite/core';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReportsScreen } from './ReportsScreen.js';
 
 const TODAY = '2026-11-12';
 
+beforeEach(() => {
+  clearCache();
+});
+
 afterEach(() => {
   cleanup();
+  clearCache();
   vi.restoreAllMocks();
 });
 
@@ -147,5 +153,59 @@ describe('ReportsScreen', () => {
     renderScreen(backend);
 
     expect(await screen.findByText('Nothing to report yet')).toBeInTheDocument();
+  });
+
+  it('paints a cached report immediately and revalidates in the background', async () => {
+    setCached(cacheKey.reports('90d'), reportFor('90d'));
+    let resolve!: (report: AdvancedReport) => void;
+    const backend = stubBackend(
+      () =>
+        new Promise<AdvancedReport>((done) => {
+          resolve = done;
+        }),
+    );
+
+    renderScreen(backend);
+
+    // The cached report is on screen on the first paint: no skeleton.
+    expect(screen.getByText('Report card · last 7 days')).toBeInTheDocument();
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull();
+
+    act(() => resolve(reportFor('90d')));
+    await waitFor(() => expect(screen.getByText('Daily kcal · last 90 days')).toBeInTheDocument());
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull();
+  });
+
+  it('keeps the cached report and stays silent when the background refresh fails', async () => {
+    setCached(cacheKey.reports('90d'), reportFor('90d'));
+    const analytics = vi.fn(async () => {
+      throw new ApiError(503, 'offline');
+    });
+    const backend = { mode: 'local', analytics } as unknown as Backend;
+
+    renderScreen(backend);
+    await waitFor(() => expect(analytics).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('Report card · last 7 days')).toBeInTheDocument();
+    expect(screen.queryByText('Could not load the report')).toBeNull();
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull();
+  });
+
+  it('switches to a cached range instantly, without a skeleton', async () => {
+    setCached(cacheKey.reports('90d'), reportFor('90d'));
+    setCached(cacheKey.reports('12m'), reportFor('12m'));
+    const analytics = vi.fn(() => new Promise<AdvancedReport>(() => {}));
+    const backend = { mode: 'local', analytics } as unknown as Backend;
+
+    renderScreen(backend);
+    expect(screen.getByText('Daily kcal · last 90 days')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: '12 months' }));
+
+    expect(screen.getByText('Monthly kcal · last 12 months')).toBeInTheDocument();
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull();
   });
 });

@@ -2,8 +2,9 @@ import { Section } from '@/components/Section';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { ApiError } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
+import { cacheKey } from '@/lib/cache';
+import { useCachedData } from '@/lib/useCachedData';
 import type {
   AdvancedReport,
   ReportCard as ReportCardData,
@@ -15,7 +16,7 @@ import type {
   ReportWeekday,
 } from '@snapbite/core';
 import { ArrowLeft } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 interface ReportsScreenProps {
   backend: Backend;
@@ -331,39 +332,21 @@ function DishesSection({
  */
 export function ReportsScreen({ backend, onBack, onSeeCredits }: ReportsScreenProps) {
   const [range, setRange] = useState<ReportRange>('90d');
-  const [report, setReport] = useState<AdvancedReport | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'locked' | 'error'>('loading');
-  const [message, setMessage] = useState('');
-  const [reload, setReload] = useState(0);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `reload` deliberately re-runs the same request
-  useEffect(() => {
-    let live = true;
-    setStatus('loading');
-    backend
-      .analytics(range)
-      .then((next) => {
-        if (!live) return;
-        setReport(next);
-        setStatus('ready');
-      })
-      .catch((error: unknown) => {
-        if (!live) return;
-        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-          setStatus('locked');
-          return;
-        }
-        setMessage(
-          error instanceof Error && error.message
-            ? error.message
-            : 'Check the connection, then try again.',
-        );
-        setStatus('error');
-      });
-    return () => {
-      live = false;
-    };
-  }, [backend, range, reload]);
+  // The last report for this range renders instantly; a background fetch swaps
+  // it in place. A range with no cache keeps the previous report on screen
+  // while loading, so switching never flashes a full-page skeleton.
+  const {
+    data: report,
+    loading,
+    error,
+    errorStatus,
+    refresh,
+  } = useCachedData<AdvancedReport>(
+    cacheKey.reports(range),
+    () => backend.analytics(range),
+    'Check the connection, then try again.',
+  );
+  const locked = errorStatus === 401 || errorStatus === 403;
 
   return (
     <div className="flex flex-col gap-5">
@@ -389,7 +372,7 @@ export function ReportsScreen({ backend, onBack, onSeeCredits }: ReportsScreenPr
       </ToggleGroup>
 
       <div className="flex flex-col gap-4">
-        {status === 'loading' && (
+        {!locked && !error && !report && loading && (
           <div className="flex flex-col gap-3">
             <Skeleton className="h-36 w-full rounded-control" />
             <Skeleton className="h-40 w-full rounded-control" />
@@ -397,18 +380,14 @@ export function ReportsScreen({ backend, onBack, onSeeCredits }: ReportsScreenPr
           </div>
         )}
 
-        {status === 'locked' && (
+        {locked && (
           <Section title="Reports are part of the supporter tag">
             <p className="text-muted-foreground text-caption">
               Buy any credit pack once, or start the trial, and Reports stay unlocked for good.
               Credits run the AI. The tag does not expire.
             </p>
             <Button onClick={onSeeCredits}>See credits and supporter</Button>
-            <Button
-              variant="link"
-              className="w-full"
-              onClick={() => setReload((value) => value + 1)}
-            >
+            <Button variant="link" className="w-full" onClick={refresh}>
               Check again after buying a pack
             </Button>
             <p className="text-muted-foreground text-caption">
@@ -417,16 +396,16 @@ export function ReportsScreen({ backend, onBack, onSeeCredits }: ReportsScreenPr
           </Section>
         )}
 
-        {status === 'error' && (
+        {!locked && error && (
           <Section title="Could not load the report">
-            <p className="text-muted-foreground text-caption">{message}</p>
-            <Button variant="secondary" onClick={() => setReload((value) => value + 1)}>
+            <p className="text-muted-foreground text-caption">{error}</p>
+            <Button variant="secondary" onClick={refresh}>
               Try again
             </Button>
           </Section>
         )}
 
-        {status === 'ready' && report && (
+        {!locked && !error && report && (
           <>
             <ReportCardSection card={report.card} projection={report.projection} />
 
