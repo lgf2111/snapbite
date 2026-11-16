@@ -38,16 +38,22 @@ const active = () => wedges().map((w) => w.dataset.active);
 const label = () =>
   document.querySelector<HTMLElement>('[data-testid=capture-fan] span[class*=w-32]')?.textContent;
 
-const pointer = (type: string, x: number, y: number) =>
-  new PointerEvent(type, {
+const pointer = (type: string, x: number, y: number) => {
+  const e = new PointerEvent(type, {
     bubbles: true,
     cancelable: true,
     pointerId: 1,
     pointerType: 'touch',
     isPrimary: true,
-    clientX: x,
-    clientY: y,
+    // `MouseEventInit` coordinates are integers; the gesture reads sub-pixel
+    // ones, so write the exact point onto the event afterwards.
+    clientX: Math.round(x),
+    clientY: Math.round(y),
   });
+  Object.defineProperty(e, 'clientX', { value: x });
+  Object.defineProperty(e, 'clientY', { value: y });
+  return e;
+};
 const fire = (el: EventTarget, e: Event) =>
   act(() => {
     el.dispatchEvent(e);
@@ -75,6 +81,22 @@ const from = (deg: number, r = 100) => [
   CX + r * Math.cos((deg * Math.PI) / 180),
   CY - r * Math.sin((deg * Math.PI) / 180),
 ];
+/** The fan's baseline centre, read from its rendered box. */
+const fanCentre = () => {
+  const el = fan() as HTMLElement;
+  const width = Number.parseFloat(el.style.width);
+  const height = Number.parseFloat(el.style.height);
+  return {
+    x: Number.parseFloat(el.style.left) + width / 2,
+    y: Number.parseFloat(el.style.top) + height,
+  };
+};
+/** A point `r` px from the fan's centre at `deg` (90 = straight up). */
+const atFan = (deg: number, r: number) =>
+  [
+    fanCentre().x + r * Math.cos((deg * Math.PI) / 180),
+    fanCentre().y - r * Math.sin((deg * Math.PI) / 180),
+  ] as [number, number];
 
 let onPick: ReturnType<typeof vi.fn>;
 let vibrate: ReturnType<typeof vi.fn>;
@@ -142,7 +164,7 @@ describe('hold and slide on the camera button', () => {
 
     expect(fan()).toBeTruthy();
     expect(vibrate).toHaveBeenCalledTimes(1);
-    expect(label()).toBe('Slide to choose');
+    expect(label()).toBe('Release to cancel');
     expect(active()).toEqual(['false', 'false', 'false', 'false']);
 
     // Releasing with nothing chosen: no action, and the click that follows the
@@ -308,21 +330,143 @@ describe('hold and slide on the camera button', () => {
     expect(fan()).toBeNull();
   });
 
-  it('latches the wedge once the finger leaves the button, so a release back on it fires', () => {
+  it('returning over the button clears the choice: the hollow cancels', () => {
     fire(button(), pointer('pointerdown', CX, CY));
     hold();
     const [x, y] = from(20) as [number, number];
     fire(button(), pointer('pointermove', x, y));
     expect(active()[3]).toBe('true');
 
-    // The chosen wedge stays up while the finger comes back over the button.
+    // Back over the button, below the fan's horizon: the highlight goes.
     fire(button(), pointer('pointermove', CX + 10, CY - 10));
+    expect(active()).toEqual(['false', 'false', 'false', 'false']);
+    expect(label()).toBe('Release to cancel');
+
+    release(CX + 10, CY - 10);
+    expect(onPick).not.toHaveBeenCalled();
+    expect(fan()).toBeNull();
+  });
+
+  it('sliding back into the hollow cancels, and the next tap still opens the cards', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    fire(button(), pointer('pointermove', ...atFan(110, 100)));
+    expect(active()[1]).toBe('true');
+    expect(label()).toBe('Upload image');
+
+    const [hx, hy] = atFan(110, 10);
+    fire(button(), pointer('pointermove', hx, hy));
+    expect(active()).toEqual(['false', 'false', 'false', 'false']);
+    expect(label()).toBe('Release to cancel');
+    expect(
+      document.querySelector<HTMLElement>('[data-testid=capture-fan] span[class*=w-32]')?.dataset
+        .active,
+    ).toBe('false');
+
+    release(hx, hy);
+    expect(onPick).not.toHaveBeenCalled();
+    expect(fan()).toBeNull();
+    // The compatibility click of that release is swallowed, not the cards.
+    fireEvent.click(button());
+    expect(screen.queryByRole('group', { name: /4 options/i })).toBeNull();
+
+    // A fresh tap is a fresh gesture: the cards open.
+    fire(button(), pointer('pointerdown', CX, CY));
+    release(CX, CY);
+    fireEvent.click(button());
+    expect(screen.getByRole('group', { name: /4 options/i })).toBeTruthy();
+  });
+
+  it('keeps the choice two pixels inside the hollow edge, so the boundary cannot flicker', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    fire(button(), pointer('pointermove', ...atFan(110, 100)));
+    expect(active()[1]).toBe('true');
+    const ticks = vibrate.mock.calls.length;
+
+    // The edge is `deadPx` (24): 22 is two pixels inside it, still inside the
+    // hysteresis ring. Small movements there change nothing.
+    for (const r of [22, 23, 21, 22.5, 23.5]) {
+      const [x, y] = atFan(110, r);
+      fire(button(), pointer('pointermove', x, y));
+    }
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(active()[1]).toBe('true');
+    expect(label()).toBe('Upload image');
+    expect(vibrate).toHaveBeenCalledTimes(ticks);
+
+    // Released while still on the retained wedge, it runs.
+    const [x, y] = atFan(110, 22);
+    release(x, y);
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick).toHaveBeenCalledWith('upload');
+  });
+
+  it('clears only once the finger is inside deadPx * 0.85 (20.4px)', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    fire(button(), pointer('pointermove', ...atFan(110, 100)));
+    expect(active()[1]).toBe('true');
+
+    // 20.5px is still outside the clear threshold: the choice holds.
+    fire(button(), pointer('pointermove', ...atFan(110, 20.5)));
+    expect(active()[1]).toBe('true');
+
+    // 20.3px is inside it: the choice goes.
+    fire(button(), pointer('pointermove', ...atFan(110, 20.3)));
+    expect(active()).toEqual(['false', 'false', 'false', 'false']);
+    expect(label()).toBe('Release to cancel');
+  });
+
+  it('survives three trips out of the hollow: the release still cancels', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    const [hx, hy] = atFan(110, 10);
+    for (let i = 0; i < 3; i++) {
+      fire(button(), pointer('pointermove', ...atFan(110, 100)));
+      expect(active()[1]).toBe('true');
+      fire(button(), pointer('pointermove', hx, hy));
+      expect(active()).toEqual(['false', 'false', 'false', 'false']);
+    }
+
+    release(hx, hy);
+    expect(onPick).not.toHaveBeenCalled();
+    expect(fan()).toBeNull();
+  });
+
+  it('crossing back out to a wedge after a cancel chooses it again, and runs it', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    fire(button(), pointer('pointermove', ...atFan(110, 100)));
+    expect(active()[1]).toBe('true');
+    fire(button(), pointer('pointermove', ...atFan(110, 10)));
+    expect(active()).toEqual(['false', 'false', 'false', 'false']);
+
+    const [x, y] = atFan(20, 100);
+    fire(button(), pointer('pointermove', x, y));
     expect(active()[3]).toBe('true');
     expect(label()).toBe('Take photo');
 
-    release(CX + 10, CY - 10);
+    release(x, y);
     expect(onPick).toHaveBeenCalledTimes(1);
     expect(onPick).toHaveBeenCalledWith('photo');
+    expect(fan()).toBeNull();
+  });
+
+  it('sliding below the horizon clears a chosen wedge, and the release cancels', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    fire(button(), pointer('pointermove', ...atFan(110, 100)));
+    expect(active()[1]).toBe('true');
+
+    fire(button(), pointer('pointermove', ...atFan(-90, 60)));
+    expect(active()).toEqual(['false', 'false', 'false', 'false']);
+    expect(label()).toBe('Release to cancel');
+
+    release(...atFan(-90, 60));
+    expect(onPick).not.toHaveBeenCalled();
     expect(fan()).toBeNull();
   });
 

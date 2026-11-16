@@ -82,9 +82,10 @@ const TOUCH_END_GRACE_MS = 500;
  * first. Mouse and pen releases stay on `pointerup`. One flag per gesture
  * makes sure the action runs once, whichever path gets there.
  *
- * The choice is latched as soon as the finger leaves the button, and only then:
- * a release back over the button still runs the highlighted wedge, while a
- * hold and release without a slide stays in the dead zone and does nothing.
+ * The choice can only be made once the finger leaves the button (a wobble
+ * inside it is never a choice), and coming back to the hollow clears it again:
+ * releasing with nothing chosen cancels. The hollow clears with hysteresis, so
+ * a thumb resting on its inner edge cannot flicker between chosen and nothing.
  * The angle is read from the press point, not from the moment the fan appears,
  * so a slide that starts inside the hold lands on its wedge when the fan opens.
  *
@@ -120,7 +121,9 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     const el = label.current;
     if (el) {
       el.textContent =
-        idx == null ? 'Slide to choose' : CAPTURE_ACTIONS[FAN_ACTIONS[idx] as CaptureAction].title;
+        idx == null
+          ? 'Release to cancel'
+          : CAPTURE_ACTIONS[FAN_ACTIONS[idx] as CaptureAction].title;
       el.dataset.active = String(idx != null);
     }
   };
@@ -147,9 +150,8 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     let centre = { x: 0, y: 0 };
     let held = false;
     /**
-     * The finger has left the button, so the wedge is chosen and stays chosen
-     * even if the finger drifts back over the button. This is what makes a
-     * release inside the button run the highlighted action instead of cancel.
+     * The finger has left the button, so a wedge may be chosen from here on.
+     * Returning to the hollow or dropping below the horizon clears it again.
      */
     let latched = false;
     let timer = 0;
@@ -179,21 +181,41 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       setOrigin(null);
     };
 
-    /** Chooses the wedge under a point, once the fan is up. */
+    /** Drops the highlight: releasing now cancels. */
+    const clearChoice = () => {
+      if (current.current == null) return;
+      current.current = null;
+      paint.current();
+      tick();
+    };
+
+    /** Chooses the wedge under a point, or clears it in the hollow, once the fan is up. */
     const chooseAt = (p: { x: number; y: number }) => {
       if (!start) return;
-      // A tap that wobbles inside the button never becomes a choice.
-      if (Math.hypot(p.x - start.x, p.y - start.y) < FAN.travelPx) return;
       // Once the finger is out of the button it is a slide, not a tap. Latch
-      // here rather than at the fan's edge: coming back to the button before
-      // releasing must still run what was highlighted.
+      // here rather than at the fan's edge: a choice made out here survives a
+      // drift back until it enters the hollow.
       if (p.x < bounds.left || p.x > bounds.right || p.y < bounds.top || p.y > bounds.bottom) {
         latched = true;
       }
       if (!latched) return;
-      const idx = wedgeAt(p.x - centre.x, p.y - centre.y);
-      // The centre hollow keeps the current choice: it is a dead zone, not a cancel.
-      if (idx == null) return;
+      const dx = p.x - centre.x;
+      const dy = p.y - centre.y;
+      const idx = wedgeAt(dx, dy);
+      if (idx == null) {
+        // Back in the hollow, or below the horizon: releasing now cancels.
+        // The hollow clears only past its hysteresis ring, so a thumb resting
+        // at the inner edge cannot flicker. Below the horizon is already 30deg
+        // past the wedge ends, so it clears at once. A new choice needs the
+        // finger back out past `deadPx`, which is where `wedgeAt` answers again.
+        const radius = Math.hypot(dx, dy);
+        // In the hollow only the hysteresis ring clears; the other refusal is
+        // below the horizon, which cancels at once.
+        if (radius >= FAN.deadPx || radius < FAN.deadPx * FAN.clearRatio) clearChoice();
+        return;
+      }
+      // A tap that wobbles inside the button never becomes a choice.
+      if (Math.hypot(p.x - start.x, p.y - start.y) < FAN.travelPx) return;
       if (idx !== current.current) {
         current.current = idx;
         paint.current();
@@ -409,7 +431,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
           className="text-muted-foreground data-[active=true]:text-foreground text-caption absolute w-32 text-center font-medium"
           style={{ left: radii.outer - 64, top: radii.outer - (radii.inner - 10) }}
         >
-          Slide to choose
+          Release to cancel
         </span>
       </div>
     </>

@@ -18,6 +18,10 @@ const HOLD_MS = 260;
 const SETTLE_MS = 250;
 /** The app's window for a picker to prove it opened, plus a slow frame. */
 const PROBE_MS = 2500 + 600;
+/** `FAN.deadPx`: within this of the fan's centre there is no wedge. */
+const DEAD_PX = 24;
+/** `FAN.deadPx * FAN.clearRatio`: a chosen wedge is cleared strictly inside this. */
+const CLEAR_PX = DEAD_PX * 0.85;
 
 /** A valid profile in local mode keeps the welcome/onboarding gate closed. */
 const PROFILE = {
@@ -148,7 +152,38 @@ async function openApp(page: Page): Promise<void> {
 
 const button = (page: Page) => page.getByRole('button', { name: /add a meal/i });
 const fan = (page: Page) => page.getByTestId('capture-fan');
+const fanLabel = (page: Page) => page.locator('[data-testid=capture-fan] span[class*=w-32]');
 const menu = (page: Page) => page.getByTestId('capture-menu');
+
+/** Counts the live window `touchend` capture listeners by identity. */
+async function trackWindowTouchEnds(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.__windowTouchEnds = new Set();
+    const add = EventTarget.prototype.addEventListener;
+    const remove = EventTarget.prototype.removeEventListener;
+    const capture = (opts: boolean | AddEventListenerOptions | undefined) =>
+      opts === true || (typeof opts === 'object' && opts?.capture === true);
+    EventTarget.prototype.addEventListener = function (
+      type: string,
+      fn: EventListenerOrEventListenerObject | null,
+      opts?: boolean | AddEventListenerOptions,
+    ) {
+      if (this === window && type === 'touchend' && capture(opts) && fn) {
+        window.__windowTouchEnds.add(fn);
+      }
+      return add.call(this, type, fn, opts);
+    };
+    EventTarget.prototype.removeEventListener = function (
+      type: string,
+      fn: EventListenerOrEventListenerObject | null,
+      opts?: boolean | AddEventListenerOptions,
+    ) {
+      if (this === window && type === 'touchend' && fn) window.__windowTouchEnds.delete(fn);
+      return remove.call(this, type, fn, opts);
+    };
+  });
+}
+const windowTouchEnds = (page: Page) => page.evaluate(() => window.__windowTouchEnds.size);
 const clicks = (page: Page) => page.evaluate(() => window.__pickerClicks.slice());
 const shows = (page: Page) => page.evaluate(() => window.__pickerShows.slice());
 const throws = (page: Page) => page.evaluate(() => window.__pickerThrows.slice());
@@ -396,7 +431,7 @@ test('hold and release with no slide does nothing, not even the cards', async ({
   await expect(menu(page)).toBeHidden();
 });
 
-test('a release back over the button still runs the latched wedge, once', async ({ page }) => {
+test('a release back over the button cancels instead of keeping the wedge', async ({ page }) => {
   await openApp(page);
   const finger = await Finger.on(page);
   const buttonBox = (await button(page).boundingBox()) as Box;
@@ -405,20 +440,215 @@ test('a release back over the button still runs the latched wedge, once', async 
   await hold(page, finger, start);
   const g = await geometry(page);
   const p = at(g, 20, (g.inner + g.outer) / 2);
-  await finger.move(p.x, p.y);
+  await slideTo(page, finger, p);
   expect(await activeWedge(page)).toBe('photo');
 
-  // Back inside the button's bounds, without letting go.
-  await finger.move(start.x + 10, start.y - 10);
+  // Back over the button, without letting go. That is into the hollow (and
+  // below the horizon), which is now a cancel: nothing stays highlighted and
+  // the label says the release is safe.
+  await slideTo(page, finger, { x: start.x + 10, y: start.y - 10 });
+  expect(await activeWedge(page)).toBeNull();
+  await expect(fanLabel(page)).toHaveText('Release to cancel');
+
+  await finger.end();
+  await expect(fan(page)).toBeHidden();
+  await page.waitForTimeout(150);
+  expect(await shows(page)).toEqual([]);
+  expect(await clicks(page)).toEqual([]);
+  expect(choosers.get(page) ?? []).toEqual([]);
+  await expect(menu(page)).toBeHidden();
+});
+
+test('sliding back into the hollow cancels, and the next tap still opens the cards', async ({
+  page,
+}) => {
+  await trackWindowTouchEnds(page);
+  await openApp(page);
+  const finger = await Finger.on(page);
+  const start = centre((await button(page).boundingBox()) as Box);
+  const live = () => windowTouchEnds(page);
+  const listeners = await live();
+
+  await hold(page, finger, start);
+  expect(await live()).toBe(listeners + 1);
+  const g = await geometry(page);
+  await slideTo(page, finger, at(g, 110, (g.inner + g.outer) / 2));
+  expect(await activeWedge(page)).toBe('upload');
+
+  // 10px from the fan's centre: deep in the hollow. The highlight goes, and the
+  // label says releasing is safe.
+  await slideTo(page, finger, at(g, 110, 10));
+  expect(await activeWedge(page)).toBeNull();
+  await expect(fanLabel(page)).toHaveText('Release to cancel');
+  expect(await strokes(page)).not.toContain('4');
+
+  const showsBefore = (await shows(page)).length;
+  const clicksBefore = (await clicks(page)).length;
+  const choosersBefore = (choosers.get(page) ?? []).length;
+  await finger.end();
+  await expect(fan(page)).toBeHidden();
+  // A cancelled release releases the gesture with it: no listener survives.
+  expect(await live()).toBe(listeners);
+  await page.waitForTimeout(SETTLE_MS);
+
+  expect((await shows(page)).length).toBe(showsBefore);
+  expect((await clicks(page)).length).toBe(clicksBefore);
+  expect((choosers.get(page) ?? []).length).toBe(choosersBefore);
+  await expect(page.getByText(/could not open the photo picker/i)).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(menu(page)).toBeHidden();
+
+  // The next tap is a new gesture: it opens the cards, so a cancel swallowed
+  // nothing that belonged to it.
+  await button(page).tap();
+  await expect(menu(page)).toBeVisible();
+  await expect(page.getByRole('group', { name: /4 options/i })).toBeVisible();
+});
+
+test('two pixels inside the hollow edge keeps the highlight, with no flicker', async ({ page }) => {
+  await openApp(page);
+  const finger = await Finger.on(page);
+  const start = centre((await button(page).boundingBox()) as Box);
+
+  await hold(page, finger, start);
+  const g = await geometry(page);
+  await slideTo(page, finger, at(g, 110, (g.inner + g.outer) / 2));
+  expect(await activeWedge(page)).toBe('upload');
+
+  // The edge is DEAD_PX (24): 22 is two pixels inside it. The hysteresis ring
+  // is at 20.4, so the wedge stays chosen while the thumb moves about there.
+  for (const r of [22, 23, 21, 22.5, 23.5, 22]) {
+    await slideTo(page, finger, at(g, 110, r));
+    expect(await activeWedge(page), `${r}px`).toBe('upload');
+  }
+  await page.waitForTimeout(200);
+  expect(await activeWedge(page)).toBe('upload');
+  expect((await strokes(page)).filter((w) => w === '4')).toHaveLength(1);
+
+  // Released while still on the retained wedge, it runs once.
+  await finger.end();
+  await expect.poll(async () => (await shows(page)).length).toBe(1);
+  expect((await shows(page))[0]).toBe('library');
+  await expect.poll(() => page.evaluate(() => window.__pickerEvents.length)).toBeGreaterThan(0);
+  await page.waitForTimeout(SETTLE_MS);
+});
+
+test('measures the radius at which the hollow clears the choice', async ({ page }) => {
+  await openApp(page);
+  const finger = await Finger.on(page);
+  const start = centre((await button(page).boundingBox()) as Box);
+
+  await hold(page, finger, start);
+  const g = await geometry(page);
+  await slideTo(page, finger, at(g, 110, (g.inner + g.outer) / 2));
+  expect(await activeWedge(page)).toBe('upload');
+
+  // Creep inward across the boundary. The source clears strictly inside
+  // DEAD_PX * 0.85 = 20.4px.
+  let lastKept: number | null = null;
+  let firstCleared: number | null = null;
+  for (let r = 210; r >= 195; r -= 1) {
+    const radius = r / 10;
+    await slideTo(page, finger, at(g, 110, radius));
+    if ((await activeWedge(page)) == null) {
+      firstCleared = radius;
+      break;
+    }
+    lastKept = radius;
+  }
+  await finger.cancel();
+  await expect(fan(page)).toBeHidden();
+
+  expect(lastKept).not.toBeNull();
+  expect(firstCleared).not.toBeNull();
+  if (lastKept == null || firstCleared == null) return;
+  // Kept at the threshold or just outside it, cleared strictly inside.
+  expect(lastKept).toBeGreaterThanOrEqual(CLEAR_PX - 0.4);
+  expect(firstCleared).toBeLessThan(CLEAR_PX);
+  expect((lastKept as number) - (firstCleared as number)).toBeLessThanOrEqual(0.4);
+
+  const report = {
+    deadZoneRadius: DEAD_PX,
+    clearRadius: CLEAR_PX,
+    lastKeptPx: lastKept,
+    firstClearedPx: firstCleared,
+  };
+  test.info().annotations.push({ type: 'cancel-radius', description: JSON.stringify(report) });
+  console.log('capture-fan cancel radius', JSON.stringify(report));
+});
+
+test('three trips out of the hollow and back still cancel on release', async ({ page }) => {
+  await openApp(page);
+  const finger = await Finger.on(page);
+  const start = centre((await button(page).boundingBox()) as Box);
+
+  await hold(page, finger, start);
+  const g = await geometry(page);
+  const hollow = at(g, 110, 10);
+  for (let i = 0; i < 3; i++) {
+    await slideTo(page, finger, at(g, 110, (g.inner + g.outer) / 2));
+    expect(await activeWedge(page)).toBe('upload');
+    await slideTo(page, finger, hollow);
+    expect(await activeWedge(page)).toBeNull();
+  }
+
+  await finger.end();
+  await expect(fan(page)).toBeHidden();
+  await page.waitForTimeout(150);
+  expect(await shows(page)).toEqual([]);
+  expect(await clicks(page)).toEqual([]);
+  expect(choosers.get(page) ?? []).toEqual([]);
+  await expect(menu(page)).toBeHidden();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('crossing back out to a wedge after a cancel still runs it', async ({ page }) => {
+  await openApp(page);
+  const finger = await Finger.on(page);
+  const start = centre((await button(page).boundingBox()) as Box);
+
+  await hold(page, finger, start);
+  const g = await geometry(page);
+  await slideTo(page, finger, at(g, 110, (g.inner + g.outer) / 2));
+  expect(await activeWedge(page)).toBe('upload');
+  await slideTo(page, finger, at(g, 110, 10));
+  expect(await activeWedge(page)).toBeNull();
+
+  // A new choice needs the finger back out past DEAD_PX: 20deg is Take photo.
+  await slideTo(page, finger, at(g, 20, (g.inner + g.outer) / 2));
   expect(await activeWedge(page)).toBe('photo');
+  await expect(fanLabel(page)).toHaveText('Take photo');
 
   await finger.end();
   await expect.poll(async () => (await shows(page)).length).toBe(1);
   expect((await shows(page))[0]).toBe('camera');
   expect(await clicks(page)).toEqual([]);
-  await expect(fan(page)).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__pickerEvents.length)).toBeGreaterThan(0);
   await page.waitForTimeout(SETTLE_MS);
-  expect((await shows(page)).length).toBe(1);
+});
+
+test('sliding below the horizon clears a chosen wedge and cancels the release', async ({
+  page,
+}) => {
+  await openApp(page);
+  const finger = await Finger.on(page);
+  const start = centre((await button(page).boundingBox()) as Box);
+
+  await hold(page, finger, start);
+  const g = await geometry(page);
+  await slideTo(page, finger, at(g, 110, (g.inner + g.outer) / 2));
+  expect(await activeWedge(page)).toBe('upload');
+
+  await slideTo(page, finger, at(g, -90, 60));
+  expect(await activeWedge(page)).toBeNull();
+  await expect(fanLabel(page)).toHaveText('Release to cancel');
+
+  await finger.end();
+  await expect(fan(page)).toBeHidden();
+  await page.waitForTimeout(150);
+  expect(await shows(page)).toEqual([]);
+  expect(await clicks(page)).toEqual([]);
+  await expect(menu(page)).toBeHidden();
 });
 
 test('a cancelled touch runs nothing and fires no picker', async ({ page }) => {
@@ -444,35 +674,11 @@ test('a cancelled touch runs nothing and fires no picker', async ({ page }) => {
 test('a cancelled touch detaches the window release listener and stays inert', async ({ page }) => {
   // Count the window `touchend` listeners by identity. A cancel that left the
   // listener attached would let a later stray release run a latched wedge.
-  await page.addInitScript(() => {
-    window.__windowTouchEnds = new Set();
-    const add = EventTarget.prototype.addEventListener;
-    const remove = EventTarget.prototype.removeEventListener;
-    const capture = (opts: boolean | AddEventListenerOptions | undefined) =>
-      opts === true || (typeof opts === 'object' && opts?.capture === true);
-    EventTarget.prototype.addEventListener = function (
-      type: string,
-      fn: EventListenerOrEventListenerObject | null,
-      opts?: boolean | AddEventListenerOptions,
-    ) {
-      if (this === window && type === 'touchend' && capture(opts) && fn) {
-        window.__windowTouchEnds.add(fn);
-      }
-      return add.call(this, type, fn, opts);
-    };
-    EventTarget.prototype.removeEventListener = function (
-      type: string,
-      fn: EventListenerOrEventListenerObject | null,
-      opts?: boolean | AddEventListenerOptions,
-    ) {
-      if (this === window && type === 'touchend' && fn) window.__windowTouchEnds.delete(fn);
-      return remove.call(this, type, fn, opts);
-    };
-  });
+  await trackWindowTouchEnds(page);
   await openApp(page);
   const finger = await Finger.on(page);
   const start = centre((await button(page).boundingBox()) as Box);
-  const live = () => page.evaluate(() => window.__windowTouchEnds.size);
+  const live = () => windowTouchEnds(page);
   // Other libraries (react-swipeable) already listen on the window, so the
   // assertion is about this gesture's listener: one more while held, back to
   // the baseline after any ending.

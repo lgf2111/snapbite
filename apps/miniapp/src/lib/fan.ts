@@ -25,6 +25,12 @@ export const FAN = {
   travelPx: 12,
   /** Within this of the fan's centre, no wedge is chosen (the hollow holds the label). */
   deadPx: 24,
+  /**
+   * A choice is cleared only once the finger is this far inside the dead zone.
+   * The inner edge is a ring, not a line: a thumb resting on it cannot flicker
+   * between chosen and cancelled.
+   */
+  clearRatio: 0.85,
   /** Half-ring radii. The inner hollow holds the label. */
   innerPx: 80,
   outerPx: 148,
