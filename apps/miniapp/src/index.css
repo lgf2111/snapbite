@@ -383,6 +383,22 @@ body {
   padding-right: 48px;
 }
 
+/*
+ * A toast action reads as text (the fill/border live in sonner.tsx). Underline
+ * on hover/focus is the only affordance it needs, and the focus ring is the
+ * app's, not sonner's grey one.
+ */
+[data-sonner-toast] [data-button][data-action]:hover,
+[data-sonner-toast] [data-button][data-action]:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+[data-sonner-toast] [data-button][data-action]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
 /* An error is named in the message; a red glyph would be a second signal. */
 [data-sonner-toast][data-type="error"] [data-icon] {
   display: none;

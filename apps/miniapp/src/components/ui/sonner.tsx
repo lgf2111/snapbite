@@ -77,9 +77,21 @@ function Toaster(props: ToasterProps) {
           width: `min(24rem, calc(100vw - ${TOAST_OFFSET.left} - ${TOAST_OFFSET.right}))`,
         }}
         toastOptions={{
+          // An action is an offer inside the sentence, not a second button: no
+          // fill, no border, the message's own size, and the label in the link
+          // colour that is contrast-checked in both themes. The 44px height is
+          // the tap target; the text stays the size of the message.
           actionButtonStyle: {
+            background: 'transparent',
+            borderWidth: '0px',
             color: 'var(--primary-text)',
+            fontSize: 'inherit',
             fontWeight: 500,
+            height: '44px',
+            padding: '0 8px',
+            marginLeft: 'auto',
+            // Keep the label clear of the close button's 44px hit area.
+            marginRight: '12px',
           },
           style: {
             background: 'var(--card)',

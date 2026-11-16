@@ -42,22 +42,53 @@ describe('Toaster placement', () => {
 });
 
 describe('Toaster styling', () => {
-  it('draws the toast on the level-2 surface and the action in brand text', async () => {
+  it.each(['light', 'dark'] as const)(
+    'draws the toast action as quiet brand text with a 44px target (%s theme)',
+    async (theme) => {
+      render(<Toaster theme={theme} />);
+      act(() => {
+        toast('Meal deleted', { action: { label: 'Undo', onClick: () => {} } });
+      });
+
+      const message = await screen.findByText('Meal deleted');
+      const li = message.closest('[data-sonner-toast]') as HTMLElement;
+      const style = li.getAttribute('style') ?? '';
+      // The surface stays the card, with its shadow and radius.
+      expect(style).toContain('var(--card)');
+      expect(style).toContain('var(--radius-surface)');
+      expect(style).toContain('var(--lift)');
+      expect(li.style.fontSize).toBe('1rem');
+
+      const action = within(li).getByRole('button', { name: 'Undo' });
+      // Text, not a chip: no fill, no border, the message's own size.
+      expect(action.style.color).toBe('var(--primary-text)');
+      expect(action.style.background).toBe('transparent');
+      expect(action.style.borderWidth).toBe('0px');
+      expect(action.style.fontSize).toBe('inherit');
+      expect(action.style.fontWeight).toBe('500');
+      // The target stays 44px even though the visual is text.
+      expect(action.style.height).toBe('44px');
+      expect(action.style.marginRight).toBe('12px');
+    },
+  );
+
+  it('gives every toast action the same treatment, not just Reload', async () => {
     render(<Toaster />);
     act(() => {
+      toast.info('App updated', { action: { label: 'Reload', onClick: () => {} } });
       toast('Meal deleted', { action: { label: 'Undo', onClick: () => {} } });
     });
 
-    const message = await screen.findByText('Meal deleted');
-    const li = message.closest('[data-sonner-toast]') as HTMLElement;
-    const style = li.getAttribute('style') ?? '';
-    expect(style).toContain('var(--card)');
-    expect(style).toContain('var(--radius-surface)');
-    expect(style).toContain('var(--lift)');
-
-    const action = within(li).getByRole('button', { name: 'Undo' });
-    expect(action.style.color).toBe('var(--primary-text)');
-    expect(action.style.fontWeight).toBe('500');
+    expect(await screen.findByText('App updated')).toBeInTheDocument();
+    expect(await screen.findByText('Meal deleted')).toBeInTheDocument();
+    const actions = screen.getAllByRole('button', { name: /^(Reload|Undo)$/ });
+    expect(actions).toHaveLength(2);
+    for (const action of actions) {
+      expect(action.style.background).toBe('transparent');
+      expect(action.style.borderWidth).toBe('0px');
+      expect(action.style.fontSize).toBe('inherit');
+      expect(action.style.height).toBe('44px');
+    }
   });
 
   it('names an error in words, with no red glyph', async () => {
