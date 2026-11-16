@@ -28,6 +28,30 @@ const DEFAULT_TIMEOUT_MS = 20_000;
  */
 const AI_TIMEOUT_MS = 75_000;
 
+/**
+ * True once the page is unloading (reload, navigation, app switch that tears
+ * the page down). A fetch the browser cancels at that moment is a navigation,
+ * not a load failure: no one can see an error for it.
+ */
+let pageUnloading = false;
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    pageUnloading = true;
+  });
+  // bfcache restore: the same page is live again, so a new failure is real.
+  window.addEventListener('pageshow', () => {
+    pageUnloading = false;
+  });
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { name?: unknown }).name === 'AbortError'
+  );
+}
+
 export interface MealSummary {
   id: string;
   loggedAt: number;
@@ -216,10 +240,13 @@ export interface UserExport {
 
 export class ApiError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  /** The page navigated away mid-request; there is no failure to show. */
+  readonly aborted: boolean;
+  constructor(status: number, message: string, aborted = false) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.aborted = aborted;
   }
 }
 
@@ -293,9 +320,21 @@ export class ApiClient {
       });
     } catch (err) {
       if (ac.signal.aborted) {
+        console.error(
+          `[api] ${init.method ?? 'GET'} ${path} failed with status 0 (timed out after ${timeoutMs}ms)`,
+        );
         throw new ApiError(0, 'Request timed out. Please try again.');
       }
-      throw new ApiError(0, err instanceof Error ? err.message : 'Network error');
+      // A reload or navigation cancels in-flight requests. That is not a
+      // user-visible failure, so it is neither logged nor shown.
+      if (pageUnloading || isAbortError(err)) {
+        throw new ApiError(0, 'Request aborted', true);
+      }
+      const message = err instanceof Error ? err.message : 'Network error';
+      // No response means no status; log the path anyway so the request that
+      // failed is identifiable in the console.
+      console.error(`[api] ${init.method ?? 'GET'} ${path} failed with status 0 (${message})`);
+      throw new ApiError(0, message);
     } finally {
       clearTimeout(timer);
     }

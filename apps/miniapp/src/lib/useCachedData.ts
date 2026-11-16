@@ -43,6 +43,17 @@ function statusOf(error: unknown): number | null {
   return typeof status === 'number' ? status : null;
 }
 
+/**
+ * A request the browser cancelled because the page was navigating away (a
+ * reload after a deploy is the common one). That is not a failed load: there
+ * is no screen left to show an error on, and a reload is about to replace it.
+ */
+function isAbortedRequest(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const { name, aborted } = error as { name?: unknown; aborted?: unknown };
+  return name === 'AbortError' || aborted === true;
+}
+
 function initialState<T>(key: string | null): State<T> {
   const cached = key ? getCached<T>(key) : undefined;
   return {
@@ -136,6 +147,8 @@ export function useCachedData<T>(
         })
         .catch((e: unknown) => {
           if (currentKey.current !== k) return; // stale response — ignore
+          // A navigation aborted this request. Never turn it into a retry line.
+          if (isAbortedRequest(e)) return;
           setState((prev) => {
             // A failed refresh behind data for THIS key keeps the cached screen
             // and stays silent. Only a first load (or a key with no data yet)

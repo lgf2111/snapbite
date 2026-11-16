@@ -186,4 +186,52 @@ describe('useCachedData', () => {
     await waitFor(() => expect(result.current.data).toBe('v2'));
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
+
+  it.each([
+    ['an AbortError', new DOMException('The operation was aborted.', 'AbortError')],
+    [
+      'a request marked aborted',
+      Object.assign(new Error('Request aborted'), { status: 0, aborted: true }),
+    ],
+  ])('never surfaces %s from a navigation', async (_label, failure) => {
+    const fetcher = vi.fn().mockRejectedValue(failure);
+    const { result } = renderHook(() => useCachedData('k-abort', fetcher));
+
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.errorStatus).toBeNull();
+  });
+
+  it('keeps a first-load error until a retry actually succeeds', async () => {
+    let rejectRetry: (error: Error) => void = () => {};
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<string>((_, reject) => {
+            rejectRetry = reject;
+          }),
+      )
+      .mockResolvedValueOnce('back');
+    const { result } = renderHook(() => useCachedData('k-sticky', fetcher));
+
+    await waitFor(() => expect(result.current.error).toBe('offline'));
+
+    // The line stays while the retry is in flight, and after it fails again.
+    act(() => result.current.refresh());
+    expect(result.current.error).toBe('offline');
+    await act(async () => {
+      rejectRetry(new Error('offline again'));
+    });
+    await waitFor(() => expect(result.current.error).toBe('offline again'));
+
+    act(() => result.current.refresh());
+    await waitFor(() => expect(result.current.data).toBe('back'));
+    expect(result.current.error).toBeNull();
+  });
 });

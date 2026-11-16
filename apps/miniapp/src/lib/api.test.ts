@@ -89,7 +89,61 @@ describe('ApiClient', () => {
       message: LOAD_FAILED_MESSAGE,
     });
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('HTTP 503'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('/api/analytics'));
     expect(LOAD_FAILED_MESSAGE).not.toMatch(/HTTP/);
+    errorSpy.mockRestore();
+  });
+
+  it('marks a navigation abort as aborted and logs nothing', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchMock = vi.fn(async () => {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    });
+    const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
+
+    await expect(client.analytics('90d')).rejects.toMatchObject({
+      status: 0,
+      aborted: true,
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('treats a rejection after pagehide as a navigation, not a failure', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Safari can reject an unloaded fetch with a bare TypeError, no AbortError.
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError('Load failed');
+    });
+    const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
+
+    window.dispatchEvent(new Event('pagehide'));
+    try {
+      await expect(client.analytics('90d')).rejects.toMatchObject({
+        status: 0,
+        aborted: true,
+      });
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      window.dispatchEvent(new Event('pageshow'));
+    }
+    errorSpy.mockRestore();
+  });
+
+  it('logs the path and status of a real failure with no response', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    const client = new ApiClient('https://api.example.com', () => 'X', fetchMock);
+
+    await expect(client.analytics('90d')).rejects.toMatchObject({
+      status: 0,
+      aborted: false,
+      message: 'Failed to fetch',
+    });
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('/api/analytics'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('status 0'));
     errorSpy.mockRestore();
   });
 

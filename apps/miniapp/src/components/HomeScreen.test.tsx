@@ -55,6 +55,9 @@ const TARGETS: DailyTargets = {
   fatG: 60,
 };
 
+/** The sentence Home shows when a first load fails and there is nothing to show. */
+const LOAD_FAILED = "Couldn't load that. Tap to retry.";
+
 /** Common no-op props for the controlled/callback surface. */
 function props(backend: Backend, over: Record<string, unknown> = {}) {
   return {
@@ -850,12 +853,99 @@ describe('HomeScreen', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
     await act(async () => {
-      rejectEleventh(new Error("Couldn't load that. Tap to retry."));
+      rejectEleventh(new Error(LOAD_FAILED));
     });
 
-    // The 11th has no rows for this key, so the retry line is the truth.
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load that. Tap to retry.");
+    // The 11th has no rows for this key, so the retry affordance is the truth.
+    const retry = await screen.findByRole('button', { name: LOAD_FAILED });
+    expect(screen.getAllByRole('button', { name: LOAD_FAILED })).toHaveLength(1);
+    expect(retry.className).toContain('min-h-11');
     expect(screen.queryAllByTestId('swipe-card')).toHaveLength(0);
     expect(screen.queryByText('Sixteenth curry')).not.toBeInTheDocument();
+  });
+
+  it('retries a failed first load when the line is tapped', async () => {
+    const backend = stubBackend({
+      mealsByDate: vi
+        .fn<() => Promise<RecentMeal[]>>()
+        .mockRejectedValueOnce(new Error(LOAD_FAILED))
+        .mockResolvedValueOnce([meal({ id: 'retried', label: 'Chicken rice' })]),
+    });
+    render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    const retry = await screen.findByRole('button', { name: LOAD_FAILED });
+    expect(retry.tagName).toBe('BUTTON');
+    fireEvent.click(retry);
+
+    expect(await screen.findByText('Chicken rice')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: LOAD_FAILED })).not.toBeInTheDocument();
+  });
+
+  it('retries a failed first load from the keyboard', async () => {
+    const user = userEvent.setup();
+    const backend = stubBackend({
+      mealsByDate: vi
+        .fn<() => Promise<RecentMeal[]>>()
+        .mockRejectedValueOnce(new Error(LOAD_FAILED))
+        .mockResolvedValueOnce([meal({ id: 'retried', label: 'Chicken rice' })]),
+    });
+    render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    const retry = await screen.findByRole('button', { name: LOAD_FAILED });
+    retry.focus();
+    expect(document.activeElement).toBe(retry);
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText('Chicken rice')).toBeInTheDocument();
+  });
+
+  it('keeps the retry line through a failed retry and unrelated state changes', async () => {
+    let rejectRetry: (error: Error) => void = () => {};
+    const backend = stubBackend({
+      mealsByDate: vi
+        .fn<() => Promise<RecentMeal[]>>()
+        .mockRejectedValueOnce(new Error(LOAD_FAILED))
+        .mockImplementationOnce(
+          () =>
+            new Promise<RecentMeal[]>((_, reject) => {
+              rejectRetry = reject;
+            }),
+        ),
+    });
+    const { rerender } = render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    const retry = await screen.findByRole('button', { name: LOAD_FAILED });
+    fireEvent.click(retry);
+
+    // The line is still the retry while the second request is in flight.
+    expect(screen.getByRole('button', { name: LOAD_FAILED })).toBeInTheDocument();
+
+    // An unrelated prop change must not dismiss it.
+    rerender(
+      <HomeScreen {...props(backend, { targets: null, creditNotice: 'One credit used.' })} />,
+    );
+    expect(screen.getByRole('button', { name: LOAD_FAILED })).toBeInTheDocument();
+
+    await act(async () => {
+      rejectRetry(new Error(LOAD_FAILED));
+    });
+    expect(await screen.findByRole('button', { name: LOAD_FAILED })).toBeInTheDocument();
+  });
+
+  it('renders no error line when the first load was aborted by a reload', async () => {
+    const backend = stubBackend({
+      mealsByDate: vi
+        .fn<() => Promise<RecentMeal[]>>()
+        .mockRejectedValue(new DOMException('The operation was aborted.', 'AbortError')),
+    });
+    render(<HomeScreen {...props(backend, { targets: TARGETS })} />);
+
+    await waitFor(() => expect(backend.mealsByDate).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Tap to retry/ })).not.toBeInTheDocument();
   });
 });

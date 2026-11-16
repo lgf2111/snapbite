@@ -40,7 +40,7 @@ const UNDO_MS = 6000;
 const CAMERA_CUE = 'Tap the camera to add one.';
 
 /** Shown when the backend gave no message of its own. */
-const LOAD_ERROR = "Couldn't load meals. Tap Refresh to try again.";
+const LOAD_ERROR = "Couldn't load meals. Tap to retry.";
 
 interface HomeScreenProps {
   backend: Backend;
@@ -498,9 +498,18 @@ export function HomeScreen({
       )}
 
       {error && (
-        <p role="alert" className="text-destructive text-caption">
-          {error}
-        </p>
+        <div role="alert">
+          {/* The line is the retry: a real native button (role=button), 44px,
+              reachable by keyboard, so "tap to retry" is never a label next to
+              nothing. */}
+          <button
+            type="button"
+            onClick={refreshMeals}
+            className="text-destructive text-caption flex min-h-11 w-full items-center text-left underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {error}
+          </button>
+        </div>
       )}
 
       {mealsLoading && mealsData === undefined && !error && (
