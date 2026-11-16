@@ -177,4 +177,28 @@ describe('renderMealShareCard', () => {
     const title = calls.find((c) => c.text.endsWith('…'));
     expect(title).toBeDefined();
   });
+
+  it('keeps the macro row and footer inside the card, clear of the hairline', async () => {
+    await renderMealShareCard(CARD);
+
+    const H = 1350;
+    const call = (text: string): TextCall => {
+      const found = calls.find((c) => c.text === text);
+      if (!found) throw new Error(`No text call for ${text}`);
+      return found;
+    };
+    const fontSize = (c: TextCall) =>
+      Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(c.font)?.[1] ?? '0');
+    // Every line below the photo is drawn with textBaseline 'top', so the line
+    // box starts at y. 1.3 is the preview's line-height, an upper bound on the
+    // ink for the canvas's own top alignment.
+    const bottom = (c: TextCall) => c.y + fontSize(c) * 1.3;
+
+    const footer = call('Snap a photo · log your meal · SnapBite');
+    for (const text of ['32g', '61g', '14g']) {
+      expect(bottom(call(text))).toBeLessThan(footer.y);
+    }
+    // The hairline's top edge is H - 2; the caption finishes above it.
+    expect(bottom(footer)).toBeLessThan(H - 2);
+  });
 });

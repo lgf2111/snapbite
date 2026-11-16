@@ -45,7 +45,10 @@ const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, 
 const DISPLAY_FONT = 'ui-serif, "New York", Georgia, "Times New Roman", serif';
 const BRAND = '#1f4fd0';
 
-interface CardTheme {
+/** Anything `drawImage` accepts that also reports its intrinsic size. */
+type DrawableImage = HTMLImageElement | HTMLCanvasElement | ImageBitmap;
+
+export interface CardTheme {
   card: string;
   foreground: string;
   muted: string;
@@ -96,7 +99,7 @@ function loadLogo(): Promise<HTMLImageElement | null> {
 /** Draws the SnapBite logo image (or the drawn fallback) as a disc at (cx,cy). */
 function drawLogo(
   ctx: CanvasRenderingContext2D,
-  logo: HTMLImageElement | null,
+  logo: DrawableImage | null,
   cx: number,
   cy: number,
   r: number,
@@ -134,7 +137,7 @@ function roundRect(
 /** Cover-crop an image into a rect (like CSS object-fit: cover). */
 function drawImageCover(
   ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
+  img: DrawableImage,
   x: number,
   y: number,
   w: number,
@@ -145,7 +148,15 @@ function drawImageCover(
   const dh = img.height * scale;
   const dx = x + (w - dw) / 2;
   const dy = y + (h - dh) / 2;
+  // Cover overflows the rect on one axis (a portrait photo overflows
+  // vertically here). Clip so the photo stops at its band instead of painting
+  // over the title, the kcal line and the macros below it.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
   ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.restore();
 }
 
 /**
@@ -215,7 +226,7 @@ function drawBrandMark(ctx: CanvasRenderingContext2D, cx: number, cy: number, r:
 }
 
 /** A small wordmark pill over the top-left of the photo. */
-function drawWordmarkPill(ctx: CanvasRenderingContext2D, logo: HTMLImageElement | null): void {
+function drawWordmarkPill(ctx: CanvasRenderingContext2D, logo: DrawableImage | null): void {
   const x = 40;
   const y = 40;
   const h = 76;
@@ -242,7 +253,7 @@ function drawWordmarkPill(ctx: CanvasRenderingContext2D, logo: HTMLImageElement 
 /** The no-photo panel: a plain secondary surface with the wordmark, centred. */
 function drawEmptyPhoto(
   ctx: CanvasRenderingContext2D,
-  logo: HTMLImageElement | null,
+  logo: DrawableImage | null,
   theme: CardTheme,
 ): void {
   ctx.fillStyle = theme.secondary;
@@ -262,34 +273,37 @@ function drawEmptyPhoto(
   ctx.fillText('SnapBite', logoCx + r + gap, PHOTO_H / 2 + 1);
 }
 
-export async function renderMealShareCard(input: MealShareCardInput): Promise<Blob> {
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas 2D not supported');
+export interface MealCardImages {
+  /** The meal photo, or null to paint the wordmark panel instead. */
+  photo: DrawableImage | null;
+  /** The SnapBite logo, or null to use the drawn mark. */
+  logo: DrawableImage | null;
+}
 
-  const theme = readTheme();
-  const logo = await loadLogo();
-
+/**
+ * Paints the whole card onto an existing 1080×1350 context.
+ *
+ * Separate from `renderMealShareCard` so a test can paint a real canvas with a
+ * synthetic photo and read the pixels back; loading and JPEG encoding stay in
+ * the caller.
+ */
+export function drawMealCard(
+  ctx: CanvasRenderingContext2D,
+  input: MealShareCardInput,
+  images: MealCardImages,
+  theme: CardTheme = readTheme(),
+): void {
   // --- Card surface ---------------------------------------------------------
   ctx.fillStyle = theme.card;
   ctx.fillRect(0, 0, W, H);
 
   // --- Photo: top 60%, cover-cropped, no meal text over it ------------------
-  let hasPhoto = false;
-  if (input.photoUrl) {
-    try {
-      const img = await loadImage(input.photoUrl);
-      drawImageCover(ctx, img, 0, 0, W, PHOTO_H);
-      hasPhoto = true;
-    } catch {
-      drawEmptyPhoto(ctx, logo, theme);
-    }
+  if (images.photo) {
+    drawImageCover(ctx, images.photo, 0, 0, W, PHOTO_H);
+    drawWordmarkPill(ctx, images.logo);
   } else {
-    drawEmptyPhoto(ctx, logo, theme);
+    drawEmptyPhoto(ctx, images.logo, theme);
   }
-  if (hasPhoto) drawWordmarkPill(ctx, logo);
 
   // --- Title: one line, ellipsis -------------------------------------------
   const titleTop = PHOTO_H + GAP_AFTER_PHOTO;
@@ -342,6 +356,28 @@ export async function renderMealShareCard(input: MealShareCardInput): Promise<Bl
   ctx.strokeStyle = theme.border;
   ctx.lineWidth = 2;
   ctx.strokeRect(1, 1, W - 2, H - 2);
+}
+
+export async function renderMealShareCard(input: MealShareCardInput): Promise<Blob> {
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D not supported');
+
+  const theme = readTheme();
+  const logo = await loadLogo();
+
+  let photo: DrawableImage | null = null;
+  if (input.photoUrl) {
+    try {
+      photo = await loadImage(input.photoUrl);
+    } catch {
+      // The no-photo panel is the fallback, never a broken card.
+    }
+  }
+
+  drawMealCard(ctx, input, { photo, logo }, theme);
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
