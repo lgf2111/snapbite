@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type RefObject, useLayoutEffect, useRef, useState } from 'react';
 import {
   FAN,
   FAN_ACTIONS,
@@ -85,6 +85,8 @@ const TOUCH_END_GRACE_MS = 500;
  * The choice is latched as soon as the finger leaves the button, and only then:
  * a release back over the button still runs the highlighted wedge, while a
  * hold and release without a slide stays in the dead zone and does nothing.
+ * The angle is read from the press point, not from the moment the fan appears,
+ * so a slide that starts inside the hold lands on its wedge when the fan opens.
  *
  * It is a shortcut, never the only route: the tap-for-cards menu does the same
  * four things with labels.
@@ -128,11 +130,19 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     if (origin) paint.current();
   }, [origin]);
 
-  useEffect(() => {
+  // Layout effect, not a passive one: the listeners are attached in the same
+  // commit that puts the button on screen, so the very first press is never
+  // made against a button React has painted but not yet wired.
+  useLayoutEffect(() => {
     const button = triggerRef.current;
     if (!button || !enabled) return;
 
     let start: { x: number; y: number } | null = null;
+    /**
+     * The newest point the finger was seen at. A slide can start before the
+     * hold opens the fan; this is what lets that slide still choose a wedge.
+     */
+    let last: { x: number; y: number } | null = null;
     let bounds = { left: 0, top: 0, right: 0, bottom: 0 };
     let centre = { x: 0, y: 0 };
     let held = false;
@@ -157,14 +167,38 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     const closeFan = () => {
       window.clearTimeout(timer);
       window.clearTimeout(touchTimer);
-      // The window-level release listener lives only as long as this gesture.
+      // The window-level release listeners live only as long as this gesture.
       window.removeEventListener('touchend', onTouchEnd, true);
+      window.removeEventListener('pointercancel', onCancel, true);
       awaitTouchEnd = false;
       start = null;
+      last = null;
       held = false;
       latched = false;
       current.current = null;
       setOrigin(null);
+    };
+
+    /** Chooses the wedge under a point, once the fan is up. */
+    const chooseAt = (p: { x: number; y: number }) => {
+      if (!start) return;
+      // A tap that wobbles inside the button never becomes a choice.
+      if (Math.hypot(p.x - start.x, p.y - start.y) < FAN.travelPx) return;
+      // Once the finger is out of the button it is a slide, not a tap. Latch
+      // here rather than at the fan's edge: coming back to the button before
+      // releasing must still run what was highlighted.
+      if (p.x < bounds.left || p.x > bounds.right || p.y < bounds.top || p.y > bounds.bottom) {
+        latched = true;
+      }
+      if (!latched) return;
+      const idx = wedgeAt(p.x - centre.x, p.y - centre.y);
+      // The centre hollow keeps the current choice: it is a dead zone, not a cancel.
+      if (idx == null) return;
+      if (idx !== current.current) {
+        current.current = idx;
+        paint.current();
+        tick();
+      }
     };
 
     /** Runs the highlighted action, at most once for this gesture. */
@@ -183,20 +217,32 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       awaitTouchEnd = false;
       window.clearTimeout(touchTimer);
       start = { x: e.clientX, y: e.clientY };
+      last = start;
       held = false;
       latched = false;
       current.current = null;
-      button.setPointerCapture?.(e.pointerId);
+      try {
+        button.setPointerCapture?.(e.pointerId);
+      } catch {
+        // A refused capture is survivable: the window touchend still catches
+        // the release. Throwing here would take the hold timer with it.
+      }
       // The release may not come back to the button: iOS can deliver it to the
       // window once the finger has slid off, whether or not pointer capture
       // survived the drag. Listen on the window for the length of the gesture,
       // in the capture phase, so the action still runs. `closeFan` removes it.
       window.addEventListener('touchend', onTouchEnd, true);
+      // The OS takes the touch (a pan, a system gesture): the same listener
+      // catches it wherever it lands, and the fan closes without running.
+      window.addEventListener('pointercancel', onCancel, true);
       timer = window.setTimeout(() => {
         const placed = placeFan(button);
         centre = { x: placed.cx, y: placed.cy };
         held = true;
         swallowClick = true;
+        // The thumb may be on its wedge already: read the angle it travelled
+        // to, not the one it was at when the press began.
+        if (last) chooseAt(last);
         tick();
         setOrigin(placed);
       }, FAN.holdMs);
@@ -204,40 +250,17 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
 
     const onMove = (e: PointerEvent) => {
       if (!start) return;
-      const dx = e.clientX - start.x;
-      const dy = e.clientY - start.y;
-      const travel = Math.hypot(dx, dy);
+      last = { x: e.clientX, y: e.clientY };
       if (!held) {
-        // A drag or a scroll, not a hold: forget the hold, and the tap with it.
-        if (travel > FAN.slopPx) {
-          window.clearTimeout(timer);
-          start = null;
+        // Sliding before the hold is not a scroll: the button owns the gesture
+        // (`touch-action: none`), so remember the point and let the hold land
+        // on it. Swallow the click, but never cancel the timer.
+        if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > FAN.slopPx) {
           swallowClick = true;
         }
         return;
       }
-      // A tap that wobbles inside the button never becomes a choice.
-      if (travel < FAN.travelPx) return;
-      // Once the finger is out of the button it is a slide, not a tap. Latch
-      // here rather than at the fan's edge: coming back to the button before
-      // releasing must still run what was highlighted.
-      if (
-        e.clientX < bounds.left ||
-        e.clientX > bounds.right ||
-        e.clientY < bounds.top ||
-        e.clientY > bounds.bottom
-      ) {
-        latched = true;
-      }
-      if (!latched) return;
-      const idx = wedgeAt(e.clientX - centre.x, e.clientY - centre.y);
-      // The centre hollow keeps the current choice: it is a dead zone, not a cancel.
-      if (idx == null) return;
-      if (idx !== current.current) {
-        current.current = idx;
-        paint.current();
-        tick();
-      }
+      chooseAt(last);
     };
 
     const onUp = (e: PointerEvent) => {
@@ -314,6 +337,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       button.removeEventListener('click', onClick);
       button.removeEventListener('contextmenu', onContextMenu);
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pointercancel', onCancel, true);
       closeFan();
     };
   }, [enabled, triggerRef]);
@@ -333,7 +357,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       <div
         aria-hidden
         data-testid="capture-fan"
-        className="pointer-events-none fixed z-[45] origin-bottom motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-50 motion-safe:duration-150"
+        className="pointer-events-none fixed z-[45] origin-bottom touch-none motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-50 motion-safe:duration-150"
         style={{
           left: origin.cx - radii.outer,
           top: origin.cy - radii.outer,
@@ -346,7 +370,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
           width={size}
           height={radii.outer}
           viewBox={`0 0 ${size} ${radii.outer}`}
-          className="overflow-visible"
+          className="touch-none overflow-visible"
         >
           {FAN_ACTIONS.map((id, i) => (
             <path

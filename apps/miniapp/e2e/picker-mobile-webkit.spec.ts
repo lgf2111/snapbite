@@ -20,6 +20,8 @@ declare global {
     __pickerShows: string[];
     __pickerThrows: string[];
     __pickerEvents: string[];
+    /** Pointer/touch events the page saw, in order: the gesture's own trace. */
+    __gestureEvents: string[];
   }
 }
 
@@ -96,6 +98,17 @@ async function openApp(
   await page.evaluate((forceClick) => {
     window.__picks = [];
     window.__pickerEvents = [];
+    window.__gestureEvents = [];
+    for (const type of [
+      'pointerdown',
+      'pointerup',
+      'pointercancel',
+      'lostpointercapture',
+      'touchend',
+      'touchcancel',
+    ]) {
+      window.addEventListener(type, () => window.__gestureEvents.push(type), true);
+    }
     for (const input of document.querySelectorAll<HTMLInputElement>('input[type=file]')) {
       const name = input.hasAttribute('capture') ? 'camera' : 'library';
       if (forceClick) Object.defineProperty(input, 'showPicker', { value: undefined });
@@ -141,10 +154,8 @@ const at = (g: { cx: number; cy: number }, deg: number, radius: number) => ({
   y: g.cy - radius * Math.sin((deg * Math.PI) / 180),
 });
 
-/** Press and hold the button; returns the fan's geometry. */
-async function holdButton(
-  page: Page,
-): Promise<{ cx: number; cy: number; inner: number; outer: number }> {
+/** Press the button with the synthetic touch the fan listens for. */
+async function pressButton(page: Page): Promise<{ x: number; y: number }> {
   const target = await button(page).boundingBox();
   if (!target) throw new Error('camera button has no box');
   const p = centre(target);
@@ -166,9 +177,32 @@ async function holdButton(
       }),
     );
   }, p);
+  return p;
+}
+
+/** Press and hold the button; returns the fan's geometry. */
+async function holdButton(
+  page: Page,
+): Promise<{ cx: number; cy: number; inner: number; outer: number }> {
+  await pressButton(page);
   await page.waitForTimeout(300);
   await expect(fan(page)).toBeVisible();
   return geometry(page);
+}
+
+/**
+ * Where the fan will stand, worked out before it opens from the button and the
+ * bar: the same rule as `placeFan` (the bar's top less `barGapPx` and half the
+ * stroke). The full radii fit on this screen; the Chromium geometry test pins
+ * them, and the angle alone decides the wedge.
+ */
+async function fanLayout(
+  page: Page,
+): Promise<{ cx: number; cy: number; inner: number; outer: number }> {
+  const b = await button(page).boundingBox();
+  const nav = await page.locator('nav').boundingBox();
+  if (!b || !nav) throw new Error('camera button or tab bar has no box');
+  return { cx: b.x + b.width / 2, cy: nav.y - 9, inner: 80, outer: 148 };
 }
 
 async function slide(page: Page, p: { x: number; y: number }): Promise<void> {
@@ -217,6 +251,81 @@ async function pick(page: Page, deg: number): Promise<void> {
   await releaseOnWindow(page, p);
   await expect(fan(page)).toBeHidden();
 }
+
+/**
+ * The owner's gesture: press, slide to `deg` at once (before the hold opens the
+ * fan), then release once it is up. Returns the gesture surfaces' computed
+ * `touch-action` while the fan is open.
+ */
+async function fastPick(page: Page, deg: number): Promise<{ container: string; svg: string }> {
+  await pressButton(page);
+  const g = await fanLayout(page);
+  const p = at(g, deg, (g.inner + g.outer) / 2);
+  await slide(page, p);
+  // What the page saw before the hold had a chance to open the fan: the trace
+  // that says whether this was a cancel or a gesture we dropped ourselves.
+  console.log(
+    'fast slide before the hold',
+    JSON.stringify({
+      target: p,
+      events: await page.evaluate(() => window.__gestureEvents.slice()),
+    }),
+  );
+  // A slide that started before the hold must still land: the fan opens with
+  // this wedge already chosen. Before the fix it opened never, because the
+  // move cancelled the hold, and the release ran nothing.
+  await expect(fan(page)).toBeVisible({ timeout: 2000 });
+  const actions = await fan(page).evaluate((el) => ({
+    container: getComputedStyle(el).touchAction,
+    svg: getComputedStyle(el.querySelector('svg') as SVGElement).touchAction,
+  }));
+  await releaseOnWindow(page, p);
+  await expect(fan(page)).toBeHidden();
+  return actions;
+}
+
+test('the first gesture lands when it slides at once, and so does the retry after an outside tap', async ({
+  page,
+}) => {
+  await openApp(page, { forceClick: true });
+
+  // The surface the gesture starts on must own it: without this iOS may
+  // decide the slide is a pan, fire pointercancel, and drop the rest.
+  expect(await button(page).evaluate((el) => getComputedStyle(el).touchAction)).toBe('none');
+
+  // A fresh page, no prior interaction: press and slide to Upload image
+  // straight away, then release. This is the attempt the report says is lost.
+  const fanActions = await fastPick(page, 110);
+  expect(await picks(page)).toEqual(['library']);
+  // Nothing under the thumb can start a pan, even while it is over the fan.
+  expect(fanActions).toEqual({ container: 'none', svg: 'none' });
+
+  // The retry as described: tap somewhere outside the button, then repeat.
+  await page.touchscreen.tap(10, 200);
+  await fastPick(page, 110);
+  expect(await picks(page)).toEqual(['library', 'library']);
+
+  // The same first-slide path on the other action from the report.
+  await fastPick(page, 20);
+  expect(await picks(page)).toEqual(['library', 'library', 'camera']);
+
+  // The slide that lands must not also toggle the card menu.
+  await expect(menu(page)).toBeHidden();
+
+  // Each pick was accepted by the platform and came back with no files; let
+  // the last intercepted chooser answer before the page closes.
+  await expect.poll(() => page.evaluate(() => window.__pickerEvents.length)).toBe(3);
+
+  const events = await page.evaluate(() => window.__gestureEvents.slice());
+  console.log('fast-slide gesture events', JSON.stringify(events));
+  test.info().annotations.push({
+    type: 'fast-slide',
+    description: JSON.stringify({ fanActions, events }),
+  });
+  // No pan means no cancel: if this ever fires on a normal slide, the gesture
+  // is being taken away again.
+  expect(events).not.toContain('pointercancel');
+});
 
 test('the pickers are rendered but invisible, and out of the tab order rather than aria-hidden', async ({
   page,

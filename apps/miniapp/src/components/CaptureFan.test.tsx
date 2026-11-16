@@ -261,15 +261,30 @@ describe('hold and slide on the camera button', () => {
     expect(vibrate).toHaveBeenCalledTimes(4);
   });
 
-  it('cancels if the finger moves past the threshold before the hold completes', () => {
+  it('a slide that starts before the hold still lands on its wedge when the fan opens', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    // Straight away, before the 180ms hold: this used to cancel the gesture.
+    const [x, y] = from(110) as [number, number];
+    fire(button(), pointer('pointermove', x, y));
+    expect(fan()).toBeNull();
+
+    hold();
+    expect(fan()).toBeTruthy();
+    expect(active()[1]).toBe('true');
+    expect(label()).toBe('Upload image');
+
+    release(x, y);
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick).toHaveBeenCalledWith('upload');
+  });
+
+  it('a drag released before the hold completes is still nothing, not a tap', () => {
     fire(button(), pointer('pointerdown', CX, CY));
     fire(button(), pointer('pointermove', CX + 14, CY));
-    hold();
-
-    expect(fan()).toBeNull();
     release(CX + 14, CY);
     fireEvent.click(button());
-    // A drag is neither a hold nor a tap.
+
+    expect(fan()).toBeNull();
     expect(onPick).not.toHaveBeenCalled();
     expect(screen.queryByRole('group', { name: /4 options/i })).toBeNull();
   });
@@ -347,6 +362,22 @@ describe('hold and slide on the camera button', () => {
     // The cancel also takes the window release listener with it, so a late
     // touchend from the OS cannot run the wedge the finger had chosen.
     fire(window, new Event('touchend'));
+    expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it('a pointercancel that lands on the window also closes the fan and clears the choice', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    const [x, y] = from(110) as [number, number];
+    fire(button(), pointer('pointermove', x, y));
+    expect(active()[1]).toBe('true');
+
+    // The OS takes the touch once the finger is off the button; the button
+    // itself never hears about it.
+    fire(window, pointer('pointercancel', x, y));
+
+    expect(fan()).toBeNull();
+    release(x, y);
     expect(onPick).not.toHaveBeenCalled();
   });
 
