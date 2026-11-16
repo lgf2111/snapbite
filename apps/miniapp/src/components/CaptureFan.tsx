@@ -81,6 +81,10 @@ const TOUCH_END_GRACE_MS = 500;
  * first. Mouse and pen releases stay on `pointerup`. One flag per gesture
  * makes sure the action runs once, whichever path gets there.
  *
+ * The choice is latched as soon as the finger leaves the button, and only then:
+ * a release back over the button still runs the highlighted wedge, while a
+ * hold and release without a slide stays in the dead zone and does nothing.
+ *
  * It is a shortcut, never the only route: the tap-for-cards menu does the same
  * four things with labels.
  */
@@ -100,7 +104,14 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     const idx = current.current;
     FAN_ACTIONS.forEach((_, i) => {
       const on = String(i === idx);
-      if (paths.current[i]) (paths.current[i] as SVGPathElement).dataset.active = on;
+      const path = paths.current[i];
+      if (path) {
+        path.dataset.active = on;
+        // The chosen wedge is the biggest thing in the fan: primary fill plus a
+        // 4px outline, against 1.5px for the rest. Colour alone is too quiet
+        // under a thumb.
+        path.setAttribute('stroke-width', i === idx ? '4' : '1.5');
+      }
       if (icons.current[i]) (icons.current[i] as HTMLElement).dataset.active = on;
     });
     const el = label.current;
@@ -121,8 +132,15 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     if (!button || !enabled) return;
 
     let start: { x: number; y: number } | null = null;
+    let bounds = { left: 0, top: 0, right: 0, bottom: 0 };
     let centre = { x: 0, y: 0 };
     let held = false;
+    /**
+     * The finger has left the button, so the wedge is chosen and stays chosen
+     * even if the finger drifts back over the button. This is what makes a
+     * release inside the button run the highlighted action instead of cancel.
+     */
+    let latched = false;
     let timer = 0;
     /**
      * A touch release waits for `touchend`: iOS opens a picker from a touch
@@ -141,6 +159,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       awaitTouchEnd = false;
       start = null;
       held = false;
+      latched = false;
       current.current = null;
       setOrigin(null);
     };
@@ -154,12 +173,15 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
 
     const onDown = (e: PointerEvent) => {
       if (!e.isPrimary || e.button !== 0) return;
+      const r = button.getBoundingClientRect();
+      bounds = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
       swallowClick = false;
       picked = false;
       awaitTouchEnd = false;
       window.clearTimeout(touchTimer);
       start = { x: e.clientX, y: e.clientY };
       held = false;
+      latched = false;
       current.current = null;
       button.setPointerCapture?.(e.pointerId);
       timer = window.setTimeout(() => {
@@ -174,20 +196,39 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
 
     const onMove = (e: PointerEvent) => {
       if (!start) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      const travel = Math.hypot(dx, dy);
       if (!held) {
         // A drag or a scroll, not a hold: forget the hold, and the tap with it.
-        if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > FAN.slopPx) {
+        if (travel > FAN.slopPx) {
           window.clearTimeout(timer);
           start = null;
           swallowClick = true;
         }
         return;
       }
+      // A tap that wobbles inside the button never becomes a choice.
+      if (travel < FAN.travelPx) return;
+      // Once the finger is out of the button it is a slide, not a tap. Latch
+      // here rather than at the fan's edge: coming back to the button before
+      // releasing must still run what was highlighted.
+      if (
+        e.clientX < bounds.left ||
+        e.clientX > bounds.right ||
+        e.clientY < bounds.top ||
+        e.clientY > bounds.bottom
+      ) {
+        latched = true;
+      }
+      if (!latched) return;
       const idx = wedgeAt(e.clientX - centre.x, e.clientY - centre.y);
+      // The centre hollow keeps the current choice: it is a dead zone, not a cancel.
+      if (idx == null) return;
       if (idx !== current.current) {
         current.current = idx;
         paint.current();
-        if (idx != null) tick();
+        tick();
       }
     };
 
@@ -195,22 +236,23 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       if (!start) return;
       if (e.pointerType === 'touch') {
         // The picker must open from `touchend` on iOS. Keep the gesture (and
-        // the highlight) alive until then; the fallback only covers a browser
-        // that somehow never sends it.
+        // the highlight) alive until then; the fallback only closes a fan whose
+        // touchend never arrived. It never runs the action: a timer is not the
+        // user gesture a picker needs.
         awaitTouchEnd = true;
         window.clearTimeout(touchTimer);
-        touchTimer = window.setTimeout(() => {
-          runChosen();
-          closeFan();
-        }, TOUCH_END_GRACE_MS);
+        touchTimer = window.setTimeout(closeFan, TOUCH_END_GRACE_MS);
         return;
       }
       runChosen();
       closeFan();
     };
 
-    const onTouchEnd = () => {
+    const onTouchEnd = (e: TouchEvent) => {
       if (!start) return;
+      // Only the last finger up ends the gesture: a second finger tapping the
+      // button must not fire the wedge the first one is still choosing.
+      if ((e.touches?.length ?? 0) > 0) return;
       awaitTouchEnd = false;
       runChosen();
       closeFan();
@@ -220,11 +262,17 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       if (start) closeFan();
     };
 
-    const onLostCapture = (e: PointerEvent) => {
+    const onLostCapture = () => {
       // Releasing a touch also releases its capture, and that fires before
       // `touchend`. It is not a cancel while the touch release is pending.
-      if (awaitTouchEnd) return;
+      if (awaitTouchEnd || picked) return;
       onCancel();
+    };
+
+    // Backgrounding the app kills the gesture outright (iOS may not send a
+    // pointercancel before the webview is frozen).
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') onCancel();
     };
 
     const onClick = (e: MouseEvent) => {
@@ -245,6 +293,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     button.addEventListener('lostpointercapture', onLostCapture);
     button.addEventListener('click', onClick);
     button.addEventListener('contextmenu', onContextMenu);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.clearTimeout(timer);
       window.clearTimeout(touchTimer);
@@ -256,6 +305,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       button.removeEventListener('lostpointercapture', onLostCapture);
       button.removeEventListener('click', onClick);
       button.removeEventListener('contextmenu', onContextMenu);
+      document.removeEventListener('visibilitychange', onVisibility);
       closeFan();
     };
   }, [enabled, triggerRef]);
@@ -313,7 +363,7 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
                 icons.current[i] = el;
               }}
               data-active="false"
-              className="text-primary-text data-[active=true]:text-primary-foreground absolute flex size-8 items-center justify-center"
+              className="text-primary-text data-[active=true]:text-primary-foreground absolute flex size-8 items-center justify-center motion-safe:transition-transform motion-safe:duration-100 data-[active=true]:scale-125"
               style={{ left: c.x - 16, top: c.y - 16 }}
             >
               <Icon className="size-6" aria-hidden />

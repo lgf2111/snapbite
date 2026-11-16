@@ -18,7 +18,12 @@ export const FAN = {
   holdMs: 180,
   /** Movement before the hold completes that turns it into a scroll/drag, not a hold. */
   slopPx: 10,
-  /** Within this of the button's centre, releasing cancels. */
+  /**
+   * A wedge needs this much travel from the press point. A tap that wobbles a
+   * few pixels must not log a meal.
+   */
+  travelPx: 12,
+  /** Within this of the fan's centre, no wedge is chosen (the hollow holds the label). */
   deadPx: 24,
   /** Half-ring radii. The inner hollow holds the label. */
   innerPx: 80,

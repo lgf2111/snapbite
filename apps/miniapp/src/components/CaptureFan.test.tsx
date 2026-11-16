@@ -48,7 +48,7 @@ const pointer = (type: string, x: number, y: number) =>
     clientX: x,
     clientY: y,
   });
-const fire = (el: Element, e: Event) =>
+const fire = (el: EventTarget, e: Event) =>
   act(() => {
     el.dispatchEvent(e);
   });
@@ -183,7 +183,7 @@ describe('hold and slide on the camera button', () => {
     expect(fan()).toBeNull();
   });
 
-  it('runs one action when pointerup and touchend report the same release', () => {
+  it('runs one action when pointerup, touchend and the click that follows report the release', () => {
     fire(button(), pointer('pointerdown', CX, CY));
     hold();
     const [x, y] = from(20) as [number, number];
@@ -195,6 +195,11 @@ describe('hold and slide on the camera button', () => {
     touchRelease();
     expect(onPick).toHaveBeenCalledTimes(1);
     expect(onPick).toHaveBeenCalledWith('photo');
+
+    // A compatibility click must be swallowed, not opened as the cards.
+    fireEvent.click(button());
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('group', { name: /4 options/i })).toBeNull();
   });
 
   it.each([
@@ -258,25 +263,45 @@ describe('hold and slide on the camera button', () => {
   it('releasing in the dead zone, over the button, does nothing', () => {
     fire(button(), pointer('pointerdown', CX, CY));
     hold();
-    release(CX + 8, CY - 8);
+    // Past the 12px minimum travel, but still inside the button the whole way.
+    fire(button(), pointer('pointermove', CX + 10, CY - 10));
+    expect(active()).toEqual(['false', 'false', 'false', 'false']);
+    release(CX + 10, CY - 10);
 
     expect(onPick).not.toHaveBeenCalled();
     expect(fan()).toBeNull();
   });
 
-  it('sliding back to the centre clears the highlight, and releasing cancels', () => {
+  it('latches the wedge once the finger leaves the button, so a release back on it fires', () => {
     fire(button(), pointer('pointerdown', CX, CY));
     hold();
     const [x, y] = from(20) as [number, number];
     fire(button(), pointer('pointermove', x, y));
     expect(active()[3]).toBe('true');
 
-    fire(button(), pointer('pointermove', CX + 5, CY - 5));
-    expect(active()).toEqual(['false', 'false', 'false', 'false']);
-    expect(label()).toBe('Slide to choose');
+    // The chosen wedge stays up while the finger comes back over the button.
+    fire(button(), pointer('pointermove', CX + 10, CY - 10));
+    expect(active()[3]).toBe('true');
+    expect(label()).toBe('Take photo');
 
-    release(CX + 5, CY - 5);
-    expect(onPick).not.toHaveBeenCalled();
+    release(CX + 10, CY - 10);
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick).toHaveBeenCalledWith('photo');
+    expect(fan()).toBeNull();
+  });
+
+  it('makes the chosen wedge the heaviest ink in the fan before release', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    const [x, y] = from(110) as [number, number];
+    fire(button(), pointer('pointermove', x, y));
+
+    expect(wedges().map((w) => w.getAttribute('stroke-width'))).toEqual(['1.5', '4', '1.5', '1.5']);
+    const icon = document.querySelector<HTMLElement>(
+      '[data-testid=capture-fan] span[data-active=true]',
+    );
+    expect(icon?.className).toContain('data-[active=true]:scale-125');
+    expect(label()).toBe('Upload image');
   });
 
   it('sliding straight down cancels', () => {
@@ -297,6 +322,21 @@ describe('hold and slide on the camera button', () => {
 
     expect(fan()).toBeNull();
     expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it('a backgrounded app kills the gesture, even if its touchend arrives late', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    const [x, y] = from(20) as [number, number];
+    fire(button(), pointer('pointermove', x, y));
+
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    fire(document, new Event('visibilitychange'));
+    expect(fan()).toBeNull();
+
+    touchRelease();
+    expect(onPick).not.toHaveBeenCalled();
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
   });
 
   it('is off while the card menu is open: the button is just its ×', () => {

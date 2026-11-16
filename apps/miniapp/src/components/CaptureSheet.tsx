@@ -65,7 +65,7 @@ const FILE_INPUT = 'sr-only';
 /**
  * How long a fan release waits for a sign that the file picker actually opened.
  * A picker blurs the page (or hides it); nothing after this long means the
- * platform refused the open, and the next tap needs a working route.
+ * platform refused the open, and the person is told once.
  */
 export const PICKER_PROBE_MS = 400;
 
@@ -114,6 +114,8 @@ export function CaptureSheet({
   const libraryInput = useRef<HTMLInputElement | null>(null);
   /** Stops the wait for a picker signal; set while one is pending. */
   const pickerWatch = useRef<(() => void) | null>(null);
+  /** The "no picker" line is said once in this session, not after every gesture. */
+  const pickerFailureShown = useRef(false);
 
   function reset() {
     setStage('idle');
@@ -256,9 +258,9 @@ export function CaptureSheet({
 
   /**
    * The fan can only ask; the platform decides whether a picker opens. If
-   * nothing signals that it did — no blur, no hidden page, no files — put the
-   * cards back with the same action highlighted, so the release leaves the
-   * person with a next tap instead of an unchanged screen.
+   * nothing signals that it did — no blur, no hidden page, no files — say so
+   * once. Never reopen the menu: that would turn every slide-and-release into
+   * a slide, a release and a tap.
    */
   function watchPickerOpen(action: Extract<CaptureAction, 'photo' | 'upload'>) {
     stopPickerWatch();
@@ -286,8 +288,9 @@ export function CaptureSheet({
       const input = action === 'photo' ? cameraInput.current : libraryInput.current;
       // The picker opened and came back with files: `change` is on its way.
       if ((input?.files?.length ?? 0) > 0) return;
-      setHighlight(action);
-      onOpenChange(true);
+      if (pickerFailureShown.current) return;
+      pickerFailureShown.current = true;
+      onToast('error', 'Could not open the photo picker on this device.');
     }, PICKER_PROBE_MS);
     pickerWatch.current = stop;
   }

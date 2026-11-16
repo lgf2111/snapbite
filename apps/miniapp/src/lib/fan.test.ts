@@ -22,13 +22,31 @@ describe('wedgeAt', () => {
     expect(wedgeAt(0, 0)).toBeNull();
   });
 
-  it('resolves a finger exactly on a boundary to exactly one wedge, the same one every time', () => {
-    for (const deg of [135, 90, 45]) {
-      const first = pick(deg);
-      expect(first).not.toBeNull();
-      for (let i = 0; i < 5; i++) expect(pick(deg)).toBe(first);
-      // and one degree either side lands on the two neighbours
-      expect(new Set([pick(deg + 1), pick(deg - 1)]).size).toBe(2);
+  it('puts every edge on its documented side, one degree either side', () => {
+    // 0/45/90/135/180 plus a degree on each side. A boundary belongs to the
+    // wedge on its right (the lower angle). Indices: saved, upload, manual, photo.
+    const cases = [
+      [359, 3],
+      [0, 3],
+      [1, 3],
+      [44, 3],
+      [45, 3],
+      [46, 2],
+      [89, 2],
+      [90, 2],
+      [91, 1],
+      [134, 1],
+      [135, 1],
+      [136, 0],
+      [179, 0],
+      [180, 0],
+      [181, 0],
+    ] as const;
+
+    for (const [deg, expected] of cases) {
+      expect(pick(deg), `${deg}deg`).toBe(expected);
+      // The same point resolves the same way every time.
+      for (let i = 0; i < 3; i++) expect(pick(deg)).toBe(expected);
     }
   });
 

@@ -103,7 +103,7 @@ const fanPoint = (trigger: HTMLElement, deg: number) => {
 };
 
 /**
- * A sheet whose menu state is real, so the fan's picker backstop can open it.
+ * A sheet whose menu state is real, so the fan's picker handling can be seen.
  * The button lives outside the sheet, as it does under the tab bar.
  */
 function setupFan() {
@@ -113,6 +113,7 @@ function setupFan() {
     analyze: vi.fn(async () => RESULT),
     logWithPhoto: vi.fn(async () => {}),
   } as unknown as Backend;
+  const onToast = vi.fn();
 
   function Host() {
     const [open, setOpen] = useState(false);
@@ -129,7 +130,7 @@ function setupFan() {
           triggerRef={trigger}
           onLogged={vi.fn()}
           onManualLogged={vi.fn()}
-          onToast={vi.fn()}
+          onToast={onToast}
         />
       </>
     );
@@ -140,7 +141,7 @@ function setupFan() {
   const inputs = [...container.querySelectorAll<HTMLInputElement>('input[type=file]')];
   const camera = inputs.find((i) => i.hasAttribute('capture')) as HTMLInputElement;
   const library = inputs.find((i) => !i.hasAttribute('capture')) as HTMLInputElement;
-  return { trigger, camera, library };
+  return { trigger, camera, library, onToast };
 }
 
 const photo = (name: string) => new File([name], name, { type: 'image/jpeg' });
@@ -262,10 +263,10 @@ describe('when the fan cannot open a picker', () => {
     });
   }
 
-  it('reopens the cards with that action highlighted when no picker signal arrives', () => {
+  it('says so once, and never reopens the cards for a second tap', () => {
     vi.useFakeTimers();
     try {
-      const { library, trigger } = setupFan();
+      const { library, trigger, onToast } = setupFan();
       const libraryClick = vi.spyOn(library, 'click');
       slideTo(trigger, 110); // Upload image
       expect(libraryClick).toHaveBeenCalledTimes(1);
@@ -275,25 +276,34 @@ describe('when the fan cannot open a picker', () => {
       act(() => {
         vi.advanceTimersByTime(PICKER_PROBE_MS);
       });
+      expect(screen.queryByTestId('capture-menu')).toBeNull();
+      expect(onToast).toHaveBeenCalledTimes(1);
+      expect(onToast).toHaveBeenCalledWith('error', expect.stringMatching(/photo picker/i));
 
-      const menu = screen.getByTestId('capture-menu');
-      const upload = within(menu).getByRole('button', { name: /upload image/i });
-      expect(upload).toHaveAttribute('data-highlighted', 'true');
+      // A second refusal is the same news: it is said once.
+      slideTo(trigger, 110);
+      expect(libraryClick).toHaveBeenCalledTimes(2);
+      act(() => {
+        vi.advanceTimersByTime(PICKER_PROBE_MS);
+      });
+      expect(onToast).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('capture-menu')).toBeNull();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('stays closed when the picker does signal that it opened', () => {
+  it('stays quiet when the picker does signal that it opened', () => {
     vi.useFakeTimers();
     try {
-      const { trigger } = setupFan();
+      const { trigger, onToast } = setupFan();
       slideTo(trigger, 110);
 
       act(() => {
         window.dispatchEvent(new Event('blur'));
         vi.advanceTimersByTime(PICKER_PROBE_MS);
       });
+      expect(onToast).not.toHaveBeenCalled();
       expect(screen.queryByTestId('capture-menu')).toBeNull();
     } finally {
       vi.useRealTimers();
