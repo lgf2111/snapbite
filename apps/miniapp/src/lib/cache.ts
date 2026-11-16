@@ -4,7 +4,10 @@
  * Goal: the app should feel instant. Reads render immediately from a cached
  * copy (in memory, warmed from sessionStorage on load), while a background fetch
  * revalidates and only notifies subscribers when the data actually changed.
- * Mutations patch or invalidate the relevant keys so the next read is current.
+ *
+ * Rule: a mutation must rewrite its key (`mutateCached`) or `invalidate` it.
+ * A silent mutation plus a warm cache is a guaranteed stale UI: the next mount
+ * paints the pre-mutation value, and a failed refresh leaves it there.
  *
  * Storage is sessionStorage, not localStorage: the payload is a screen's last
  * look for this tab, not a durable offline database. Closing the tab drops it.
@@ -42,6 +45,14 @@ const STORE_PREFIX = 'snapbite.cache.';
 const MAX_ENTRIES = 24;
 /** A single entry larger than this is kept in memory but not persisted. */
 const MAX_ENTRY_CHARS = 256_000;
+/**
+ * How long a mutation's write outranks a revalidation that was already in
+ * flight. A GET that started before the PUT can resolve after it with the old
+ * value; the user's write must not be painted back over.
+ */
+const MUTATION_WINS_MS = 5_000;
+/** When each key was last rewritten by a mutation (ms). */
+const MUTATED_AT = new Map<string, number>();
 
 function storageKey(key: string): string {
   return `${STORE_PREFIX}${key}`;
@@ -117,15 +128,35 @@ export function getCached<T>(key: string): T | undefined {
   return read(key)?.value as T | undefined;
 }
 
-/** Writes a value to the cache (used after mutations to seed a known result). */
+/** Seeds a value. Mutations must use `mutateCached`, not this. */
 export function setCached<T>(key: string, value: T): void {
   write(key, value);
+}
+
+/**
+ * Writes a mutation's result into the cache and marks it as the newest truth
+ * for `key`.
+ *
+ * THE RULE: every successful mutation must either rewrite its key with this or
+ * `invalidate` it. A silent mutation plus a warm cache is a guaranteed stale
+ * screen on the next mount — the cache paints the pre-mutation value, and a
+ * failing revalidation leaves it there.
+ *
+ * The write also beats a revalidation that races it for `MUTATION_WINS_MS`, so
+ * an older GET cannot clobber the value the person just set.
+ */
+export function mutateCached<T>(key: string, value: T): void {
+  write(key, value);
+  MUTATED_AT.set(key, Date.now());
 }
 
 /** Removes cached entries whose key starts with the given prefix. */
 export function invalidate(prefix: string): void {
   for (const k of [...MEM.keys()]) {
     if (k.startsWith(prefix)) MEM.delete(k);
+  }
+  for (const k of [...MUTATED_AT.keys()]) {
+    if (k.startsWith(prefix)) MUTATED_AT.delete(k);
   }
   try {
     const full = storageKey(prefix);
@@ -204,6 +235,7 @@ export function patchCachedItem(prefix: string, id: string, patch: Record<string
 /** Clears the entire client cache (e.g. on account deletion). */
 export function clearCache(): void {
   MEM.clear();
+  MUTATED_AT.clear();
   try {
     const toRemove: string[] = [];
     for (let i = 0; i < sessionStorage.length; i++) {
@@ -223,6 +255,14 @@ export function clearCache(): void {
  */
 export async function revalidate<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
   const next = await fetcher();
+  // A mutation landed while this fetch was in flight: the response is an older
+  // snapshot. Return the locally written truth and do not put the old value
+  // back into the cache.
+  const mutatedAt = MUTATED_AT.get(key);
+  if (mutatedAt !== undefined && Date.now() - mutatedAt < MUTATION_WINS_MS) {
+    const current = read(key)?.value as T | undefined;
+    if (current !== undefined) return current;
+  }
   const prev = read(key)?.value;
   if (JSON.stringify(prev) !== JSON.stringify(next)) {
     write(key, next);

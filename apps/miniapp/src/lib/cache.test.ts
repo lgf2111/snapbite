@@ -4,6 +4,7 @@ import {
   clearCache,
   getCached,
   invalidate,
+  mutateCached,
   patchCachedItem,
   removeCachedItem,
   revalidate,
@@ -116,6 +117,48 @@ describe('cache', () => {
     expect(result).toEqual({ v: 1 });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(getCached('k')).toEqual({ v: 1 });
+  });
+
+  it('a mutation outranks a revalidation that was already in flight', async () => {
+    setCached('k', { v: 1 });
+    let resolve!: (value: { v: number }) => void;
+    const pending = revalidate(
+      'k',
+      () =>
+        new Promise<{ v: number }>((done) => {
+          resolve = done;
+        }),
+    );
+
+    mutateCached('k', { v: 2 });
+    resolve({ v: 1 });
+
+    await expect(pending).resolves.toEqual({ v: 2 });
+    expect(getCached('k')).toEqual({ v: 2 });
+  });
+
+  it('lets a revalidation land once the mutation window has passed', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-01T00:00:00Z'));
+      let resolve!: (value: { v: number }) => void;
+      const pending = revalidate(
+        'k',
+        () =>
+          new Promise<{ v: number }>((done) => {
+            resolve = done;
+          }),
+      );
+
+      mutateCached('k', { v: 2 });
+      vi.setSystemTime(Date.now() + 6_000);
+      resolve({ v: 1 });
+
+      await expect(pending).resolves.toEqual({ v: 1 });
+      expect(getCached('k')).toEqual({ v: 1 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('caps the cache at 24 entries and evicts the oldest', () => {

@@ -26,9 +26,9 @@ import {
   cacheKey,
   clearCache,
   invalidate,
+  mutateCached,
   patchCachedItem,
   removeCachedItem,
-  setCached,
 } from './cache.js';
 import { type AppConfig, readConfig } from './config.js';
 import {
@@ -267,7 +267,7 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
         await api.saveApiKey(apiKey, aiProvider, aiModel, custom);
         // Re-fetch so profile/targets/custom fields all round-trip correctly.
         const s = await api.getSettings();
-        setCached(cacheKey.settings(), s);
+        mutateCached(cacheKey.settings(), s);
         return s;
       },
       async saveProfile(profile) {
@@ -278,19 +278,19 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
       async saveFallback(apiKey, aiProvider, aiModel, custom) {
         await api.saveFallback(apiKey, aiProvider, aiModel, custom);
         const s = await api.getSettings();
-        setCached(cacheKey.settings(), s);
+        mutateCached(cacheKey.settings(), s);
         return s;
       },
       async setFallbackEnabled(enabled) {
         await api.setFallbackEnabled(enabled);
         const s = await api.getSettings();
-        setCached(cacheKey.settings(), s);
+        mutateCached(cacheKey.settings(), s);
         return s;
       },
       async removeFallback() {
         await api.removeFallback();
         const s = await api.getSettings();
-        setCached(cacheKey.settings(), s);
+        mutateCached(cacheKey.settings(), s);
         return s;
       },
       exportData() {
@@ -321,19 +321,19 @@ export function createBackend(config: AppConfig = readConfig()): Backend {
       async saveReminders(enabled, times) {
         await api.saveReminders(enabled, times);
         const s = await api.getSettings();
-        setCached(cacheKey.settings(), s);
+        mutateCached(cacheKey.settings(), s);
         return s;
       },
       async saveAdaptive(enabled) {
         await api.saveAdaptive(enabled);
         const s = await api.getSettings();
-        setCached(cacheKey.settings(), s);
+        mutateCached(cacheKey.settings(), s);
         return s;
       },
       async logWeight(kg) {
         await api.logWeight(kg);
         const s = await api.getSettings();
-        setCached(cacheKey.settings(), s);
+        mutateCached(cacheKey.settings(), s);
         return s;
       },
       async sendFeedback(message) {

@@ -333,8 +333,8 @@ function DishesSection({
 export function ReportsScreen({ backend, onBack, onSeeCredits }: ReportsScreenProps) {
   const [range, setRange] = useState<ReportRange>('90d');
   // The last report for this range renders instantly; a background fetch swaps
-  // it in place. A range with no cache keeps the previous report on screen
-  // while loading, so switching never flashes a full-page skeleton.
+  // it in place. A range with no cache shows its own loading state: the
+  // previous range's report is never shown as this range while it loads.
   const {
     data: report,
     loading,

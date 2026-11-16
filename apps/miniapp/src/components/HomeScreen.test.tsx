@@ -729,4 +729,133 @@ describe('HomeScreen', () => {
       'Your key hit its limit — used 1 credit',
     );
   });
+
+  it('never paints the previous day while a day with no cache loads', async () => {
+    const sixteenth = [meal({ id: 'nov16', label: 'Sixteenth curry' })];
+    const eleventh = [meal({ id: 'nov11', label: 'Eleventh toast' })];
+    setCached(cacheKey.mealsByDate('2026-11-16'), sixteenth);
+    let resolveEleventh: (meals: RecentMeal[]) => void = () => {};
+    const backend = stubBackend({
+      mealsByDate: vi.fn((date: string) =>
+        date === '2026-11-16'
+          ? Promise.resolve(sixteenth)
+          : new Promise<RecentMeal[]>((resolve) => {
+              resolveEleventh = resolve;
+            }),
+      ),
+    });
+
+    const { rerender } = render(
+      <HomeScreen {...props(backend, { date: '2026-11-16', targets: TARGETS })} />,
+    );
+    expect(screen.getByText('Sixteenth curry')).toBeInTheDocument();
+
+    rerender(<HomeScreen {...props(backend, { date: '2026-11-11', targets: TARGETS })} />);
+
+    // The 16th's meals belong to another key and are gone in the same commit
+    // as the 11th's header: the list is empty and loading, not yesterday's food.
+    expect(screen.queryByText('Sixteenth curry')).not.toBeInTheDocument();
+    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveEleventh(eleventh);
+    });
+    expect(await screen.findByText('Eleventh toast')).toBeInTheDocument();
+    expect(screen.queryByText('Sixteenth curry')).not.toBeInTheDocument();
+  });
+
+  it('never paints an earlier day while a later day with no cache loads', async () => {
+    const eleventh = [meal({ id: 'nov11', label: 'Eleventh toast' })];
+    const sixteenth = [meal({ id: 'nov16', label: 'Sixteenth curry' })];
+    setCached(cacheKey.mealsByDate('2026-11-11'), eleventh);
+    let resolveSixteenth: (meals: RecentMeal[]) => void = () => {};
+    const backend = stubBackend({
+      mealsByDate: vi.fn((date: string) =>
+        date === '2026-11-11'
+          ? Promise.resolve(eleventh)
+          : new Promise<RecentMeal[]>((resolve) => {
+              resolveSixteenth = resolve;
+            }),
+      ),
+    });
+
+    const { rerender } = render(
+      <HomeScreen {...props(backend, { date: '2026-11-11', targets: TARGETS })} />,
+    );
+    expect(screen.getByText('Eleventh toast')).toBeInTheDocument();
+
+    rerender(<HomeScreen {...props(backend, { date: '2026-11-16', targets: TARGETS })} />);
+
+    expect(screen.queryByText('Eleventh toast')).not.toBeInTheDocument();
+    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+
+    await act(async () => {
+      resolveSixteenth(sixteenth);
+    });
+    expect(await screen.findByText('Sixteenth curry')).toBeInTheDocument();
+    expect(screen.queryByText('Eleventh toast')).not.toBeInTheDocument();
+  });
+
+  it('paints a day whose cache is warm synchronously when stepping back to it', async () => {
+    setCached(cacheKey.mealsByDate('2026-11-16'), [
+      meal({ id: 'nov16', label: 'Sixteenth curry' }),
+    ]);
+    setCached(cacheKey.mealsByDate('2026-11-11'), [meal({ id: 'nov11', label: 'Eleventh toast' })]);
+    const backend = stubBackend({
+      mealsByDate: vi.fn(() => new Promise<RecentMeal[]>(() => {})),
+    });
+
+    const { rerender } = render(
+      <HomeScreen {...props(backend, { date: '2026-11-16', targets: TARGETS })} />,
+    );
+    expect(screen.getByText('Sixteenth curry')).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0);
+
+    rerender(<HomeScreen {...props(backend, { date: '2026-11-11', targets: TARGETS })} />);
+    expect(screen.getByText('Eleventh toast')).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0);
+
+    rerender(<HomeScreen {...props(backend, { date: '2026-11-16', targets: TARGETS })} />);
+    expect(screen.getByText('Sixteenth curry')).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0);
+
+    // Let the dates chip settle inside act (the meals fetches stay in flight).
+    await act(async () => {
+      await Promise.resolve();
+    });
+  });
+
+  it('shows the retry line only when the current day has no meals to show', async () => {
+    const sixteenth = [meal({ id: 'nov16', label: 'Sixteenth curry' })];
+    setCached(cacheKey.mealsByDate('2026-11-16'), sixteenth);
+    let rejectEleventh: (error: Error) => void = () => {};
+    const backend = stubBackend({
+      mealsByDate: vi.fn((date: string) =>
+        date === '2026-11-16'
+          ? Promise.resolve(sixteenth)
+          : new Promise<RecentMeal[]>((_, reject) => {
+              rejectEleventh = reject;
+            }),
+      ),
+    });
+
+    const { rerender } = render(
+      <HomeScreen {...props(backend, { date: '2026-11-16', targets: TARGETS })} />,
+    );
+    expect(screen.getByText('Sixteenth curry')).toBeInTheDocument();
+
+    rerender(<HomeScreen {...props(backend, { date: '2026-11-11', targets: TARGETS })} />);
+    expect(screen.queryByText('Sixteenth curry')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    await act(async () => {
+      rejectEleventh(new Error("Couldn't load that. Tap to retry."));
+    });
+
+    // The 11th has no rows for this key, so the retry line is the truth.
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load that. Tap to retry.");
+    expect(screen.queryAllByTestId('swipe-card')).toHaveLength(0);
+    expect(screen.queryByText('Sixteenth curry')).not.toBeInTheDocument();
+  });
 });

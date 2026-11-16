@@ -161,8 +161,8 @@ export function HomeScreen({
   );
   // Hidden rows are deleted optimistically: totals, verdict and the list all stop
   // counting the meal during the undo window, and Undo puts it straight back.
-  // A background revalidate may replace `mealsData`, but it never clears the
-  // list: only a first load with no cached value has no rows to show.
+  // A background revalidate may replace `mealsData`; a different day with no
+  // cache starts empty, never showing the previous day's rows under its header.
   const meals = useMemo(
     () => (mealsData ?? []).filter((m) => !hiddenIds.has(m.id)),
     [mealsData, hiddenIds],

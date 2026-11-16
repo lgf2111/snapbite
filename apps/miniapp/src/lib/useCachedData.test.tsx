@@ -76,7 +76,7 @@ describe('useCachedData', () => {
     expect(result.current.loading).toBe(false);
   });
 
-  it('keeps the last rendered value when a new key has no cache, then swaps in place', async () => {
+  it('clears the last rendered value when a new key has no cache, then swaps in place', async () => {
     let resolveNew: (value: string) => void = () => {};
     const newFetcher = vi.fn(
       () =>
@@ -93,7 +93,37 @@ describe('useCachedData', () => {
 
     rerender({ k: 'day:2', f: newFetcher });
 
-    // No cache for the new key: yesterday stays on screen, no skeleton state.
+    // No cache for the new key: the previous key's value belongs to a
+    // different day and must not be shown under this key's label.
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.loading).toBe(true);
+    expect(result.current.stale).toBe(true);
+
+    act(() => resolveNew('day-2'));
+    await waitFor(() => expect(result.current.data).toBe('day-2'));
+    expect(result.current.loading).toBe(false);
+    expect(result.current.stale).toBe(false);
+  });
+
+  it('keeps the previous value across a cold key change only when keepPreviousData is set', async () => {
+    let resolveNew: (value: string) => void = () => {};
+    const newFetcher = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveNew = resolve;
+        }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ k, f }: { k: string; f: () => Promise<string> }) =>
+        useCachedData(k, f, 'Failed to load', { keepPreviousData: true }),
+      { initialProps: { k: 'day:1', f: async () => 'day-1' } },
+    );
+    await waitFor(() => expect(result.current.data).toBe('day-1'));
+
+    rerender({ k: 'day:2', f: newFetcher });
+
+    // The caller opted into showing a payload the key does not label.
     expect(result.current.data).toBe('day-1');
     expect(result.current.loading).toBe(false);
     expect(result.current.stale).toBe(true);
