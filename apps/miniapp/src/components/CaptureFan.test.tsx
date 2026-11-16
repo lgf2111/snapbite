@@ -170,6 +170,27 @@ describe('hold and slide on the camera button', () => {
     expect(fan()).toBeNull();
   });
 
+  it('runs the release from a touchend delivered to the window, not the button', () => {
+    fire(button(), pointer('pointerdown', CX, CY));
+    hold();
+    const [x, y] = from(20) as [number, number];
+    fire(button(), pointer('pointermove', x, y));
+
+    // iOS sends pointerup first; the button does not get the touch release
+    // because the finger left it and pointer capture did not retarget it.
+    fire(button(), pointer('pointerup', x, y));
+    expect(onPick).not.toHaveBeenCalled();
+    fire(window, new Event('touchend'));
+
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(onPick).toHaveBeenCalledWith('photo');
+    expect(fan()).toBeNull();
+
+    // The window listener belongs to the gesture: it is gone with it.
+    fire(window, new Event('touchend'));
+    expect(onPick).toHaveBeenCalledTimes(1);
+  });
+
   it('opens the picker from touchend, the touch event iOS trusts', () => {
     fire(button(), pointer('pointerdown', CX, CY));
     hold();

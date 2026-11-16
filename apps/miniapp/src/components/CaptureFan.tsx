@@ -71,7 +71,8 @@ const TOUCH_END_GRACE_MS = 500;
 /**
  * Press and hold the camera button, slide to a wedge, release to run it.
  *
- * The listeners are native pointer listeners on the button, and the highlight
+ * The listeners are native pointer listeners on the button, plus one window
+ * `touchend` listener for the length of each touch gesture, and the highlight
  * is written straight to the DOM from the pointer-move handler, so sliding a
  * thumb around causes no React render. React renders twice per gesture: when
  * the fan opens and when it closes.
@@ -156,6 +157,8 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
     const closeFan = () => {
       window.clearTimeout(timer);
       window.clearTimeout(touchTimer);
+      // The window-level release listener lives only as long as this gesture.
+      window.removeEventListener('touchend', onTouchEnd, true);
       awaitTouchEnd = false;
       start = null;
       held = false;
@@ -184,6 +187,11 @@ export function CaptureFan({ triggerRef, enabled, onPick }: Props) {
       latched = false;
       current.current = null;
       button.setPointerCapture?.(e.pointerId);
+      // The release may not come back to the button: iOS can deliver it to the
+      // window once the finger has slid off, whether or not pointer capture
+      // survived the drag. Listen on the window for the length of the gesture,
+      // in the capture phase, so the action still runs. `closeFan` removes it.
+      window.addEventListener('touchend', onTouchEnd, true);
       timer = window.setTimeout(() => {
         const placed = placeFan(button);
         centre = { x: placed.cx, y: placed.cy };

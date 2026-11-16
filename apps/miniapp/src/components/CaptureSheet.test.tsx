@@ -166,13 +166,27 @@ afterEach(() => {
 });
 
 describe('the file pickers', () => {
-  it('are in the DOM while the menu is closed, and hidden by position, not display:none', () => {
+  it('are in the DOM while the menu is closed, rendered but invisible to every hit test', () => {
     const { camera, library } = setup(false);
     expect(screen.queryByTestId('capture-menu')).toBeNull();
     for (const input of [camera, library]) {
       expect(input.isConnected).toBe(true);
-      expect(input.className).toContain('sr-only');
-      expect(input.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+      // Fixed, transparent and 1px, not `display:none` and not clipped:
+      // some iOS builds refuse a programmatic click on a clipped input.
+      expect(input.style.position).toBe('fixed');
+      expect(input.style.top).toBe('0px');
+      expect(input.style.left).toBe('0px');
+      expect(input.style.width).toBe('1px');
+      expect(input.style.height).toBe('1px');
+      expect(input.style.opacity).toBe('0');
+      expect(input.style.pointerEvents).toBe('none');
+      expect(input.style.zIndex).toBe('-1');
+      expect(input.style.display).toBe('');
+      expect(input.style.visibility).toBe('');
+      expect(input.style.clip).toBe('');
+      expect(input.style.clipPath).toBe('');
+      // Not `aria-hidden`: it is a focusable control.
+      expect(input.hasAttribute('aria-hidden')).toBe(false);
     }
     expect(camera.getAttribute('capture')).toBe('environment');
     expect(camera.accept).toBe('image/*');
@@ -263,7 +277,7 @@ describe('when the fan cannot open a picker', () => {
     });
   }
 
-  it('says so once, and never reopens the cards for a second tap', () => {
+  it('waits the full window before saying so once, then opens the cards on that action', () => {
     vi.useFakeTimers();
     try {
       const { library, trigger, onToast } = setupFan();
@@ -272,21 +286,72 @@ describe('when the fan cannot open a picker', () => {
       expect(libraryClick).toHaveBeenCalledTimes(1);
       expect(screen.queryByTestId('capture-menu')).toBeNull();
 
-      // No blur, no hidden page, no files: the platform refused the open.
+      // No cancel, no change, no blur, no hidden page: not yet…
       act(() => {
-        vi.advanceTimersByTime(PICKER_PROBE_MS);
+        vi.advanceTimersByTime(PICKER_PROBE_MS - 1);
       });
+      expect(onToast).not.toHaveBeenCalled();
       expect(screen.queryByTestId('capture-menu')).toBeNull();
-      expect(onToast).toHaveBeenCalledTimes(1);
-      expect(onToast).toHaveBeenCalledWith('error', expect.stringMatching(/photo picker/i));
 
-      // A second refusal is the same news: it is said once.
-      slideTo(trigger, 110);
-      expect(libraryClick).toHaveBeenCalledTimes(2);
+      // …and exactly at the window, one line and a way out.
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(onToast).toHaveBeenCalledTimes(1);
+      expect(onToast).toHaveBeenCalledWith('error', expect.stringMatching(/tap the camera/i));
+      const menu = screen.getByTestId('capture-menu');
+      expect(within(menu).getByRole('button', { name: /upload image/i })).toHaveAttribute(
+        'data-highlighted',
+        'true',
+      );
+
+      // A second refusal lands in the same place, without repeating the line.
+      fireEvent.click(screen.getByTestId('capture-scrim'));
+      expect(screen.queryByTestId('capture-menu')).toBeNull();
+      slideTo(trigger, 20); // Take photo
       act(() => {
         vi.advanceTimersByTime(PICKER_PROBE_MS);
       });
       expect(onToast).toHaveBeenCalledTimes(1);
+      const again = screen.getByTestId('capture-menu');
+      expect(within(again).getByRole('button', { name: /take photo/i })).toHaveAttribute(
+        'data-highlighted',
+        'true',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('treats the native cancel event as proof the picker opened', () => {
+    vi.useFakeTimers();
+    try {
+      const { library, trigger, onToast } = setupFan();
+      slideTo(trigger, 110);
+
+      // iOS 16+ fires `cancel` when the sheet is dismissed without a file.
+      act(() => {
+        library.dispatchEvent(new Event('cancel'));
+        vi.advanceTimersByTime(PICKER_PROBE_MS * 2);
+      });
+      expect(onToast).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('capture-menu')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('treats a change with no files as proof too', () => {
+    vi.useFakeTimers();
+    try {
+      const { library, trigger, onToast } = setupFan();
+      slideTo(trigger, 110);
+
+      fireEvent.change(library, { target: { files: [] } });
+      act(() => {
+        vi.advanceTimersByTime(PICKER_PROBE_MS);
+      });
+      expect(onToast).not.toHaveBeenCalled();
       expect(screen.queryByTestId('capture-menu')).toBeNull();
     } finally {
       vi.useRealTimers();
@@ -307,6 +372,45 @@ describe('when the fan cannot open a picker', () => {
       expect(screen.queryByTestId('capture-menu')).toBeNull();
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('stays quiet when a visibility change shows the picker was opened', () => {
+    vi.useFakeTimers();
+    try {
+      const { trigger, onToast } = setupFan();
+      slideTo(trigger, 110);
+
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+        vi.advanceTimersByTime(PICKER_PROBE_MS);
+      });
+      expect(onToast).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('capture-menu')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    }
+  });
+
+  it('never accuses a hidden page, even after the whole window', () => {
+    vi.useFakeTimers();
+    try {
+      const { trigger, onToast } = setupFan();
+      slideTo(trigger, 110);
+
+      // The photo sheet is over the same web process: no visibilitychange, no
+      // blur, and the page is simply hidden. That is not a refusal.
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      act(() => {
+        vi.advanceTimersByTime(PICKER_PROBE_MS);
+      });
+      expect(onToast).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('capture-menu')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
     }
   });
 });

@@ -1,6 +1,6 @@
 import type { MealResult } from '@snapbite/core';
 import { Loader2 } from 'lucide-react';
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type RefObject, useEffect, useRef, useState } from 'react';
 import type { Backend } from '../lib/backend.js';
 import { compressPhoto } from '../lib/compress.js';
 import { mealNoticeBody, notifyLogged } from '../lib/mealNotice.js';
@@ -56,18 +56,31 @@ export type CaptureIntent =
 export const MAX_BATCH = 5;
 
 /**
- * The pickers are always mounted and kept out of sight with `sr-only` positioning,
- * not `display:none`: iOS has been known to refuse to open an input that is not
- * rendered.
+ * The pickers are always mounted and rendered, but invisible: no `display:none`,
+ * no `visibility:hidden`, and no `clip`/`sr-only`. iOS has been known to refuse
+ * a programmatic `click()` on an input it cannot consider rendered, and several
+ * builds silently ignore one clipped to 1px with `clip`. Fixed at the top-left
+ * corner, transparent, and out of the way of every hit test.
  */
-const FILE_INPUT = 'sr-only';
+const FILE_INPUT_STYLE: CSSProperties = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  width: 1,
+  height: 1,
+  opacity: 0,
+  pointerEvents: 'none',
+  zIndex: -1,
+};
 
 /**
  * How long a fan release waits for a sign that the file picker actually opened.
- * A picker blurs the page (or hides it); nothing after this long means the
- * platform refused the open, and the person is told once.
+ * A picker answers with `cancel` (dismissed) or `change` (files); it may also
+ * blur or hide the page. In an installed PWA the photo sheet can be presented
+ * over the same web process and send none of those, so the wait is generous and
+ * silence is the only thing that counts as failure.
  */
-export const PICKER_PROBE_MS = 400;
+export const PICKER_PROBE_MS = 2500;
 
 /**
  * The add-a-meal flow: the four-card menu, the hidden file inputs it drives, and
@@ -257,40 +270,53 @@ export function CaptureSheet({
   }
 
   /**
-   * The fan can only ask; the platform decides whether a picker opens. If
-   * nothing signals that it did — no blur, no hidden page, no files — say so
-   * once. Never reopen the menu: that would turn every slide-and-release into
-   * a slide, a release and a tap.
+   * The fan can only ask; the platform decides whether a picker opens.
+   *
+   * The picker proves it opened with `cancel` (iOS 16+ fires it when the sheet
+   * is dismissed without a file) or `change` (files came back). A blur, a
+   * hidden page or `pagehide` also count. Any of them clears the watch in
+   * silence. Only total silence for PICKER_PROBE_MS is a refusal — and never
+   * while the page is hidden, which is the picker being open, not a failure.
+   * On a real refusal the cards come back with the failed action highlighted,
+   * so the tap path is one tap away.
    */
   function watchPickerOpen(action: Extract<CaptureAction, 'photo' | 'upload'>) {
     stopPickerWatch();
+    const input = action === 'photo' ? cameraInput.current : libraryInput.current;
     let timer = 0;
     let stopped = false;
-    function onVisibility() {
-      if (document.visibilityState === 'hidden') stop();
-    }
     const stop = () => {
       if (stopped) return;
       stopped = true;
       window.clearTimeout(timer);
+      input?.removeEventListener('cancel', stop);
       window.removeEventListener('blur', stop);
       window.removeEventListener('focus', stop);
       window.removeEventListener('pagehide', stop);
-      document.removeEventListener('visibilitychange', onVisibility);
+      document.removeEventListener('visibilitychange', stop);
       if (pickerWatch.current === stop) pickerWatch.current = null;
     };
+    input?.addEventListener('cancel', stop);
     window.addEventListener('blur', stop);
     window.addEventListener('focus', stop);
     window.addEventListener('pagehide', stop);
-    document.addEventListener('visibilitychange', onVisibility);
+    document.addEventListener('visibilitychange', stop);
     timer = window.setTimeout(() => {
+      // Hidden means the picker (or another app) is on screen: never accuse it
+      // of failing while the person cannot even see the accusation.
+      const hidden = document.visibilityState !== 'visible';
       stop();
-      const input = action === 'photo' ? cameraInput.current : libraryInput.current;
+      if (hidden) return;
       // The picker opened and came back with files: `change` is on its way.
       if ((input?.files?.length ?? 0) > 0) return;
-      if (pickerFailureShown.current) return;
-      pickerFailureShown.current = true;
-      onToast('error', 'Could not open the photo picker on this device.');
+      if (!pickerFailureShown.current) {
+        pickerFailureShown.current = true;
+        onToast('error', 'Could not open the photo picker. Tap the camera to choose a photo.');
+      }
+      // The direct tap always works: leave the cards open on the action that
+      // failed, instead of on the dead screen the refused click came from.
+      setHighlight(action);
+      onOpenChange(true);
     }, PICKER_PROBE_MS);
     pickerWatch.current = stop;
   }
@@ -353,9 +379,8 @@ export function CaptureSheet({
         type="file"
         accept="image/*"
         capture="environment"
-        className={FILE_INPUT}
+        style={FILE_INPUT_STYLE}
         tabIndex={-1}
-        aria-hidden
         onChange={(e) => void handleFile(e.target.files?.[0])}
       />
       <input
@@ -363,9 +388,8 @@ export function CaptureSheet({
         type="file"
         accept="image/*"
         multiple
-        className={FILE_INPUT}
+        style={FILE_INPUT_STYLE}
         tabIndex={-1}
-        aria-hidden
         onChange={(e) => {
           handleLibrary(e.target.files);
           // So picking the same photos again still fires a change.
