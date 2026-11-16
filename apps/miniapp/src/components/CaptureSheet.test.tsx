@@ -120,7 +120,7 @@ function setupFan() {
     const trigger = useRef<HTMLButtonElement>(null);
     return (
       <>
-        <button ref={trigger} type="button">
+        <button ref={trigger} type="button" onClick={() => setOpen(true)}>
           camera trigger
         </button>
         <CaptureSheet
@@ -147,6 +147,12 @@ function setupFan() {
 const photo = (name: string) => new File([name], name, { type: 'image/jpeg' });
 const pick = (input: HTMLInputElement, ...files: File[]) =>
   fireEvent.change(input, { target: { files } });
+
+/** jsdom ships no showPicker; give one input the API under test. */
+const withShowPicker = (input: HTMLInputElement, impl: () => void = vi.fn()) => {
+  Object.defineProperty(input, 'showPicker', { configurable: true, value: impl });
+  return impl;
+};
 
 const card = (name: RegExp) => screen.getByRole('button', { name });
 
@@ -278,6 +284,7 @@ describe('when the fan cannot open a picker', () => {
   }
 
   it('waits the full window before saying so once, then opens the cards on that action', () => {
+    expect(PICKER_PROBE_MS).toBe(2500);
     vi.useFakeTimers();
     try {
       const { library, trigger, onToast } = setupFan();
@@ -319,6 +326,37 @@ describe('when the fan cannot open a picker', () => {
         'true',
       );
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('falls back to click() when showPicker() throws, and logs the error name once', () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { library, trigger, onToast } = setupFan();
+      const showPicker = vi.fn(() => {
+        throw new DOMException('no transient activation', 'NotAllowedError');
+      });
+      withShowPicker(library, showPicker);
+      const libraryClick = vi.spyOn(library, 'click');
+
+      slideTo(trigger, 110); // Upload image
+      expect(showPicker).toHaveBeenCalledTimes(1);
+      expect(libraryClick).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        vi.advanceTimersByTime(PICKER_PROBE_MS);
+      });
+
+      // The toast stays actionable; the console names the error a tester can report.
+      expect(onToast).toHaveBeenCalledTimes(1);
+      expect(onToast).toHaveBeenCalledWith('error', expect.stringMatching(/tap the camera/i));
+      expect(onToast.mock.calls[0]?.[1]).not.toContain('NotAllowedError');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain('NotAllowedError');
+    } finally {
+      warn.mockRestore();
       vi.useRealTimers();
     }
   });
@@ -394,6 +432,32 @@ describe('when the fan cannot open a picker', () => {
     }
   });
 
+  it('lets a retry from the cards supersede the gesture it came after', () => {
+    vi.useFakeTimers();
+    try {
+      const { trigger, library, onToast } = setupFan();
+      const libraryClick = vi.spyOn(library, 'click');
+      slideTo(trigger, 110); // arms the watch
+      expect(libraryClick).toHaveBeenCalledTimes(1);
+
+      // The person taps the camera to open the cards, then retries at once.
+      // The first tap's compatibility click is swallowed; the second opens.
+      fireEvent.click(trigger);
+      fireEvent.click(trigger);
+      const menu = screen.getByTestId('capture-menu');
+      fireEvent.click(within(menu).getByRole('button', { name: /upload image/i }));
+      expect(libraryClick).toHaveBeenCalledTimes(2);
+
+      // The old gesture's window must not accuse the new tap.
+      act(() => {
+        vi.advanceTimersByTime(PICKER_PROBE_MS);
+      });
+      expect(onToast).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('never accuses a hidden page, even after the whole window', () => {
     vi.useFakeTimers();
     try {
@@ -426,6 +490,32 @@ describe('CaptureSheet (the add-a-meal flow)', () => {
     expect(cameraClick).toHaveBeenCalledTimes(1);
     expect(libraryClick).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('prefers showPicker() for both inputs when the browser has it', () => {
+    const { camera, library } = setup();
+    const cameraShow = withShowPicker(camera);
+    const libraryShow = withShowPicker(library);
+    const cameraClick = vi.spyOn(camera, 'click');
+    const libraryClick = vi.spyOn(library, 'click');
+
+    fireEvent.click(card(/take photo/i));
+    fireEvent.click(card(/upload image/i));
+
+    expect(cameraShow).toHaveBeenCalledTimes(1);
+    expect(libraryShow).toHaveBeenCalledTimes(1);
+    expect(cameraClick).not.toHaveBeenCalled();
+    expect(libraryClick).not.toHaveBeenCalled();
+  });
+
+  it('keeps click() when showPicker() is missing', () => {
+    const { camera } = setup();
+    expect('showPicker' in camera).toBe(false);
+    const cameraClick = vi.spyOn(camera, 'click');
+
+    fireEvent.click(card(/take photo/i));
+
+    expect(cameraClick).toHaveBeenCalledTimes(1);
   });
 
   it('Upload image opens the library input and closes the menu at once', () => {

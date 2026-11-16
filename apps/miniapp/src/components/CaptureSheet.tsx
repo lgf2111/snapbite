@@ -129,6 +129,8 @@ export function CaptureSheet({
   const pickerWatch = useRef<(() => void) | null>(null);
   /** The "no picker" line is said once in this session, not after every gesture. */
   const pickerFailureShown = useRef(false);
+  /** The `error.name` from a refused `showPicker()`, for that one report. */
+  const pickerRefusal = useRef<string | null>(null);
 
   function reset() {
     setStage('idle');
@@ -250,17 +252,38 @@ export function CaptureSheet({
   const busy = stage === 'analyzing' || stage === 'saving';
 
   /**
-   * iOS opens a file picker only from inside the tap or release that asked for
-   * it. So these are plain synchronous calls: no await, no state change and no
-   * timer before `click()`, and nothing the menu's closing animation can delay.
-   * The fan reaches them from `touchend`, the event iOS accepts.
+   * Opens a file picker from inside the tap or release that asked for it.
+   *
+   * iOS only opens a picker from a transient activation and, on 16+, exposes
+   * `showPicker()` for file inputs as the spec'd entry point; a bare `click()`
+   * on a hidden input is refused in some installed-PWA and in-app-webview
+   * contexts. The call stays synchronous: no await, no state change and no
+   * timer before it. Older Safari and some webviews have no `showPicker`, and
+   * it can still throw `NotAllowedError` when the activation was lost, so
+   * `click()` remains the fallback.
    */
+  function openPicker(input: HTMLInputElement | null) {
+    if (!input) return;
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker();
+        return;
+      } catch (err) {
+        // Keep only the name: the probe turns it into evidence, the toast stays plain.
+        // `DOMException` is not an `Error` subclass everywhere, so read `name` directly.
+        pickerRefusal.current =
+          err && typeof err === 'object' && 'name' in err ? String(err.name) : 'unknown';
+      }
+    }
+    input.click();
+  }
+
   function takePhoto() {
-    cameraInput.current?.click();
+    openPicker(cameraInput.current);
   }
   function uploadImage() {
     if (batchRunning.current) return;
-    libraryInput.current?.click();
+    openPicker(libraryInput.current);
   }
 
   /** Stops waiting for a picker signal, if a wait is pending. */
@@ -282,6 +305,8 @@ export function CaptureSheet({
    */
   function watchPickerOpen(action: Extract<CaptureAction, 'photo' | 'upload'>) {
     stopPickerWatch();
+    // A new gesture starts with no refusal; only this one may be reported.
+    pickerRefusal.current = null;
     const input = action === 'photo' ? cameraInput.current : libraryInput.current;
     let timer = 0;
     let stopped = false;
@@ -311,6 +336,13 @@ export function CaptureSheet({
       if ((input?.files?.length ?? 0) > 0) return;
       if (!pickerFailureShown.current) {
         pickerFailureShown.current = true;
+        // The API's own error name is the one clue a device tester can send
+        // back, so it goes to the console; the toast stays actionable.
+        console.warn(
+          `[capture] no photo picker after ${PICKER_PROBE_MS}ms${
+            pickerRefusal.current ? `; showPicker() threw ${pickerRefusal.current}` : ''
+          }`,
+        );
         onToast('error', 'Could not open the photo picker. Tap the camera to choose a photo.');
       }
       // The direct tap always works: leave the cards open on the action that
@@ -335,9 +367,12 @@ export function CaptureSheet({
    *
    * `fromFan` arms the picker probe: the fan's release is the one a platform
    * may refuse from a pointer event, and its own route (touchend) cannot be
-   * verified from here. Card taps are left exactly as they were.
+   * verified from here. Card taps are left exactly as they were — but any watch
+   * the previous gesture left running is stale: a retry must not be accused by
+   * the tap that came before it.
    */
   function pick(action: CaptureAction, fromFan = false) {
+    stopPickerWatch();
     if (fromFan && (action === 'photo' || action === 'upload')) watchPickerOpen(action);
     if (action === 'photo') takePhoto();
     else if (action === 'upload') uploadImage();
