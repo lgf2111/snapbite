@@ -17,6 +17,8 @@ import { type Locator, type Page, expect, test } from '@playwright/test';
 declare global {
   interface Window {
     __picks: string[];
+    __pickerShows: string[];
+    __pickerThrows: string[];
     __pickerEvents: string[];
   }
 }
@@ -39,10 +41,42 @@ const choosers = new WeakMap<Page, ChooserKind[]>();
 /** Whether the intercepted chooser should be closed by selecting no files. */
 const answerChooser = new WeakSet<Page>();
 
-async function openApp(page: Page, opts: { answer?: boolean } = {}): Promise<void> {
+/**
+ * Open the app with both inputs instrumented.
+ *
+ * `forceClick` hides `showPicker()` from the app, so `openPicker()` takes its
+ * `click()` fallback. WebKit no-ops `showPicker()` when it has no user
+ * activation, without throwing and without a fallback, so the synthetic
+ * gesture tests would otherwise observe nothing at all. The trusted-tap test
+ * leaves it alone: that is the real iOS path, and it works there.
+ */
+async function openApp(
+  page: Page,
+  opts: { answer?: boolean; forceClick?: boolean } = {},
+): Promise<void> {
   await page.addInitScript((profile) => {
     localStorage.setItem('snapbite.profile.v1', JSON.stringify(profile));
   }, PROFILE);
+  // Record the API the app asks. This WebKit build exposes showPicker() but
+  // does not route it to Playwright's chooser interception, so the call itself
+  // is the evidence here; the trusted click probe below still opens a chooser.
+  await page.addInitScript(() => {
+    window.__pickerShows = [];
+    window.__pickerThrows = [];
+    const proto = HTMLInputElement.prototype;
+    const original = proto.showPicker;
+    if (typeof original !== 'function') return;
+    proto.showPicker = function (this: HTMLInputElement) {
+      const name = this.hasAttribute('capture') ? 'camera' : 'library';
+      try {
+        original.call(this);
+        window.__pickerShows.push(name);
+      } catch (err) {
+        window.__pickerThrows.push(`${name}:${(err as DOMException).name}`);
+        throw err;
+      }
+    };
+  });
   const kinds: ChooserKind[] = [];
   choosers.set(page, kinds);
   if (opts.answer !== false) answerChooser.add(page);
@@ -59,23 +93,26 @@ async function openApp(page: Page, opts: { answer?: boolean } = {}): Promise<voi
   });
   await page.goto('/');
   await expect(page.getByRole('button', { name: /add a meal/i })).toBeVisible();
-  await page.evaluate(() => {
+  await page.evaluate((forceClick) => {
     window.__picks = [];
     window.__pickerEvents = [];
     for (const input of document.querySelectorAll<HTMLInputElement>('input[type=file]')) {
       const name = input.hasAttribute('capture') ? 'camera' : 'library';
+      if (forceClick) Object.defineProperty(input, 'showPicker', { value: undefined });
       input.addEventListener('click', () => window.__picks.push(name));
       for (const type of ['cancel', 'change']) {
         input.addEventListener(type, () => window.__pickerEvents.push(`${name}:${type}`));
       }
     }
-  });
+  }, opts.forceClick === true);
 }
 
 const button = (page: Page) => page.getByRole('button', { name: /add a meal/i });
 const fan = (page: Page) => page.getByTestId('capture-fan');
 const menu = (page: Page) => page.getByTestId('capture-menu');
 const picks = (page: Page) => page.evaluate(() => window.__picks.slice());
+const shows = (page: Page) => page.evaluate(() => window.__pickerShows.slice());
+const thrown = (page: Page) => page.evaluate(() => window.__pickerThrows.slice());
 
 const centre = (b: { x: number; y: number; width: number; height: number }) => ({
   x: b.x + b.width / 2,
@@ -228,7 +265,7 @@ test('the pickers are rendered but invisible, and out of the tab order rather th
 test('a slide-and-release asks the camera and the library inputs, even when the window gets the release', async ({
   page,
 }) => {
-  await openApp(page);
+  await openApp(page, { forceClick: true });
 
   await pick(page, 20); // Take photo
   await pick(page, 110); // Upload image
@@ -300,7 +337,7 @@ test('a trusted tap that calls click() opens a real chooser on both 1px inputs',
 
 test('a dismissed picker is silent: cancel is the proof, not an error', async ({ page }) => {
   // Do not answer the chooser: the sheet is left for us to dismiss.
-  await openApp(page, { answer: false });
+  await openApp(page, { answer: false, forceClick: true });
   await pick(page, 110); // Upload image
 
   await expect.poll(() => (choosers.get(page) ?? []).length).toBe(1);
