@@ -1,17 +1,20 @@
 import {
   MAX_REMINDER_ATTEMPTS,
   type ReminderAttempt,
+  currentStreak,
   dueReminderSlots,
-  reminderMessage,
 } from '@snapbite/core';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { logError } from './db/errors.js';
+import { createMealsDb, mealRowsSince } from './db/meals.js';
 import { createPushDb } from './db/push.js';
 import { settings, users } from './db/schema.js';
 import { type ReminderConfig, parsePreferences } from './db/settings.js';
 import type { Env } from './env.js';
 import { type PushFailure, pushToUser } from './push/deliver.js';
+import { pickReminderCopy } from './reminders/copy.js';
+import { localDayKey } from './routes/meals.js';
 import { TelegramBotClient } from './telegram/botClient.js';
 
 /**
@@ -86,23 +89,35 @@ async function saveReminderState(
     .where(eq(settings.userId, userId));
 }
 
-const PUSH_BODIES: Record<string, string> = {
-  breakfast: 'Log your breakfast before the day gets busy.',
-  lunch: 'Log your meal while it is fresh.',
-  dinner: 'Snap your dinner and log it in a few seconds.',
-};
+/** How far back the reminder copy's streak check looks. */
+const STREAK_WINDOW_DAYS = 60;
 
 /**
- * What the lock screen shows. iOS already prints the app name above the title, so
- * the title is the reminder itself and the body is the instruction. Plain, and no
- * instruction to message a bot.
+ * The user's active logging streak, or undefined when it cannot be read. The
+ * copy module then falls back to the plain pool. Mirrors the bot footer and the
+ * weekly recap: meals bucketed by local day, with revived days counted.
  */
-export function pushReminder(label: string): { title: string; body: string } {
-  const name = label.trim() || 'Meal';
-  return {
-    title: name.charAt(0).toUpperCase() + name.slice(1),
-    body: PUSH_BODIES[label] ?? 'Log your meal while it is fresh.',
-  };
+async function reminderStreak(
+  db: D1Database,
+  userId: string,
+  preferencesJson: string | null,
+  tzOffsetMinutes: number,
+  dateKey: string,
+  nowMs: number,
+): Promise<number | undefined> {
+  try {
+    const rows = await mealRowsSince(
+      createMealsDb(db),
+      userId,
+      nowMs - STREAK_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const dayKeys = new Set(rows.map((r) => localDayKey(r.loggedAt, tzOffsetMinutes)));
+    const prefs = parsePreferences(preferencesJson);
+    for (const day of prefs.streakRevival?.revivedDays ?? []) dayKeys.add(day);
+    return currentStreak(dayKeys, dateKey);
+  } catch {
+    return undefined;
+  }
 }
 
 /** The Settings "send a test" notification: unmistakably a test. */
@@ -146,10 +161,19 @@ export async function runReminders(env: Env, nowMs: number = Date.now()): Promis
       }
       let lastFailureAt = u.reminders.lastFailureAt;
       let changed = false;
+      const streak = await reminderStreak(
+        env.DB,
+        u.userId,
+        u.preferencesJson,
+        u.reminders.tzOffsetMinutes,
+        dateKey,
+        nowMs,
+      );
 
       for (const label of due) {
         const tries = attempts[label]?.tries ?? 0;
         if (tries >= MAX_REMINDER_ATTEMPTS) continue;
+        const copy = pickReminderCopy({ slot: label, dateKey, userId: u.userId, streak });
 
         let delivered = false;
         let live = 0;
@@ -163,7 +187,7 @@ export async function runReminders(env: Env, nowMs: number = Date.now()): Promis
               pushDb,
               u.userId,
               {
-                ...pushReminder(label),
+                ...copy,
                 url: '/',
                 tag: `reminder-${label}`,
               },
@@ -177,7 +201,7 @@ export async function runReminders(env: Env, nowMs: number = Date.now()): Promis
           if (live === 0 && bot && u.telegramUserId != null) {
             telegramAttempted = true;
             const dm = await bot.sendMessage(u.telegramUserId, {
-              text: reminderMessage(label),
+              text: copy.body,
             });
             delivered = dm.messageId != null;
           }

@@ -10,8 +10,14 @@ import { createSettingsDb, getSettings, parsePreferences } from './db/settings.j
 import { createDb, upsertUser } from './db/users.js';
 import { INIT_DATA_HEADER } from './middleware/auth.js';
 import { encryptPayload } from './push/send.js';
-import { TEST_PUSH, pushReminder, runReminders } from './reminders.js';
-import { browserSubscription, vapidEnv } from './test/pushFixtures.js';
+import { TEST_PUSH, runReminders } from './reminders.js';
+import { pickReminderCopy } from './reminders/copy.js';
+import {
+  browserSubscription,
+  browserSubscriptionWithKeys,
+  decryptPush,
+  vapidEnv,
+} from './test/pushFixtures.js';
 
 const BOT_TOKEN = '123456:LOCAL-DEV-BOT-TOKEN';
 
@@ -25,22 +31,17 @@ async function headers(userId: number): Promise<Record<string, string>> {
 }
 
 describe('push reminder copy', () => {
-  it('puts the reminder in the title and the instruction in the body, never the app name', () => {
-    for (const slot of ['breakfast', 'lunch', 'dinner', 'tea break']) {
-      const { title, body } = pushReminder(slot);
+  it('keeps a stable, scannable title without exclamation marks or emoji', () => {
+    for (const slot of ['lunch', 'dinner', 'breakfast', 'tea break']) {
+      const { title } = pickReminderCopy({
+        slot,
+        dateKey: '2026-06-01',
+        userId: 'user-a',
+      });
       expect(title).toBe(slot.charAt(0).toUpperCase() + slot.slice(1));
-      expect(title.toLowerCase()).not.toContain('snapbite');
-      expect(body.toLowerCase()).not.toContain('snapbite');
-      expect(body.length).toBeGreaterThan(0);
-      expect(body.length).toBeLessThan(90);
+      expect(title).not.toMatch(/!/);
+      expect(title).not.toMatch(/\p{Extended_Pictographic}/u);
     }
-  });
-
-  it('varies the body by slot and falls back for a custom one', () => {
-    const bodies = new Set(['breakfast', 'lunch', 'dinner'].map((s) => pushReminder(s).body));
-    expect(bodies.size).toBe(3);
-    expect(pushReminder('lunch').body).toBe('Log your meal while it is fresh.');
-    expect(pushReminder('tea break').body).toBe('Log your meal while it is fresh.');
   });
 
   it('keeps the test notification obviously a test', () => {
@@ -68,6 +69,7 @@ describe('runReminders', () => {
       },
       env,
     );
+    const userId = (await upsertUser(createDb(env.DB), { id: tgId })).id;
 
     // Capture Telegram sendMessage calls by stubbing global fetch.
     const calls: Array<{ chatId: number; text: string }> = [];
@@ -92,7 +94,9 @@ describe('runReminders', () => {
       const sent1 = await runReminders(env, now);
       expect(sent1).toBeGreaterThanOrEqual(1);
       const dm = calls.find((c) => c.chatId === tgId);
-      expect(dm?.text.toLowerCase()).toContain('breakfast');
+      expect(dm?.text).toBe(
+        pickReminderCopy({ slot: 'breakfast', dateKey: '2026-06-01', userId, streak: 0 }).body,
+      );
 
       // Running again in the same window must NOT double-send (lastSent guard).
       calls.length = 0;
@@ -152,7 +156,7 @@ describe('runReminders: web push first, Telegram as the fallback', () => {
   }
 
   async function subscribe(userId: string, host = 'web.push.apple.com') {
-    const sub = await browserSubscription(host);
+    const sub = await browserSubscriptionWithKeys(host);
     await upsertSubscription(createPushDb(env.DB), {
       userId,
       endpoint: sub.endpoint,
@@ -165,6 +169,7 @@ describe('runReminders: web push first, Telegram as the fallback', () => {
   /** Records every outgoing request; answers pushes with `pushStatus`. */
   function network(pushStatus: number | (() => number), pushBody = '') {
     const pushes: string[] = [];
+    const pushBodies: Array<{ url: string; body: Uint8Array }> = [];
     const dms: Array<{ chatId: number; text: string }> = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input);
@@ -180,13 +185,15 @@ describe('runReminders: web push first, Telegram as the fallback', () => {
       }
       if (url.includes('push.apple.com') || url.includes('googleapis.com')) {
         pushes.push(url);
+        const raw = (init as RequestInit | undefined)?.body;
+        if (raw instanceof Uint8Array) pushBodies.push({ url, body: raw });
         return new Response(pushBody || null, {
           status: typeof pushStatus === 'function' ? pushStatus() : pushStatus,
         });
       }
       return new Response('{}', { status: 200 });
     });
-    return { pushes, dms };
+    return { pushes, pushBodies, dms };
   }
 
   const remaining = (endpoint: string) =>
@@ -240,7 +247,40 @@ describe('runReminders: web push first, Telegram as the fallback', () => {
     await runReminders({ ...env, ...vapid }, SLOT + 2 * DAY);
 
     expect(await remaining(sub.endpoint)).toHaveLength(0);
-    expect(dms.find((d) => d.chatId === 6103)?.text.toLowerCase()).toContain('breakfast');
+    expect(dms.find((d) => d.chatId === 6103)?.text).toBe(
+      pickReminderCopy({ slot: 'breakfast', dateKey: '2026-06-03', userId, streak: 0 }).body,
+    );
+  });
+
+  it('sends exactly the same body to web push and the Telegram fallback', async () => {
+    const vapid = await vapidEnv();
+    const tgId = 6303;
+    const userId = await userWithReminder(tgId);
+    const sub = await subscribe(userId);
+    // The push service says the subscription is gone, so this same run falls
+    // back to Telegram: both channels are exercised with one notification.
+    const { pushBodies, dms } = network(410);
+    const now = SLOT + 50 * DAY;
+
+    await runReminders({ ...env, ...vapid }, now);
+
+    const sent = pushBodies.find((p) => p.url === sub.endpoint);
+    expect(sent).toBeTruthy();
+    if (!sent) throw new Error('push body not captured');
+    const payload = JSON.parse(await decryptPush(sent.body, sub)) as {
+      title: string;
+      body: string;
+    };
+    expect(payload.title).toBe('Breakfast');
+    expect(dms.find((d) => d.chatId === tgId)?.text).toBe(payload.body);
+    expect(payload.body).toBe(
+      pickReminderCopy({
+        slot: 'breakfast',
+        dateKey: new Date(now).toISOString().slice(0, 10),
+        userId,
+        streak: 0,
+      }).body,
+    );
   });
 
   it('a user with no subscription falls back to Telegram', async () => {
@@ -442,7 +482,7 @@ describe('push payload size', () => {
     const sub = await browserSubscription();
     for (const label of ['breakfast', 'lunch', 'dinner', 'tea break']) {
       const body = JSON.stringify({
-        ...pushReminder(label),
+        ...pickReminderCopy({ slot: label, dateKey: '2026-06-01', userId: 'user-a', streak: 6 }),
         url: '/',
         tag: `reminder-${label}`,
       });
