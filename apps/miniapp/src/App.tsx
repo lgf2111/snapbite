@@ -9,6 +9,7 @@ import { Skeleton } from './components/ui/skeleton';
 import { Toaster } from './components/ui/sonner';
 import { type Me, authNotice, fetchMe, takeAuthStatus } from './lib/account.js';
 import type { SettingsView } from './lib/api.js';
+import { useAppUpdate } from './lib/appUpdate.js';
 import { type Backend, type RecentMeal, createBackend } from './lib/backend.js';
 import { cacheKey, getCached, revalidate } from './lib/cache.js';
 import { readConfig } from './lib/config.js';
@@ -68,6 +69,13 @@ export function App() {
   // A request from outside the app (an icon shortcut, a shared photo): see lib/launch.ts.
   const [captureIntent, setCaptureIntent] = useState<CaptureIntent | null>(null);
   const cameraRef = useRef<HTMLButtonElement>(null);
+
+  // A deploy while this tab is open: offer a reload, never force one. Setup and
+  // the add-a-meal menu hold the notice; dialogs are detected by the same guard.
+  // Saves and screen changes use the one-minute floor; returning to the app checks at once.
+  const { checkAfterActivity: checkForUpdate } = useAppUpdate({
+    isBlocked: () => showOnboarding || menuOpen,
+  });
 
   // Profile/targets drive the Home rings + onboarding gate.
   const [targets, setTargets] = useState<DailyTargets | null>(null);
@@ -157,8 +165,10 @@ export function App() {
         // Navigating (tab bar, Back) leaves the add-meal menu behind.
         setMenuOpen(false);
         if (next.name === 'day') setHomeDate(next.date);
+        // A screen change is a natural moment to ask whether the app is still current.
+        checkForUpdate();
       }),
-    [],
+    [checkForUpdate],
   );
 
   // Welcome: shown on every launch where the account has nothing at all (no
@@ -177,6 +187,12 @@ export function App() {
   const openMeal = (meal: RecentMeal) => {
     setDetailMeal(meal);
     navigate({ name: 'meal', id: meal.id });
+  };
+
+  /** A save/delete that already round-tripped: cheap to ask for the build too. */
+  const mealChanged = () => {
+    setHomeVersion((v) => v + 1);
+    checkForUpdate();
   };
 
   /**
@@ -223,7 +239,7 @@ export function App() {
                   // Return to the day the meal belongs to, not always today.
                   navigate({ name: 'day', date: homeDate }, { replace: true });
                 }}
-                onChanged={() => setHomeVersion((v) => v + 1)}
+                onChanged={mealChanged}
                 onToast={toastFn}
               />
             </Suspense>
@@ -268,8 +284,8 @@ export function App() {
         open={menuOpen}
         onOpenChange={setMenuOpen}
         triggerRef={cameraRef}
-        onLogged={() => setHomeVersion((v) => v + 1)}
-        onManualLogged={() => setHomeVersion((v) => v + 1)}
+        onLogged={mealChanged}
+        onManualLogged={mealChanged}
         onToast={toastFn}
         onBatchStatus={setBatchStatus}
         intent={captureIntent}

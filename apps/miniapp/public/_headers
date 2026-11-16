@@ -19,6 +19,11 @@
 /sw.js
   Cache-Control: no-cache, must-revalidate
 
+# The deployed build's id. This is how a running tab learns that a newer build
+# exists, so a cached answer would be worse than no answer at all.
+/version.json
+  Cache-Control: no-store
+
 # The shortcut file. Pages adds `X-Content-Type-Options: nosniff` to every response by
 # default; on this file it can make Safari refuse to hand it to Shortcuts, so it is
 # detached here. No Content-Disposition either: that makes iOS treat it as a download.
