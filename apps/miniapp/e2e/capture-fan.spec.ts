@@ -7,6 +7,8 @@ declare global {
     __pickerThrows: string[];
     __pickerEvents: string[];
     __lastPointerMove: { x: number; y: number } | null;
+    /** The live window `touchend` capture listeners, by identity. */
+    __windowTouchEnds: Set<EventListenerOrEventListenerObject>;
   }
 }
 
@@ -437,6 +439,80 @@ test('a cancelled touch runs nothing and fires no picker', async ({ page }) => {
   expect(await shows(page)).toEqual([]);
   expect(await clicks(page)).toEqual([]);
   await expect(menu(page)).toBeHidden();
+});
+
+test('a cancelled touch detaches the window release listener and stays inert', async ({ page }) => {
+  // Count the window `touchend` listeners by identity. A cancel that left the
+  // listener attached would let a later stray release run a latched wedge.
+  await page.addInitScript(() => {
+    window.__windowTouchEnds = new Set();
+    const add = EventTarget.prototype.addEventListener;
+    const remove = EventTarget.prototype.removeEventListener;
+    const capture = (opts: boolean | AddEventListenerOptions | undefined) =>
+      opts === true || (typeof opts === 'object' && opts?.capture === true);
+    EventTarget.prototype.addEventListener = function (
+      type: string,
+      fn: EventListenerOrEventListenerObject | null,
+      opts?: boolean | AddEventListenerOptions,
+    ) {
+      if (this === window && type === 'touchend' && capture(opts) && fn) {
+        window.__windowTouchEnds.add(fn);
+      }
+      return add.call(this, type, fn, opts);
+    };
+    EventTarget.prototype.removeEventListener = function (
+      type: string,
+      fn: EventListenerOrEventListenerObject | null,
+      opts?: boolean | AddEventListenerOptions,
+    ) {
+      if (this === window && type === 'touchend' && fn) window.__windowTouchEnds.delete(fn);
+      return remove.call(this, type, fn, opts);
+    };
+  });
+  await openApp(page);
+  const finger = await Finger.on(page);
+  const start = centre((await button(page).boundingBox()) as Box);
+  const live = () => page.evaluate(() => window.__windowTouchEnds.size);
+  // Other libraries (react-swipeable) already listen on the window, so the
+  // assertion is about this gesture's listener: one more while held, back to
+  // the baseline after any ending.
+  const baseline = await live();
+
+  await hold(page, finger, start);
+  // Attached for the gesture only, and before any slide.
+  expect(await live()).toBe(baseline + 1);
+  const g = await geometry(page);
+  const p = at(g, 110, (g.inner + g.outer) / 2);
+  await finger.move(p.x, p.y);
+  await expect.poll(() => activeWedge(page)).toBe('upload');
+
+  await finger.cancel();
+  await expect(fan(page)).toBeHidden();
+  // The cancel is what has to take the listener away.
+  expect(await live()).toBe(baseline);
+
+  // A stray release with no gesture behind it runs nothing at all.
+  await page.evaluate(() => window.dispatchEvent(new Event('touchend', { bubbles: true })));
+  await page.waitForTimeout(150);
+  expect(await shows(page)).toEqual([]);
+  expect(await clicks(page)).toEqual([]);
+  expect(choosers.get(page) ?? []).toEqual([]);
+  await expect(menu(page)).toBeHidden();
+
+  // And the next gesture is unaffected: one release, one picker.
+  await hold(page, finger, start);
+  const g2 = await geometry(page);
+  const p2 = at(g2, 20, (g2.inner + g2.outer) / 2);
+  await finger.move(p2.x, p2.y);
+  await expect.poll(() => activeWedge(page)).toBe('photo');
+  await finger.end();
+  await expect.poll(async () => (await shows(page)).length).toBe(1);
+  expect((await shows(page))[0]).toBe('camera');
+  // Let the intercepted chooser close before teardown, or its async answer
+  // races the page closing.
+  await expect.poll(() => page.evaluate(() => window.__pickerEvents.length)).toBeGreaterThan(0);
+  await page.waitForTimeout(SETTLE_MS);
+  expect(await live()).toBe(baseline);
 });
 
 test('every wedge boundary belongs to the documented side', async ({ page }) => {

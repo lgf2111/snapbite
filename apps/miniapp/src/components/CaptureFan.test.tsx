@@ -343,6 +343,11 @@ describe('hold and slide on the camera button', () => {
 
     expect(fan()).toBeNull();
     expect(onPick).not.toHaveBeenCalled();
+
+    // The cancel also takes the window release listener with it, so a late
+    // touchend from the OS cannot run the wedge the finger had chosen.
+    fire(window, new Event('touchend'));
+    expect(onPick).not.toHaveBeenCalled();
   });
 
   it('a backgrounded app kills the gesture, even if its touchend arrives late', () => {
