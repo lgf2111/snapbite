@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
-import { cacheKey, getCached, revalidate } from '@/lib/cache';
+import { cacheKey, getCached, mutateCached, revalidate } from '@/lib/cache';
 import {
   type WeekMode,
   type WeekPrefs,
@@ -178,6 +178,8 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [savingProfile, setSavingProfile] = useState(false);
 
   // How the Home "Weekly" view defines a week (client-only, localStorage).
+  // `saveWeekPrefs` writes the same store synchronously, so unlike the server
+  // settings there is no sessionStorage key to rewrite here.
   const [weekPrefs, setWeekPrefs] = useState<WeekPrefs>(() => loadWeekPrefs());
   function updateWeekPrefs(patch: Partial<WeekPrefs>) {
     setWeekPrefs((prev) => {
@@ -199,10 +201,17 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const apiKeyRef = useRef<HTMLInputElement>(null);
   const fbKeyRef = useRef<HTMLInputElement>(null);
   const feedbackRef = useRef<HTMLTextAreaElement>(null);
+  // Latest settings for handlers that merge a partial mutation response.
+  const settingsRef = useRef<SettingsView | null>(settings);
+  settingsRef.current = settings;
+  // Bumped when a mutation starts, so a revalidation that began earlier cannot
+  // paint its older snapshot back over the local patch when it lands.
+  const mutationEpoch = useRef(0);
 
   useEffect(() => {
     const apply = (s: SettingsView) => {
       setSettings(s);
+      settingsRef.current = s;
       setPrimaryCfg(
         cfgFromSettings(s.aiProvider, s.aiModel, s.customBaseUrl, s.customSupportsDetail),
       );
@@ -225,9 +234,12 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     // Render cached settings instantly, then revalidate in the background.
     const cached = getCached<SettingsView>(cacheKey.settings());
     if (cached) apply(cached);
+    const epoch = mutationEpoch.current;
     revalidate<SettingsView>(cacheKey.settings(), () => backend.getSettings())
       .then((s) => {
         setLoadFailed(false);
+        // A mutation started after this fetch did; its local patch is newer.
+        if (mutationEpoch.current !== epoch) return;
         apply(s);
       })
       .catch(() => {
@@ -239,7 +251,34 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const primaryConnected = Boolean(settings?.connected);
   const loading = settings == null && !loadFailed;
 
+  /**
+   * Writes the view and its cache together. Every settings mutation must go
+   * through here: a warm cache is what the next mount paints, so a silent state
+   * update shows the pre-mutation value again after a tab switch or reload.
+   */
+  function commitSettings(next: SettingsView) {
+    settingsRef.current = next;
+    setSettings(next);
+    mutateCached(cacheKey.settings(), next);
+  }
+
+  /**
+   * Merges a mutation response into the current view. A PUT such as adaptive,
+   * reminders or weight returns only `{ ok, <field> }`; replacing the whole
+   * view with it would drop profile, targets, reminders and fallback state.
+   */
+  function mergeSettings(patch: Partial<SettingsView>) {
+    const prev = settingsRef.current;
+    if (prev) commitSettings({ ...prev, ...patch });
+  }
+
+  /** Marks the start of a user mutation (see the mount revalidation above). */
+  function beginMutation() {
+    mutationEpoch.current += 1;
+  }
+
   async function handleToggleFallback(on: boolean) {
+    beginMutation();
     setFbEnabled(on);
     // Toggling only flips enabled — the stored key is KEPT so the user can
     // re-enable without re-entering it. (An unsaved draft just expands/collapses.)
@@ -247,7 +286,8 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       setSavingFb(true);
       try {
         const updated = await backend.setFallbackEnabled(on);
-        setSettings(updated);
+        mergeSettings({ fallbackEnabled: updated.fallbackEnabled ?? on });
+        setFbEnabled(updated.fallbackEnabled ?? on);
       } catch (e) {
         setFbEnabled(!on); // revert on failure
         toast.error(e instanceof Error ? e.message : 'Could not update fallback');
@@ -268,6 +308,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       return;
     }
     setSaving(true);
+    beginMutation();
     try {
       const custom =
         primaryCfg.provider === 'custom'
@@ -279,7 +320,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
         primaryCfg.model.trim() || undefined,
         custom,
       );
-      setSettings(updated);
+      mergeSettings(updated);
       setApiKey('');
       toast.success('Settings saved');
     } catch (e) {
@@ -300,6 +341,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       return;
     }
     setSavingFb(true);
+    beginMutation();
     try {
       const custom =
         fbCfg.provider === 'custom'
@@ -311,7 +353,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
         fbCfg.model.trim() || undefined,
         custom,
       );
-      setSettings(updated);
+      mergeSettings(updated);
+      // Saving a fallback enables it; keep the switch truthful even when the
+      // response is only the partial `{ ok, fallbackConnected, … }` shape.
+      setFbEnabled(updated.fallbackEnabled ?? true);
       setFbKey('');
       toast.success('Fallback saved');
     } catch (e) {
@@ -323,9 +368,17 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
   async function handleRemoveFallback() {
     setSavingFb(true);
+    beginMutation();
     try {
       const updated = await backend.removeFallback();
-      setSettings(updated);
+      // Clear the visible fallback fields even if the PUT only returns
+      // `{ ok, fallbackConnected }` instead of a whole settings view.
+      mergeSettings({
+        fallbackConnected: false,
+        fallbackEnabled: false,
+        fallbackKeyLast4: null,
+        ...updated,
+      });
       setFbKey('');
       setFbEnabled(false);
       toast.success('Fallback removed');
@@ -338,9 +391,10 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
   async function handleSaveProfile(profile: UserProfile) {
     setSavingProfile(true);
+    beginMutation();
     try {
       const targets = await backend.saveProfile(profile);
-      setSettings((s) => (s ? { ...s, profile, targets } : s));
+      mergeSettings({ profile, targets });
       setEditingProfile(false);
       onProfileSaved?.();
       toast.success('Goal updated');
@@ -353,6 +407,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
   async function handleDeleteAccount() {
     setDeleting(true);
+    beginMutation();
     try {
       await backend.deleteAccount();
       setConfirmDelete(false);
@@ -360,7 +415,7 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
       // The account is gone; read the fresh (anonymous) settings so the screen
       // keeps rendering instead of falling back to its loading state.
       try {
-        setSettings(await backend.getSettings());
+        commitSettings(await backend.getSettings());
       } catch {
         // Keep the last settings on screen if the refresh fails.
       }
@@ -390,11 +445,21 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     const deviceTz = new Date().getTimezoneOffset();
     if (anyOn && s.reminders && s.reminders.tzOffsetMinutes !== deviceTz) {
       // Silent self-heal: re-save the same enabled slots so the Worker gets the
-      // current offset. No toast — the user didn't do anything.
+      // current offset. No toast — the user didn't do anything. It is still a
+      // mutation, so it must rewrite the settings cache: a silent PUT plus a
+      // warm cache would repaint the old timezone on the next mount.
       const enabledTimes = Object.fromEntries(Object.entries(times).filter(([label]) => on[label]));
-      backend.saveReminders(true, enabledTimes).catch(() => {
-        /* best-effort; will retry next app open */
-      });
+      backend
+        .saveReminders(true, enabledTimes)
+        .then((updated) => {
+          const prev = getCached<SettingsView>(cacheKey.settings());
+          if (prev && updated.reminders) {
+            mutateCached(cacheKey.settings(), { ...prev, reminders: updated.reminders });
+          }
+        })
+        .catch(() => {
+          /* best-effort; will retry next app open */
+        });
     }
   }
 
@@ -415,9 +480,16 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     );
     const anyOn = Object.keys(enabledTimes).length > 0;
     setSavingReminders(true);
+    beginMutation();
     try {
       const updated = await backend.saveReminders(anyOn, enabledTimes);
-      setSettings(updated);
+      mergeSettings({
+        reminders: updated.reminders ?? {
+          enabled: anyOn,
+          times: enabledTimes,
+          tzOffsetMinutes: new Date().getTimezoneOffset(),
+        },
+      });
       // Advance the committed snapshot so the button goes clean.
       setSavedTimes({ ...reminderTimes });
       setSavedSlotOn({ ...slotOn });
@@ -437,12 +509,23 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
   /** Opts in/out of adaptive targets (persists immediately). */
   async function toggleAdaptive(on: boolean) {
+    beginMutation();
     setAdaptiveOn(on);
     setSavingAdaptive(true);
     try {
       const updated = await backend.saveAdaptive(on);
-      setSettings(updated);
-      toast.success(on ? 'Adaptive targets on' : 'Adaptive targets off');
+      // The response may be only `{ ok, adaptive }`; patch just that field so
+      // profile, reminders and fallback stay intact, and rewrite the cache.
+      const adaptive = {
+        enabled: updated.adaptive?.enabled ?? on,
+        tzOffsetMinutes:
+          updated.adaptive?.tzOffsetMinutes ??
+          settingsRef.current?.adaptive?.tzOffsetMinutes ??
+          new Date().getTimezoneOffset(),
+      };
+      mergeSettings({ adaptive });
+      setAdaptiveOn(adaptive.enabled);
+      toast.success(adaptive.enabled ? 'Adaptive targets on' : 'Adaptive targets off');
     } catch (e) {
       setAdaptiveOn(!on); // revert on failure
       toast.error(e instanceof Error ? e.message : 'Could not update adaptive targets');
@@ -460,10 +543,12 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
     }
     setWeightError('');
     setSavingWeight(true);
+    beginMutation();
     try {
       const updated = await backend.logWeight(kg);
-      setSettings(updated);
-      setLatestWeightKg(updated.latestWeightKg ?? kg);
+      const latestWeightKg = updated.latestWeightKg ?? kg;
+      mergeSettings({ latestWeightKg });
+      setLatestWeightKg(latestWeightKg);
       setWeightInput('');
       toast.success('Weight logged');
     } catch (e) {
