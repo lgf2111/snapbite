@@ -191,12 +191,27 @@ describe('ShortcutCard: the two accordions', () => {
     }
   });
 
-  it('opens the first one by itself on a phone that reports iOS, and leaves the second closed', () => {
+  it('stays closed on first render on a phone that reports iOS', () => {
     asUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15');
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
-    expect(accordion(EASY).getAttribute('aria-expanded')).toBe('true');
-    expect(accordion(HAND).getAttribute('aria-expanded')).toBe('false');
+    // An open help panel on arrival pushes the rest of Settings out of view.
+    for (const name of [EASY, HAND]) {
+      expect(accordion(name).getAttribute('aria-expanded')).toBe('false');
+    }
+  });
+
+  it('opens from the keyboard and closes with a second press', async () => {
+    const { backend } = stub();
+    render(<ShortcutCard backend={backend} />);
+    const btn = accordion(EASY);
+    btn.focus();
+
+    await userEvent.keyboard('{Enter}');
+    expect(btn.getAttribute('aria-expanded')).toBe('true');
+
+    await userEvent.keyboard(' ');
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('opening one closes the other, and a second tap closes it', async () => {
@@ -262,7 +277,14 @@ describe('ShortcutCard: the two accordions', () => {
   it('puts nothing a phone has to scroll sideways for: long strings wrap', () => {
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
-    expect(screen.getByTestId('shortcut-file-url').className).toContain('[overflow-wrap:anywhere]');
+    const url = screen.getByTestId('shortcut-file-url');
+    // The origin holds one line and the break opportunity sits before the path,
+    // so it never breaks mid-word; the text content remains the exact URL.
+    expect(url.className).toContain('break-words');
+    expect(url.className).not.toContain('[overflow-wrap:anywhere]');
+    expect(url.querySelector('span')?.className).toContain('whitespace-nowrap');
+    expect(url.querySelector('wbr')).toBeTruthy();
+    expect(url.textContent).toBe(FILE);
     const hand = document.getElementById(accordion(HAND).getAttribute('aria-controls') as string);
     expect(hand?.className).toContain('min-w-0');
     expect(hand?.innerHTML).toContain('[overflow-wrap:anywhere]');
@@ -285,11 +307,16 @@ describe('ShortcutCard: the two accordions', () => {
     const { backend } = stub();
     render(<ShortcutCard backend={backend} />);
     await openEasy();
+    const url = screen.getByTestId('shortcut-file-url');
+    expect(url.textContent).toBe(FILE);
+
     await userEvent.click(screen.getByRole('button', { name: 'Copy link' }));
     expect(writeText).toHaveBeenCalledWith(FILE);
     expect(screen.getByRole('link', { name: 'Add the Shortcut' }).getAttribute('href')).toBe(
       writeText.mock.calls[0]?.[0],
     );
+    // Splitting the lines must not alter the selectable text.
+    expect(url.textContent).toBe(FILE);
   });
 
   it('with an iCloud link set, the primary button leads with it and the file stays as the other way', async () => {
@@ -421,6 +448,48 @@ describe('ShortcutCard: revoke confirmation', () => {
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(spies.revokeDeviceToken).not.toHaveBeenCalled();
+  });
+});
+
+describe('ShortcutCard: the token row', () => {
+  const USED: DeviceTokenInfo = {
+    id: '2695',
+    label: 'iOS Shortcut',
+    createdAt: Date.UTC(2026, 10, 12),
+    lastUsedAt: Date.UTC(2026, 10, 15),
+    revokedAt: null,
+  };
+
+  it('keeps the two-line meta and Revoke inside a 375px row', async () => {
+    const { backend } = stub([USED]);
+    render(<ShortcutCard backend={backend} />);
+    const revoke = await screen.findByRole('button', { name: /^Revoke iOS Shortcut/ });
+    const row = revoke.closest('li') as HTMLElement;
+    const meta = row.firstElementChild as HTMLElement;
+    const nameLine = meta.children.item(0) as HTMLElement;
+    const usedLine = meta.children.item(1) as HTMLElement;
+
+    // Line 1 names the token and when it was made; line 2 says whether it was used.
+    expect(nameLine.textContent).toMatch(/^iOS Shortcut · /);
+    expect(usedLine.textContent).toMatch(/^used /);
+
+    expect(row.className).toContain('flex');
+    expect(row.className).toContain('items-center');
+    expect(row.className).toContain('justify-between');
+    expect(meta.className).toContain('flex-1');
+    expect(meta.className).toContain('min-w-0');
+    for (const line of [nameLine, usedLine]) {
+      expect(line.className).toContain('block');
+      expect(line.className).toContain('truncate');
+    }
+    expect(revoke.className).toContain('shrink-0');
+    expect(revoke.className).toContain('whitespace-nowrap');
+
+    // jsdom has no layout engine; pin the row to the 375px phone width and make
+    // the no-sideways-scroll check explicit. The classes above are what keep the
+    // meta column shrinking and the button from being pushed off.
+    row.style.width = '375px';
+    expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
   });
 });
 

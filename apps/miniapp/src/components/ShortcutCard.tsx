@@ -26,6 +26,20 @@ type Confirm = { kind: 'one'; token: DeviceTokenInfo } | { kind: 'all' } | null;
 
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString();
 
+/**
+ * Splits a URL after its origin so a wrapped link breaks before the path
+ * instead of inside a word. The two halves are rendered adjacently with a
+ * `<wbr>` between them, so the element's text stays the exact URL.
+ */
+function splitUrl(url: string): [origin: string, path: string] {
+  try {
+    const parsed = new URL(url);
+    return [parsed.origin, `${parsed.pathname}${parsed.search}${parsed.hash}`];
+  } catch {
+    return [url, ''];
+  }
+}
+
 type Panel = 'easy' | 'hand';
 
 /**
@@ -181,10 +195,9 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
   const [confirm, setConfirm] = useState<Confirm>(null);
   const tokenRef = useRef<HTMLElement | null>(null);
   const urlRef = useRef<HTMLElement | null>(null);
-  // Both closed, except that the easy path opens itself on a phone that reports iOS.
-  const [panel, setPanel] = useState<Panel | null>(() =>
-    installPlatform() === 'ios' ? 'easy' : null,
-  );
+  // Both start closed: a help panel opened before the person asks for it pushes
+  // the rest of Settings out of view. The rows are the way in.
+  const [panel, setPanel] = useState<Panel | null>(null);
   const fileRef = useRef<HTMLElement | null>(null);
   const cancelRef = useRef<HTMLButtonElement | null>(null);
   const preflightCancelRef = useRef<HTMLButtonElement | null>(null);
@@ -243,6 +256,7 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
   // then the plain https file is the way in.
   const icloud = SHORTCUT_ICLOUD_URL;
   const addHref = icloud || SHORTCUT_FILE_URL;
+  const [urlOrigin, urlPath] = splitUrl(addHref);
   const hasToken = tokens != null && tokens.length > 0;
   // A returning user has been through this: a token that has actually been used.
   const hasUsedToken = tokens?.some((t) => t.lastUsedAt != null) ?? false;
@@ -332,9 +346,14 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
           <code
             ref={fileRef}
             data-testid="shortcut-file-url"
-            className="text-caption font-mono select-all break-words [overflow-wrap:anywhere]"
+            className="text-caption font-mono select-all break-words"
           >
-            {addHref}
+            {/* Keep the origin on one line and break before the path; `<wbr>`
+                adds a break opportunity but no text, so a fallback copy still
+                yields the exact URL. */}
+            <span className="whitespace-nowrap">{urlOrigin}</span>
+            <wbr />
+            {urlPath}
           </code>
           {/* For anyone whose preview gets stuck: paste it into Safari by hand. */}
           <CopyButton text={addHref} target={fileRef} label="Copy link" />
@@ -415,14 +434,18 @@ export function ShortcutCard({ backend }: { backend: Backend }) {
           <ul className="flex flex-col gap-2">
             {tokens.map((t) => (
               <li key={t.id} className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground text-caption min-w-0">
-                  {tokenName(t)} · {fmtDate(t.createdAt)} ·{' '}
-                  {t.lastUsedAt ? `used ${fmtDate(t.lastUsedAt)}` : 'never used'}
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-muted-foreground text-caption block truncate">
+                    {tokenName(t)} · {fmtDate(t.createdAt)}
+                  </span>
+                  <span className="text-muted-foreground text-caption block truncate">
+                    {t.lastUsedAt ? `used ${fmtDate(t.lastUsedAt)}` : 'never used'}
+                  </span>
                 </span>
                 <Button
                   type="button"
                   variant="link"
-                  className="text-destructive"
+                  className="text-destructive shrink-0 whitespace-nowrap"
                   aria-label={`Revoke ${tokenName(t)} from ${fmtDate(t.createdAt)}`}
                   onClick={() => setConfirm({ kind: 'one', token: t })}
                 >
