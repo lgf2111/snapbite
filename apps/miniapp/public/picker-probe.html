@@ -196,6 +196,11 @@
 
       <button class="target" id="case-f" type="button">F — pointerup, click()</button>
       <input class="hidden-file" id="file-f" type="file" accept="image/*" tabindex="-1" />
+
+      <button class="target" id="case-g" type="button">
+        G — touchend on window, showPicker()
+      </button>
+      <input class="hidden-file" id="file-g" type="file" accept="image/*" tabindex="-1" />
     </main>
 
     <pre id="log" aria-live="polite"></pre>
@@ -217,6 +222,7 @@
         D: document.getElementById('file-d'),
         E: document.getElementById('file-e'),
         F: document.getElementById('file-f'),
+        G: document.getElementById('file-g'),
       };
       let lastCase = 'none yet';
       const mark = (letter) => {
@@ -237,6 +243,36 @@
         log(
           `case ${letter}: click() called at ${at}ms · userActivation.isActive=${active} · hasBeenActive=${hasBeenActive}`,
         );
+      }
+
+      /**
+       * Case G: the same moment, through showPicker(). Logs whether the call
+       * returned or threw, with the error name, and falls back to click() the
+       * way the app does when the API is missing or refused.
+       */
+      function fireShow(letter, input) {
+        mark(letter);
+        const at = now();
+        const activation = navigator.userActivation;
+        const active = activation ? activation.isActive : 'unsupported';
+        const hasBeenActive = activation ? activation.hasBeenActive : 'unsupported';
+        if (typeof input.showPicker !== 'function') {
+          log(`case ${letter}: showPicker() unsupported at ${at}ms — falling back to click()`);
+          input.click();
+          return;
+        }
+        try {
+          input.showPicker();
+          log(
+            `case ${letter}: showPicker() returned at ${now()}ms · userActivation.isActive=${active} · hasBeenActive=${hasBeenActive}`,
+          );
+        } catch (err) {
+          const name = err && typeof err === 'object' && 'name' in err ? err.name : 'unknown';
+          log(
+            `case ${letter}: showPicker() threw ${name} at ${now()}ms — falling back to click()`,
+          );
+          input.click();
+        }
       }
 
       for (const [letter, input] of Object.entries(inputs)) {
@@ -382,6 +418,39 @@
         if (event.button !== 0) return;
         fire('F', inputs.F);
       });
+
+      // G — the app's path: the input is asked from the window's captured
+      // touchend, through showPicker() instead of click().
+      const gCase = document.getElementById('case-g');
+      let gStart = null;
+      let gListening = false;
+
+      function endG() {
+        gStart = null;
+        gListening = false;
+        window.removeEventListener('touchend', onTouchEndG, { capture: true });
+      }
+
+      function onTouchEndG(event) {
+        if ((event.touches?.length ?? 0) > 0) return;
+        if (!gStart) return;
+        endG();
+        fireShow('G', inputs.G);
+      }
+
+      gCase.addEventListener(
+        'touchstart',
+        (event) => {
+          mark('G');
+          if (!event.touches.length) return;
+          if (gListening) window.removeEventListener('touchend', onTouchEndG, { capture: true });
+          gStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+          window.addEventListener('touchend', onTouchEndG, { capture: true });
+          gListening = true;
+        },
+        { passive: true },
+      );
+      gCase.addEventListener('touchcancel', endG);
 
       // What the page is, in the page: the tester reports this along with the log.
       const activation = navigator.userActivation;

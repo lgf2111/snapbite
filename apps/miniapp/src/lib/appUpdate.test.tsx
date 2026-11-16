@@ -191,6 +191,5 @@ describe('app update notice', () => {
 
     blocker.remove();
     expect(await screen.findByText(UPDATE_MESSAGE)).toBeTruthy();
-    blocker.remove();
   });
 });
