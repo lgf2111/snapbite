@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 export const BUILD_ID: string = typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev';
 
 export const VERSION_URL = '/version.json';
-export const UPDATE_MESSAGE = 'App updated — tap to reload';
+export const UPDATE_MESSAGE = 'App updated. Tap to reload';
 export const UPDATE_TOAST_ID = 'app-update';
 export const DISMISSED_BUILD_KEY = 'snapbite.update.dismissed';
 
