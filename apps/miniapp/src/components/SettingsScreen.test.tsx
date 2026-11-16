@@ -2,6 +2,7 @@ import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
 import { cacheKey, clearCache, getCached, setCached } from '@/lib/cache';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SettingsScreen } from './SettingsScreen.js';
 
@@ -330,12 +331,74 @@ describe('SettingsScreen', () => {
     });
 
     render(<SettingsScreen backend={backend} />);
+    fireEvent.click(screen.getByRole('button', { name: /AI key/ }));
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-primary' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save key' }));
 
     await waitFor(() => expect(cachedSettings()?.keyLast4).toBe('abcd'));
     expect(persistedSettings()?.keyLast4).toBe('abcd');
     expect(persistedSettings()?.profile).toEqual(SETTINGS.profile);
+  });
+
+  it('keeps a connected AI key as one collapsed row naming provider, model and status', async () => {
+    setCached(cacheKey.settings(), WORKER_SETTINGS);
+    render(<SettingsScreen backend={workerBackend()} />);
+
+    const row = await screen.findByRole('button', { name: /AI key/ });
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    expect(row.textContent).toContain('Gemini · gemini-3.6-flash');
+    expect(row.textContent).toContain('Connected');
+    // The form is not on screen until asked for.
+    expect(screen.queryByRole('button', { name: 'Save key' })).toBeNull();
+  });
+
+  it('expands a connected AI key on tap and collapses it again', async () => {
+    setCached(cacheKey.settings(), WORKER_SETTINGS);
+    render(<SettingsScreen backend={workerBackend()} />);
+
+    const row = await screen.findByRole('button', { name: /AI key/ });
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Save key' })).toBeTruthy();
+
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Save key' })).toBeNull();
+  });
+
+  it('opens the AI key form by default when the account is not connected', async () => {
+    setCached(cacheKey.settings(), SETTINGS);
+    render(<SettingsScreen backend={workerBackend({ getSettings: async () => SETTINGS })} />);
+
+    const row = await screen.findByRole('button', { name: /AI key/ });
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByLabelText('API key')).toBeTruthy();
+  });
+
+  it('toggles the AI key row with Enter and Space', async () => {
+    const user = userEvent.setup();
+    setCached(cacheKey.settings(), WORKER_SETTINGS);
+    render(<SettingsScreen backend={workerBackend()} />);
+
+    const row = await screen.findByRole('button', { name: /AI key/ });
+    row.focus();
+    await user.keyboard('{Enter}');
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    await user.keyboard(' ');
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('remembers the AI key open choice across a remount this session', async () => {
+    setCached(cacheKey.settings(), WORKER_SETTINGS);
+    const backend = workerBackend();
+    const first = render(<SettingsScreen backend={backend} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /AI key/ }));
+    first.unmount();
+
+    render(<SettingsScreen backend={backend} />);
+    const row = await screen.findByRole('button', { name: /AI key/ });
+    expect(row.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('rewrites the cache after the account is deleted', async () => {

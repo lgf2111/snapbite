@@ -139,6 +139,21 @@ describe('the key hint', () => {
     expect((await screen.findByRole('status')).textContent).toContain('Paste it into Safari');
   });
 
+  it('does not print the raw https address until a copy happens', async () => {
+    setStandalone(true);
+    const { container } = render(<LinkifiedHint text={PROVIDER_PRESETS.gemini.keyHint} />);
+
+    expect(container.querySelector('code')).toBeNull();
+    expect(screen.queryByText('https://aistudio.google.com/apikey')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /copy link to aistudio\.google\.com/i }));
+    await waitFor(() =>
+      expect(clipboard.writeText).toHaveBeenCalledWith('https://aistudio.google.com/apikey'),
+    );
+
+    expect((await screen.findByText('https://aistudio.google.com/apikey')).tagName).toBe('CODE');
+  });
+
   it('on the onboarding key step it is right there, one tap from copied', async () => {
     setStandalone(true);
     const backend = { mode: 'worker', saveApiKey: vi.fn() } as unknown as Backend;

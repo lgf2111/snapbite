@@ -10,6 +10,12 @@ interface Props {
   href: string;
   children: ReactNode;
   className?: string;
+  /**
+   * When the link cannot open (installed app), whether the raw address is
+   * printed all the time or only after a copy. `after-copy` keeps a hint line
+   * from repeating the address it already shows.
+   */
+  address?: 'always' | 'after-copy';
 }
 
 /**
@@ -23,10 +29,10 @@ interface Props {
  * through is "copy, paste into Safari". Inside Telegram `openLink` does hand
  * off properly, so that path is unchanged.
  */
-export function ExternalLink({ href, children, className }: Props) {
+export function ExternalLink({ href, children, className, address = 'always' }: Props) {
   if (isStandalone() && !isTelegramEnv()) {
     return (
-      <CopyLink href={href} className={className}>
+      <CopyLink href={href} className={className} address={address}>
         {children}
       </CopyLink>
     );
@@ -51,14 +57,17 @@ export function ExternalLink({ href, children, className }: Props) {
 }
 
 /**
- * Inline, never a modal: the button copies, the address stays visible and
+ * Inline, never a modal: the button copies, the address can stay visible and
  * selectable (so a refused clipboard still leaves a way through), and the two
- * instruction lines appear below and go away on any tap outside.
+ * instruction lines appear below and go away on any tap outside. With
+ * `address="after-copy"` the address appears with the instructions instead of
+ * repeating text the caller already shows.
  */
-function CopyLink({ href, children, className }: Props) {
+function CopyLink({ href, children, className, address = 'always' }: Props) {
   const [state, setState] = useState<'idle' | 'copied' | 'manual'>('idle');
   const root = useRef<HTMLSpanElement>(null);
   const url = useRef<HTMLElement>(null);
+  const showAddress = address === 'always' || state !== 'idle';
 
   useEffect(() => {
     if (state === 'idle') return;
@@ -69,8 +78,21 @@ function CopyLink({ href, children, className }: Props) {
     return () => document.removeEventListener('pointerdown', away);
   }, [state]);
 
+  // `after-copy` mounts the address only once a copy starts, so the failed
+  // fallback must be selected after it has rendered rather than before.
+  useEffect(() => {
+    if (address === 'always' || state !== 'manual') return;
+    const el = url.current;
+    if (!el) return;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }, [address, state]);
+
   async function copy() {
-    setState((await copyText(href, url.current)) ? 'copied' : 'manual');
+    setState((await copyText(href, showAddress ? url.current : null)) ? 'copied' : 'manual');
   }
 
   return (
@@ -89,12 +111,14 @@ function CopyLink({ href, children, className }: Props) {
         {children}
         <Copy className="size-3.5 shrink-0" aria-hidden />
       </button>
-      <code
-        ref={url}
-        className="text-foreground text-caption mt-1 block font-mono select-all [overflow-wrap:anywhere]"
-      >
-        {href}
-      </code>
+      {showAddress && (
+        <code
+          ref={url}
+          className="text-foreground text-caption mt-1 block font-mono select-all [overflow-wrap:anywhere]"
+        >
+          {href}
+        </code>
+      )}
       {state !== 'idle' && (
         <output className="text-foreground text-caption mt-1 block">
           <span className="block font-medium">

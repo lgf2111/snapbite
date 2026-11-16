@@ -28,6 +28,8 @@ export const cacheKey = {
   favorites: () => 'favorites',
   reports: (range: string) => `reports:${range}`,
   settings: () => 'settings',
+  /** Settings screen UI state (not the payload), so a remount keeps it. */
+  settingsAiKeyOpen: () => 'settings:aiKeyOpen',
 } as const;
 
 interface Entry {

@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { SettingsView } from '@/lib/api';
 import type { Backend } from '@/lib/backend';
-import { cacheKey, getCached, mutateCached, revalidate } from '@/lib/cache';
+import { cacheKey, getCached, mutateCached, revalidate, setCached } from '@/lib/cache';
 import {
   type WeekMode,
   type WeekPrefs,
@@ -37,8 +37,8 @@ import {
   profileAge,
   snapToReminderStep,
 } from '@snapbite/core';
-import { CheckCircle2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, ChevronDown } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { AccountCard } from './AccountCard.js';
 import { CreditsCard } from './CreditsCard.js';
@@ -79,6 +79,18 @@ function cfgFromSettings(
     baseUrl: baseUrl ?? '',
     supportsDetail: Boolean(supportsDetail),
   };
+}
+
+/** `Gemini · gemini-3.6-flash`: the saved provider and model on one line. */
+function providerSummary(settings: SettingsView): string {
+  const cfg = cfgFromSettings(
+    settings.aiProvider,
+    settings.aiModel,
+    settings.customBaseUrl,
+    settings.customSupportsDetail,
+  );
+  const provider = cfg.provider === 'custom' ? 'Custom' : PROVIDER_PRESETS[cfg.provider].label;
+  return `${provider} · ${cfg.model || 'custom model'}`;
 }
 
 /** Per-provider "how to get a key" steps + the console URL. */
@@ -176,6 +188,13 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
   const [savingWeight, setSavingWeight] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  // Null means "follow the account": collapsed once connected, expanded for a
+  // new user. A real true/false is the person's own choice and outranks the
+  // account default on every later visit this session.
+  const [aiKeyOpen, setAiKeyOpen] = useState<boolean | null>(
+    () => getCached<boolean>(cacheKey.settingsAiKeyOpen()) ?? null,
+  );
+  const aiKeyPanelId = useId();
 
   // How the Home "Weekly" view defines a week (client-only, localStorage).
   // `saveWeekPrefs` writes the same store synchronously, so unlike the server
@@ -249,7 +268,13 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
 
   const isLocal = backend.mode === 'local';
   const primaryConnected = Boolean(settings?.connected);
+  const aiKeyExpanded = aiKeyOpen ?? !primaryConnected;
   const loading = settings == null && !loadFailed;
+
+  function setAiKeyExpanded(open: boolean) {
+    setAiKeyOpen(open);
+    setCached(cacheKey.settingsAiKeyOpen(), open);
+  }
 
   /**
    * Writes the view and its cache together. Every settings mutation must go
@@ -777,64 +802,111 @@ export function SettingsScreen({ backend, onProfileSaved }: SettingsScreenProps)
           <div className="flex flex-col gap-4">
             <h2 className="text-muted-foreground text-caption font-medium">Logging and AI</h2>
 
-            <Section title="AI key" level={3}>
-              {isLocal ? (
+            {isLocal ? (
+              <Section title="AI key" level={3}>
                 <p className="text-muted-foreground text-caption">
                   Demo mode: meals are analyzed by a demo model, so no key is needed.
                 </p>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-body font-medium">Status</span>
-                    {settings.connected ? (
-                      <span className="flex items-center gap-1 text-caption font-medium">
-                        <CheckCircle2 className="size-4" />
-                        Connected
-                      </span>
-                    ) : (
-                      <span className="text-destructive text-caption font-medium">
-                        Not connected
-                      </span>
-                    )}
-                  </div>
-
-                  <ProviderPicker idPrefix="primary" value={primaryCfg} onChange={setPrimaryCfg} />
-
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="apikey">API key</Label>
-                    <Input
-                      id="apikey"
-                      ref={apiKeyRef}
-                      type="password"
-                      autoComplete="off"
-                      placeholder="paste your key"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                    />
-                    {primaryCfg.provider !== 'custom' && (
-                      <LinkifiedHint
-                        text={PROVIDER_PRESETS[primaryCfg.provider].keyHint}
-                        className="text-muted-foreground text-caption"
+              </Section>
+            ) : (
+              <section className="flex flex-col gap-3 border-t border-border pt-4 first:border-t-0 first:pt-0">
+                <h3 aria-label="AI key" className="text-body font-medium">
+                  <button
+                    type="button"
+                    aria-expanded={aiKeyExpanded}
+                    aria-controls={aiKeyPanelId}
+                    onClick={() => setAiKeyExpanded(!aiKeyExpanded)}
+                    className="flex min-h-11 w-full items-center justify-between gap-3 text-left font-medium transition-[background-color,transform] duration-[120ms] active:scale-[0.97] active:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:active:scale-100"
+                  >
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <span>AI key</span>
+                      {!aiKeyExpanded && (
+                        <span className="text-muted-foreground text-caption truncate">
+                          {providerSummary(settings)}
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      {!aiKeyExpanded &&
+                        (primaryConnected ? (
+                          <span className="flex items-center gap-1 text-caption font-medium">
+                            <CheckCircle2 className="size-4" />
+                            Connected
+                          </span>
+                        ) : (
+                          <span className="text-destructive text-caption font-medium">
+                            Not connected
+                          </span>
+                        ))}
+                      <ChevronDown
+                        aria-hidden
+                        className="text-muted-foreground size-4 shrink-0 transition-transform duration-200 ease-[var(--ease-out-quint)] motion-reduce:transition-none"
+                        style={{ transform: aiKeyExpanded ? 'rotate(180deg)' : 'none' }}
                       />
+                    </span>
+                  </button>
+                </h3>
+
+                {aiKeyExpanded && (
+                  <div id={aiKeyPanelId} className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-body font-medium">Status</span>
+                      {settings.connected ? (
+                        <span className="flex items-center gap-1 text-caption font-medium">
+                          <CheckCircle2 className="size-4" />
+                          Connected
+                        </span>
+                      ) : (
+                        <span className="text-destructive text-caption font-medium">
+                          Not connected
+                        </span>
+                      )}
+                    </div>
+
+                    <ProviderPicker
+                      idPrefix="primary"
+                      value={primaryCfg}
+                      onChange={setPrimaryCfg}
+                    />
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="apikey">API key</Label>
+                      <Input
+                        id="apikey"
+                        ref={apiKeyRef}
+                        type="password"
+                        autoComplete="off"
+                        placeholder="paste your key"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                      />
+                      {primaryCfg.provider !== 'custom' && (
+                        <LinkifiedHint
+                          text={PROVIDER_PRESETS[primaryCfg.provider].keyHint}
+                          className="text-muted-foreground text-caption"
+                        />
+                      )}
+                    </div>
+
+                    {primaryCfg.provider !== 'custom' && (
+                      <KeyGuide provider={primaryCfg.provider} />
                     )}
+
+                    <Button disabled={saving} onClick={handleSave}>
+                      {saving ? 'Saving…' : 'Save key'}
+                    </Button>
+                    <p className="text-muted-foreground text-caption">
+                      Your key is sent over HTTPS, encrypted on SnapBite&apos;s servers, and never
+                      shown again or logged.
+                    </p>
+                    <p className="text-muted-foreground text-caption">
+                      Free keys stop at about 20 requests a day and return a &ldquo;quota
+                      exceeded&rdquo; error. Add billing, or set a fallback below.
+                    </p>
                   </div>
-
-                  {primaryCfg.provider !== 'custom' && <KeyGuide provider={primaryCfg.provider} />}
-
-                  <Button disabled={saving} onClick={handleSave}>
-                    {saving ? 'Saving…' : 'Save key'}
-                  </Button>
-                  <p className="text-muted-foreground text-caption">
-                    Your key is sent over HTTPS, encrypted on SnapBite&apos;s servers, and never
-                    shown again or logged.
-                  </p>
-                  <p className="text-muted-foreground text-caption">
-                    Free keys stop at about 20 requests a day and return a &ldquo;quota
-                    exceeded&rdquo; error. Add billing, or set a fallback below.
-                  </p>
-                </>
-              )}
-            </Section>
+                )}
+              </section>
+            )}
 
             {!isLocal && (
               <Section title="Fallback provider" level={3}>
