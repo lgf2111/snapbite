@@ -1,0 +1,417 @@
+<!doctype html>
+<!--
+  TEMPORARY DEVICE PROBE — not part of the app.
+  This page exists only to find out which file-picker activation path iOS 26
+  accepts from the capture fan. It is a static file in public/, so it deploys
+  as-is and is not in the JS bundle. Delete it once the answer is known.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#080d16" />
+    <title>Photo picker probe</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #080d16;
+        --card: #111a29;
+        --card-press: #1a2740;
+        --line: #243247;
+        --text: #e8eef8;
+        --muted: #93a4bd;
+        --accent: #ff9a62;
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+        overscroll-behavior: none;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        height: 100dvh;
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        overflow: hidden;
+      }
+      header {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 12px 14px 6px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 650;
+        letter-spacing: -0.01em;
+      }
+      header p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+      }
+      #copy {
+        flex: 0 0 auto;
+        height: 32px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: transparent;
+        color: var(--text);
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      #env {
+        flex: 0 0 auto;
+        margin: 0;
+        padding: 0 14px 8px;
+        color: #7f91aa;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 10px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      main {
+        display: flex;
+        flex: 0 0 auto;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .target {
+        position: relative;
+        display: flex;
+        width: 100%;
+        height: 64px;
+        align-items: center;
+        padding: 0 16px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--card);
+        color: var(--text);
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.2;
+        text-align: left;
+        touch-action: manipulation;
+        -webkit-touch-callout: none;
+        user-select: none;
+      }
+      button.target,
+      label.target {
+        cursor: pointer;
+      }
+      .target:active {
+        background: var(--card-press);
+        border-color: var(--accent);
+      }
+      .target:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+      }
+      /* Exactly the app's FILE_INPUT_STYLE: rendered, but invisible and untappable. */
+      .hidden-file {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+        z-index: -1;
+      }
+      /* Case B: same idea, but inside the button and not transparent. */
+      #file-b {
+        position: absolute;
+        top: 50%;
+        right: 18px;
+        width: 1px;
+        height: 1px;
+        opacity: 1;
+        transform: translateY(-50%);
+      }
+      #log {
+        flex: 1 1 auto;
+        min-height: 44px;
+        margin: 8px 10px 8px;
+        padding: 10px 12px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #050a12;
+        color: #b7c6db;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Photo picker probe</h1>
+        <p>
+          Safari, normal tab. Tap one case, then pick a photo or cancel. Load timestamps are
+          milliseconds since the page loaded.
+        </p>
+      </div>
+      <button id="copy" type="button">Copy log</button>
+    </header>
+    <pre id="env"></pre>
+
+    <main>
+      <button class="target" id="case-a" type="button">A — plain button, click()</button>
+      <input class="hidden-file" id="file-a" type="file" accept="image/*" tabindex="-1" />
+
+      <button class="target" id="case-b" type="button">
+        <span>B — button, click() on a fully visible input</span>
+        <input id="file-b" type="file" accept="image/*" tabindex="-1" />
+      </button>
+
+      <label class="target" id="case-c" for="file-c">C — label, native</label>
+      <input class="hidden-file" id="file-c" type="file" accept="image/*" tabindex="-1" />
+
+      <button class="target" id="case-d" type="button">D — touchend on window, click()</button>
+      <input class="hidden-file" id="file-d" type="file" accept="image/*" tabindex="-1" />
+
+      <button class="target" id="case-e" type="button">E — drag then release, click()</button>
+      <input class="hidden-file" id="file-e" type="file" accept="image/*" tabindex="-1" />
+
+      <button class="target" id="case-f" type="button">F — pointerup, click()</button>
+      <input class="hidden-file" id="file-f" type="file" accept="image/*" tabindex="-1" />
+    </main>
+
+    <pre id="log" aria-live="polite"></pre>
+
+    <script>
+      const logEl = document.getElementById('log');
+      const lines = [];
+      const now = () => Math.round(performance.now());
+      const log = (line) => {
+        lines.push(line);
+        logEl.textContent = lines.join('\n');
+        logEl.scrollTop = logEl.scrollHeight;
+      };
+
+      const inputs = {
+        A: document.getElementById('file-a'),
+        B: document.getElementById('file-b'),
+        C: document.getElementById('file-c'),
+        D: document.getElementById('file-d'),
+        E: document.getElementById('file-e'),
+        F: document.getElementById('file-f'),
+      };
+      let lastCase = 'none yet';
+      const mark = (letter) => {
+        lastCase = letter;
+      };
+
+      /**
+       * The moment of truth: one synchronous click() and the activation state
+       * the platform reports for the task it runs in.
+       */
+      function fire(letter, input) {
+        mark(letter);
+        const at = now();
+        const activation = navigator.userActivation;
+        const active = activation ? activation.isActive : 'unsupported';
+        const hasBeenActive = activation ? activation.hasBeenActive : 'unsupported';
+        input.click();
+        log(
+          `case ${letter}: click() called at ${at}ms · userActivation.isActive=${active} · hasBeenActive=${hasBeenActive}`,
+        );
+      }
+
+      for (const [letter, input] of Object.entries(inputs)) {
+        input.addEventListener('change', () => {
+          const files = Array.from(input.files ?? []);
+          const names = files.map((file) => file.name).join(', ');
+          log(
+            `case ${letter}: change at ${now()}ms — ${files.length} file(s)${names ? `: ${names}` : ''}`,
+          );
+          // So picking the same photo again still fires a change.
+          input.value = '';
+        });
+        input.addEventListener('cancel', () => {
+          log(`case ${letter}: cancel at ${now()}ms — picker opened, then was dismissed`);
+        });
+      }
+
+      // Extra evidence that a picker (or another screen) took over the page.
+      window.addEventListener('blur', () =>
+        log(`window blur at ${now()}ms (last case: ${lastCase})`),
+      );
+      window.addEventListener('focus', () =>
+        log(`window focus at ${now()}ms (last case: ${lastCase})`),
+      );
+      document.addEventListener('visibilitychange', () =>
+        log(`visibilitychange: ${document.visibilityState} at ${now()}ms (last case: ${lastCase})`),
+      );
+      window.addEventListener('pagehide', () =>
+        log(`pagehide at ${now()}ms (last case: ${lastCase})`),
+      );
+
+      // A — a plain button's click handler clicks the invisible input next to it.
+      document
+        .getElementById('case-a')
+        .addEventListener('click', () => fire('A', inputs.A));
+
+      // B — the input is inside the button, 1px, but not transparent. The
+      // programmatic click bubbles back to the button, so ignore that one.
+      document.getElementById('case-b').addEventListener('click', (event) => {
+        if (event.target === inputs.B) return;
+        fire('B', inputs.B);
+      });
+
+      // C — no script: the label opens the input natively.
+      document.getElementById('case-c').addEventListener('click', () => {
+        mark('C');
+        const activation = navigator.userActivation;
+        const active = activation ? activation.isActive : 'unsupported';
+        log(
+          `case C: label activated at ${now()}ms · native, no click() · userActivation.isActive=${active}`,
+        );
+      });
+
+      // D — faithful copy of the fan: the window listener is armed on touchstart
+      // and the input is clicked synchronously from the captured touchend.
+      const dCase = document.getElementById('case-d');
+      let dStart = null;
+      let dListening = false;
+
+      function endD() {
+        dStart = null;
+        dListening = false;
+        window.removeEventListener('touchend', onTouchEndD, { capture: true });
+      }
+
+      function onTouchEndD(event) {
+        if ((event.touches?.length ?? 0) > 0) return;
+        if (!dStart) return;
+        endD();
+        fire('D', inputs.D);
+      }
+
+      dCase.addEventListener(
+        'touchstart',
+        (event) => {
+          mark('D');
+          if (!event.touches.length) return;
+          if (dListening) window.removeEventListener('touchend', onTouchEndD, { capture: true });
+          dStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+          window.addEventListener('touchend', onTouchEndD, { capture: true });
+          dListening = true;
+        },
+        { passive: true },
+      );
+      dCase.addEventListener('touchcancel', endD);
+
+      // E — the same path, but only a release after a real slide (>40px) clicks.
+      const eCase = document.getElementById('case-e');
+      let eStart = null;
+      let eMaxTravel = 0;
+      let eListening = false;
+
+      function endE() {
+        eStart = null;
+        eMaxTravel = 0;
+        eListening = false;
+        window.removeEventListener('touchend', onTouchEndE, { capture: true });
+      }
+
+      function onTouchMoveE(event) {
+        if (!eStart || !event.touches.length) return;
+        const touch = event.touches[0];
+        eMaxTravel = Math.max(
+          eMaxTravel,
+          Math.hypot(touch.clientX - eStart.x, touch.clientY - eStart.y),
+        );
+      }
+
+      function onTouchEndE(event) {
+        if ((event.touches?.length ?? 0) > 0) return;
+        if (!eStart) return;
+        const end = event.changedTouches?.[0];
+        const finalTravel = end ? Math.hypot(end.clientX - eStart.x, end.clientY - eStart.y) : 0;
+        const travel = Math.max(eMaxTravel, finalTravel);
+        endE();
+        if (travel <= 40) {
+          log(`case E: released after ${Math.round(travel)}px — under 40px, no click()`);
+          return;
+        }
+        fire('E', inputs.E);
+      }
+
+      eCase.addEventListener(
+        'touchstart',
+        (event) => {
+          mark('E');
+          if (!event.touches.length) return;
+          if (eListening) window.removeEventListener('touchend', onTouchEndE, { capture: true });
+          eStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+          eMaxTravel = 0;
+          window.addEventListener('touchend', onTouchEndE, { capture: true });
+          eListening = true;
+        },
+        { passive: true },
+      );
+      eCase.addEventListener('touchmove', onTouchMoveE, { passive: true });
+      eCase.addEventListener('touchcancel', endE);
+
+      // F — the original approach: pointerup, which arrives before touchend.
+      const fCase = document.getElementById('case-f');
+      fCase.addEventListener('pointerdown', () => mark('F'));
+      fCase.addEventListener('pointerup', (event) => {
+        if (event.button !== 0) return;
+        fire('F', inputs.F);
+      });
+
+      // What the page is, in the page: the tester reports this along with the log.
+      const activation = navigator.userActivation;
+      const standalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true;
+      document.getElementById('env').textContent =
+        `${window.innerWidth}×${window.innerHeight} · ${standalone ? 'standalone' : 'normal tab'} · userActivation ${activation ? 'present' : 'MISSING'}\n` +
+        navigator.userAgent;
+
+      log(`probe loaded at ${now()}ms`);
+
+      document.getElementById('copy').addEventListener('click', async () => {
+        const button = document.getElementById('copy');
+        try {
+          await navigator.clipboard.writeText(lines.join('\n'));
+          button.textContent = 'Copied';
+        } catch {
+          // Clipboard blocked: select the log so it can be copied by hand.
+          const range = document.createRange();
+          range.selectNodeContents(logEl);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          button.textContent = 'Selected';
+        }
+        window.setTimeout(() => {
+          button.textContent = 'Copy log';
+        }, 1500);
+      });
+    </script>
+  </body>
+</html>

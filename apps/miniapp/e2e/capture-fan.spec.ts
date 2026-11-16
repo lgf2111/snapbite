@@ -3,6 +3,9 @@ import { type CDPSession, type Page, expect, test } from '@playwright/test';
 declare global {
   interface Window {
     __pickerClicks: string[];
+    __pickerShows: string[];
+    __pickerThrows: string[];
+    __pickerEvents: string[];
     __lastPointerMove: { x: number; y: number } | null;
   }
 }
@@ -11,6 +14,8 @@ declare global {
 const HOLD_MS = 260;
 /** Let a file chooser dismiss itself before the next gesture or the teardown. */
 const SETTLE_MS = 250;
+/** The app's window for a picker to prove it opened, plus a slow frame. */
+const PROBE_MS = 2500 + 600;
 
 /** A valid profile in local mode keeps the welcome/onboarding gate closed. */
 const PROFILE = {
@@ -71,21 +76,65 @@ interface Box {
 
 const centre = (box: Box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
 
+/** The file choosers the platform actually asked for, by input, in order. */
+const choosers = new WeakMap<Page, Array<'camera' | 'library'>>();
+
 async function openApp(page: Page): Promise<void> {
   await page.addInitScript((profile) => {
     localStorage.setItem('snapbite.profile.v1', JSON.stringify(profile));
   }, PROFILE);
-  // A picker is handled, not left open: setting no files dismisses it and
-  // sends the `change` the app's probe waits for.
-  page.on('filechooser', (chooser) => void chooser.setFiles([]));
+  // Which API actually asked for the picker. The app prefers showPicker(); a
+  // `click` event means it fell back. The wrapper stays synchronous, so the
+  // activation the app relies on is untouched.
+  await page.addInitScript(() => {
+    window.__pickerShows = [];
+    window.__pickerThrows = [];
+    const proto = HTMLInputElement.prototype;
+    const original = proto.showPicker;
+    if (typeof original !== 'function') return;
+    proto.showPicker = function (this: HTMLInputElement) {
+      const name = this.hasAttribute('capture') ? 'camera' : 'library';
+      try {
+        original.call(this);
+        window.__pickerShows.push(name);
+      } catch (err) {
+        window.__pickerThrows.push(`${name}:${(err as DOMException).name}`);
+        throw err;
+      }
+    };
+  });
+  const opened: Array<'camera' | 'library'> = [];
+  choosers.set(page, opened);
+  // Playwright intercepts the real file chooser the platform opens. Recording
+  // it is the proof that `input.click()` was accepted; giving it no files is
+  // the same evidence a dismissed sheet carries.
+  page.on('filechooser', (chooser) => {
+    void (async () => {
+      const kind = await chooser
+        .element()
+        .evaluate((el) =>
+          (el as HTMLInputElement).hasAttribute('capture') ? 'camera' : 'library',
+        );
+      opened.push(kind as 'camera' | 'library');
+      await chooser.setFiles([]);
+    })();
+  });
   await page.goto('/');
   await expect(page.getByRole('button', { name: /add a meal/i })).toBeVisible();
   await page.evaluate(() => {
     window.__pickerClicks = [];
+    window.__pickerEvents = [];
     for (const input of document.querySelectorAll<HTMLInputElement>('input[type=file]')) {
       const name = input.hasAttribute('capture') ? 'camera' : 'library';
       input.addEventListener('click', () => window.__pickerClicks.push(name));
+      for (const type of ['cancel', 'change']) {
+        input.addEventListener(type, () => window.__pickerEvents.push(`${name}:${type}`));
+      }
     }
+    window.addEventListener('blur', () => window.__pickerEvents.push('window:blur'));
+    document.addEventListener('visibilitychange', () =>
+      window.__pickerEvents.push(`document:${document.visibilityState}`),
+    );
     // The document hears a pointermove after the button's own handler has
     // painted, so this echoes what the gesture actually saw.
     window.__lastPointerMove = null;
@@ -99,6 +148,8 @@ const button = (page: Page) => page.getByRole('button', { name: /add a meal/i })
 const fan = (page: Page) => page.getByTestId('capture-fan');
 const menu = (page: Page) => page.getByTestId('capture-menu');
 const clicks = (page: Page) => page.evaluate(() => window.__pickerClicks.slice());
+const shows = (page: Page) => page.evaluate(() => window.__pickerShows.slice());
+const throws = (page: Page) => page.evaluate(() => window.__pickerThrows.slice());
 
 async function hold(page: Page, finger: Finger, at: { x: number; y: number }): Promise<void> {
   await finger.start(at.x, at.y);
@@ -168,7 +219,9 @@ async function strokes(page: Page): Promise<string[]> {
   );
 }
 
-test('a slide-and-release runs its wedge exactly once, with no second tap', async ({ page }) => {
+test('a slide-and-release asks showPicker() once per picker wedge, with no second tap', async ({
+  page,
+}) => {
   await openApp(page);
   const finger = await Finger.on(page);
   const start = centre((await button(page).boundingBox()) as Box);
@@ -191,28 +244,128 @@ test('a slide-and-release runs its wedge exactly once, with no second tap', asyn
     expect(widths.filter((w) => w === '4')).toHaveLength(1);
     expect(widths).toHaveLength(4);
 
-    const before = (await clicks(page)).length;
+    const showsBefore = (await shows(page)).length;
+    const clicksBefore = (await clicks(page)).length;
+    const choosersBefore = (choosers.get(page) ?? []).length;
     await finger.end();
     await expect(fan(page)).toBeHidden();
     await page.waitForTimeout(SETTLE_MS);
 
     if (picker) {
-      await expect.poll(async () => (await clicks(page)).length).toBe(before + 1);
-      const all = await clicks(page);
-      expect(all.slice(-1)).toEqual([picker]);
+      // Exactly one picker path per release, and it is showPicker() where the
+      // engine has it. A click here would mean the fallback ran instead.
+      await expect.poll(async () => (await shows(page)).length).toBe(showsBefore + 1);
+      expect((await shows(page)).slice(-1)).toEqual([picker]);
+      expect((await clicks(page)).length).toBe(clicksBefore);
+      // Not just the handler: the platform accepted it and opened a chooser on
+      // the right input.
+      await expect.poll(() => (choosers.get(page) ?? []).length).toBe(choosersBefore + 1);
+      expect((choosers.get(page) ?? []).at(-1)).toBe(picker);
+      // Setting no files is the picker coming back with nothing: `change` (or
+      // `cancel`) must reach the input and the app must stay quiet.
+      await expect.poll(() => page.evaluate(() => window.__pickerEvents.length)).toBeGreaterThan(0);
+      await expect(page.getByText(/could not open the photo picker/i)).toHaveCount(0);
     } else {
       // Saved meals and Manually log open the dialog, not a picker.
       await expect(page.getByRole('dialog')).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).toBeHidden();
-      expect((await clicks(page)).length).toBe(before);
+      expect((await shows(page)).length).toBe(showsBefore);
+      expect((await clicks(page)).length).toBe(clicksBefore);
+      expect((choosers.get(page) ?? []).length).toBe(choosersBefore);
     }
 
     // The click that follows the touch must not toggle the card menu.
     await expect(menu(page)).toBeHidden();
   }
 
-  expect((await clicks(page)).length).toBe(2);
+  expect(await shows(page)).toEqual(['library', 'camera']);
+  expect(await clicks(page)).toEqual([]);
+  expect(await throws(page)).toEqual([]);
+  expect(choosers.get(page)).toEqual(['library', 'camera']);
+  const events = await page.evaluate(() => window.__pickerEvents.slice());
+  console.log('picker events after both pickers', JSON.stringify(events));
+  test.info().annotations.push({ type: 'picker-events', description: JSON.stringify(events) });
+});
+
+test('a picker dismissed without a file is never reported as a failure', async ({ page }) => {
+  await openApp(page);
+  const finger = await Finger.on(page);
+  const start = centre((await button(page).boundingBox()) as Box);
+
+  await hold(page, finger, start);
+  const g = await geometry(page);
+  const p = at(g, 110, (g.inner + g.outer) / 2); // Upload image
+  await finger.move(p.x, p.y);
+  await expect.poll(() => activeWedge(page)).toBe('upload');
+  await finger.end();
+
+  // The chooser opened, and the platform's own answer came back (Playwright
+  // closes it by selecting no files).
+  await expect.poll(() => (choosers.get(page) ?? []).length).toBe(1);
+  expect(await shows(page)).toEqual(['library']);
+  expect(await clicks(page)).toEqual([]);
+  await expect.poll(() => page.evaluate(() => window.__pickerEvents.length)).toBeGreaterThan(0);
+
+  // Longer than the app's probe: silence is the correct outcome.
+  await page.waitForTimeout(PROBE_MS);
+  await expect(page.getByText(/could not open the photo picker/i)).toHaveCount(0);
+  await expect(menu(page)).toBeHidden();
+
+  const events = await page.evaluate(() => window.__pickerEvents.slice());
+  console.log('picker events after a dismissed picker', JSON.stringify(events));
+  test.info().annotations.push({ type: 'dismissed', description: JSON.stringify(events) });
+});
+
+test('a refused showPicker and click say so once, then open the cards on that action', async ({
+  page,
+}) => {
+  await openApp(page);
+  const warnings: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'warning') warnings.push(msg.text());
+  });
+  // The platform refuses every programmatic open, as some iOS builds do.
+  await page.evaluate(() => {
+    for (const input of document.querySelectorAll<HTMLInputElement>('input[type=file]')) {
+      input.showPicker = () => {
+        throw new DOMException('no transient activation', 'NotAllowedError');
+      };
+      input.click = () => {};
+    }
+  });
+
+  const finger = await Finger.on(page);
+  const start = centre((await button(page).boundingBox()) as Box);
+  await hold(page, finger, start);
+  const g = await geometry(page);
+  const p = at(g, 110, (g.inner + g.outer) / 2); // Upload image
+  await finger.move(p.x, p.y);
+  await expect.poll(() => activeWedge(page)).toBe('upload');
+  await finger.end();
+
+  // Not at the old 400ms mark, and not before the window is up.
+  await page.waitForTimeout(1500);
+  await expect(page.getByText(/could not open the photo picker/i)).toHaveCount(0);
+
+  const toast = page.getByText(/could not open the photo picker/i);
+  await expect(toast).toBeVisible({ timeout: PROBE_MS });
+  await expect(toast).toContainText(/tap the camera/i);
+
+  // The way out is on screen, with the failed action highlighted.
+  await expect(menu(page)).toBeVisible();
+  const cards = page.getByRole('group', { name: /4 options/i });
+  await expect(cards.getByRole('button', { name: /upload image/i })).toHaveAttribute(
+    'data-highlighted',
+    'true',
+  );
+
+  // It never opened anything, the API's error name was logged once, and the
+  // failure is said once.
+  await expect.poll(() => warnings.join('\n')).toContain('NotAllowedError');
+  expect(await shows(page)).toEqual([]);
+  expect(await clicks(page)).toEqual([]);
+  expect(choosers.get(page)).toEqual([]);
 });
 
 test('hold and release with no slide does nothing, not even the cards', async ({ page }) => {
@@ -225,6 +378,7 @@ test('hold and release with no slide does nothing, not even the cards', async ({
   await expect(fan(page)).toBeHidden();
   await page.waitForTimeout(150);
 
+  expect(await shows(page)).toEqual([]);
   expect(await clicks(page)).toEqual([]);
   await expect(menu(page)).toBeHidden();
 
@@ -235,6 +389,7 @@ test('hold and release with no slide does nothing, not even the cards', async ({
   await expect(fan(page)).toBeHidden();
   await page.waitForTimeout(150);
 
+  expect(await shows(page)).toEqual([]);
   expect(await clicks(page)).toEqual([]);
   await expect(menu(page)).toBeHidden();
 });
@@ -256,11 +411,12 @@ test('a release back over the button still runs the latched wedge, once', async 
   expect(await activeWedge(page)).toBe('photo');
 
   await finger.end();
-  await expect.poll(async () => (await clicks(page)).length).toBe(1);
-  expect((await clicks(page))[0]).toBe('camera');
+  await expect.poll(async () => (await shows(page)).length).toBe(1);
+  expect((await shows(page))[0]).toBe('camera');
+  expect(await clicks(page)).toEqual([]);
   await expect(fan(page)).toBeHidden();
   await page.waitForTimeout(SETTLE_MS);
-  expect((await clicks(page)).length).toBe(1);
+  expect((await shows(page)).length).toBe(1);
 });
 
 test('a cancelled touch runs nothing and fires no picker', async ({ page }) => {
@@ -278,6 +434,7 @@ test('a cancelled touch runs nothing and fires no picker', async ({ page }) => {
   await expect(fan(page)).toBeHidden();
   await page.waitForTimeout(150);
 
+  expect(await shows(page)).toEqual([]);
   expect(await clicks(page)).toEqual([]);
   await expect(menu(page)).toBeHidden();
 });

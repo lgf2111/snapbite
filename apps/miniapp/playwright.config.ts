@@ -9,7 +9,8 @@ import { defineConfig, devices } from '@playwright/test';
  * The picker spec runs in mobile WebKit, the engine an iPhone actually uses,
  * with the iPhone 15 Pro Max profile. It cannot generate trusted touch moves,
  * so it drives the same handlers with synthetic events; the Chromium project
- * covers the trusted path and the real file chooser.
+ * covers the trusted touch path, and both projects watch the real file chooser
+ * the browser opens.
  */
 export default defineConfig({
   testDir: './e2e',
