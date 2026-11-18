@@ -752,12 +752,16 @@ describe('HomeScreen', () => {
       <HomeScreen {...props(backend, { date: '2026-11-16', targets: TARGETS })} />,
     );
     expect(screen.getByText('Sixteenth curry')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'kcal: 1500 left' })).toBeInTheDocument();
 
     rerender(<HomeScreen {...props(backend, { date: '2026-11-11', targets: TARGETS })} />);
 
     // The 16th's meals belong to another key and are gone in the same commit
     // as the 11th's header: the list is empty and loading, not yesterday's food.
     expect(screen.queryByText('Sixteenth curry')).not.toBeInTheDocument();
+    // The ring's total comes from those rows, so it clears with them.
+    expect(screen.queryByRole('img', { name: 'kcal: 1500 left' })).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'kcal: 2000 left' })).toBeInTheDocument();
     expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
@@ -787,10 +791,13 @@ describe('HomeScreen', () => {
       <HomeScreen {...props(backend, { date: '2026-11-11', targets: TARGETS })} />,
     );
     expect(screen.getByText('Eleventh toast')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'kcal: 1500 left' })).toBeInTheDocument();
 
     rerender(<HomeScreen {...props(backend, { date: '2026-11-16', targets: TARGETS })} />);
 
     expect(screen.queryByText('Eleventh toast')).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'kcal: 1500 left' })).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'kcal: 2000 left' })).toBeInTheDocument();
     expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
 
     await act(async () => {
