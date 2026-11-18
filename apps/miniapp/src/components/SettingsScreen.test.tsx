@@ -256,6 +256,31 @@ describe('SettingsScreen', () => {
     expect(persistedSettings()?.profile).toEqual(SETTINGS.profile);
   });
 
+  it('rewrites the cache when the silent reminder timezone self-heal runs', async () => {
+    // A reminder saved in another timezone: opening Settings re-saves it with
+    // the device's offset. That is a mutation too, so the warm cache must carry
+    // the new offset or the next mount would repaint the old one.
+    const deviceTz = new Date().getTimezoneOffset();
+    const staleTz = deviceTz === 0 ? 60 : 0;
+    const stale: SettingsView = {
+      ...SETTINGS,
+      reminders: { enabled: true, times: { breakfast: '08:00' }, tzOffsetMinutes: staleTz },
+    };
+    setCached(cacheKey.settings(), stale);
+    const saveReminders = vi.fn(async () => ({
+      ok: true,
+      reminders: { enabled: true, times: { breakfast: '08:00' }, tzOffsetMinutes: deviceTz },
+    }));
+    const backend = stubBackend(async () => stale, { saveReminders });
+
+    render(<SettingsScreen backend={backend} />);
+
+    await waitFor(() => expect(cachedSettings()?.reminders?.tzOffsetMinutes).toBe(deviceTz));
+    expect(saveReminders).toHaveBeenCalledWith(true, { breakfast: '08:00' });
+    expect(persistedSettings()?.reminders?.tzOffsetMinutes).toBe(deviceTz);
+    expect(persistedSettings()?.profile).toEqual(SETTINGS.profile);
+  });
+
   it('rewrites the cache and sessionStorage when a weight is logged', async () => {
     setCached(cacheKey.settings(), SETTINGS);
     const backend = stubBackend(async () => SETTINGS, {
