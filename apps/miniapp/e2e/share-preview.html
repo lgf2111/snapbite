@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Share preview layout harness</title>
+  </head>
+  <body class="bg-background">
+    <div id="root"></div>
+
+    <!-- The same bottom chrome as AppShell, so the sheet's clearance is real. -->
+    <nav
+      data-testid="tab-bar"
+      aria-label="Main"
+      class="pb-safe fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md border-t border-border bg-background"
+    >
+      <div class="h-[var(--spacing-bar)]"></div>
+    </nav>
+
+    <script type="module" src="./share-preview-harness.tsx"></script>
+  </body>
+</html>
